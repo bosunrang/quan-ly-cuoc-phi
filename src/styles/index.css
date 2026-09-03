@@ -1,0 +1,29 @@
+/* Điểm nhập CSS duy nhất, quy định thứ tự cascade.
+   Giữ đúng thứ tự của Marketing App: nền tảng -> shell -> component dùng chung
+   -> CSS riêng của feature -> responsive -> typography (luôn cuối cùng). */
+
+@import './foundation/tokens.css';
+@import './foundation/fonts.css';
+@import './foundation/base.css';
+@import './layout/shell.css';
+@import './shared/components.css';
+@import './shared/stat-cards.css';
+@import './shared/data-pages.css';
+@import './shared/forms.css';
+@import '../shared/ui/DateInput/date-input.css';
+@import '../features/auth/login.css';
+@import '../features/entries/entries.css';
+@import '../features/entries/entries-page.css';
+@import '../features/entries/entries-overview.css';
+@import '../features/entries/entries-table.css';
+@import '../features/entries/entries-filter.css';
+@import '../features/entries/entries-delivery.css';
+@import '../features/employees/employees.css';
+@import '../features/settings/settings.css';
+@import '../features/misa/misa.css';
+@import '../features/customers/customers.css';
+@import '../features/carriers/carrier.css';
+@import '../features/carriers/carrier-excel.css';
+@import '../features/fuel/fuel.css';
+@import './layout/responsive.css';
+@import './foundation/typography.css';

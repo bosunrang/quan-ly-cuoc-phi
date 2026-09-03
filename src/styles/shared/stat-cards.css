@@ -1,0 +1,64 @@
+/* Ô tổng quan dùng chung: bốn màu lần lượt là trung tính, thành công, thông tin và cảnh báo. */
+.stat-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 11px;
+}
+.stat-overview article {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 84px;
+  padding: 12px 16px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--panel), var(--surface-subtle));
+  box-shadow: var(--shadow-card);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.stat-overview article::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--stat-accent, var(--stat-neutral-accent));
+  content: "";
+}
+.stat-overview article:nth-child(1) { --stat-accent: var(--stat-neutral-accent); border-color: var(--stat-neutral-border); background: linear-gradient(135deg, var(--panel), var(--stat-neutral-bg)); }
+.stat-overview article:nth-child(2) { --stat-accent: var(--stat-success-accent); border-color: var(--stat-success-border); background: linear-gradient(135deg, var(--panel), var(--stat-success-bg)); }
+.stat-overview article:nth-child(3) { --stat-accent: var(--stat-info-accent); border-color: var(--stat-info-border); background: linear-gradient(135deg, var(--panel), var(--stat-info-bg)); }
+.stat-overview article:nth-child(4) { --stat-accent: var(--stat-warning-accent); border-color: var(--stat-warning-border); background: linear-gradient(135deg, var(--panel), var(--stat-warning-bg)); }
+.stat-overview article:hover { transform: translateY(-1px); box-shadow: var(--shadow-control); }
+.stat-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  place-items: center;
+  box-shadow: inset 0 0 0 1px var(--stat-icon-inset);
+}
+.stat-icon.neutral { background: var(--stat-neutral-icon-bg); color: var(--stat-neutral-icon-text); }
+.stat-icon.success { background: var(--stat-success-icon-bg); color: var(--stat-success-icon-text); }
+.stat-icon.warning { background: var(--stat-warning-icon-bg); color: var(--stat-warning-icon-text); }
+.stat-icon.info { background: var(--stat-info-icon-bg); color: var(--stat-info-icon-text); }
+.stat-overview article > span {
+  align-self: center;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--stat-label-font-size);
+  font-weight: 650;
+  line-height: 1.35;
+}
+.stat-overview article > strong {
+  color: var(--ink);
+  font-size: calc(var(--stat-value-font-size) - 2px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.025em;
+  line-height: 1;
+  white-space: nowrap;
+}
+@media (max-width: 1320px) { .stat-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .stat-overview { grid-template-columns: 1fr; } }

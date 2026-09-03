@@ -1,0 +1,14 @@
+.entry-list-table th:nth-child(3),
+.entry-list-table td:nth-child(3),
+.entry-list-table th:nth-child(4),
+.entry-list-table td:nth-child(4),
+.entry-list-table th:nth-child(5),
+.entry-list-table td:nth-child(5),
+.entry-list-table th:nth-child(6),
+.entry-list-table td:nth-child(6),
+.entry-list-table th:nth-child(7),
+.entry-list-table td:nth-child(7),
+.entry-list-table.is-admin th:nth-child(8),
+.entry-list-table.is-admin td:nth-child(8) {
+	text-align: center;
+}

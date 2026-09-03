@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+release-*/
+data/
+coverage/
+*.log
+electron-framework-*/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

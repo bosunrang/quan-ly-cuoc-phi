@@ -1,0 +1,127 @@
+import { useState } from "react";
+import type {
+	GrantablePage,
+	ManagedUser,
+} from "../../../domain/users/user.model";
+import { validateNewUser } from "../../../domain/users/user.model";
+import { Dialog } from "../../../shared/ui/Dialog";
+import { Field, FieldGrid } from "../../../shared/ui/Field";
+import type { PageId } from "../../../types";
+
+interface UserDialogProps {
+	/** null = tạo mới. */
+	user: ManagedUser | null;
+	grantable: GrantablePage[];
+	onSave: (input: {
+		username: string;
+		fullName: string;
+		password: string;
+		pages: PageId[];
+	}) => Promise<void>;
+	onClose: () => void;
+}
+
+export function UserDialog({
+	user,
+	grantable,
+	onSave,
+	onClose,
+}: UserDialogProps) {
+	const isEdit = Boolean(user);
+	const [username, setUsername] = useState(user?.username ?? "");
+	const [fullName, setFullName] = useState(user?.fullName ?? "");
+	const [password, setPassword] = useState("");
+	const [pages, setPages] = useState<PageId[]>(user?.pages ?? []);
+
+	const toggle = (key: PageId) =>
+		setPages((current) =>
+			current.includes(key)
+				? current.filter((item) => item !== key)
+				: [...current, key],
+		);
+
+	const confirm = async () => {
+		if (!isEdit) {
+			const problem = validateNewUser({ username, fullName, password, pages });
+			if (problem) throw new Error(problem);
+		} else if (!fullName.trim()) {
+			throw new Error("Vui lòng nhập họ tên.");
+		}
+		await onSave({ username, fullName, password, pages });
+	};
+
+	return (
+		<Dialog
+			title={isEdit ? `Sửa ${user?.fullName}` : "Thêm người dùng"}
+			subtitle="Tick những thẻ người này được phép mở"
+			confirmLabel={isEdit ? "Lưu thay đổi" : "Tạo tài khoản"}
+			onConfirm={confirm}
+			onClose={onClose}
+		>
+			<FieldGrid>
+				<Field label="Họ tên">
+					{(id) => (
+						<input
+							id={id}
+							type="text"
+							value={fullName}
+							onChange={(event) => setFullName(event.target.value)}
+						/>
+					)}
+				</Field>
+				<Field
+					label="Tên đăng nhập"
+					hint={
+						isEdit
+							? "Không đổi được sau khi tạo"
+							: "Chữ thường, số, dấu chấm; 3–32 ký tự"
+					}
+				>
+					{(id) => (
+						<input
+							id={id}
+							type="text"
+							value={username}
+							disabled={isEdit}
+							onChange={(event) => setUsername(event.target.value)}
+						/>
+					)}
+				</Field>
+			</FieldGrid>
+
+			{!isEdit && (
+				<Field label="Mật khẩu" hint="Tối thiểu 8 ký tự">
+					{(id) => (
+						<input
+							id={id}
+							type="password"
+							autoComplete="new-password"
+							value={password}
+							onChange={(event) => setPassword(event.target.value)}
+						/>
+					)}
+				</Field>
+			)}
+
+			<div className="field">
+				{/* biome-ignore lint/a11y/noLabelWithoutControl: nhãn cho cả nhóm ô tick bên dưới */}
+				<label>Thẻ được truy cập</label>
+				<div className="page-picker">
+					{grantable.map((page) => (
+						<label className="page-option" key={page.key}>
+							<input
+								type="checkbox"
+								checked={pages.includes(page.key)}
+								onChange={() => toggle(page.key)}
+							/>
+							<div>
+								<strong>{page.label}</strong>
+								<span>{page.description}</span>
+							</div>
+						</label>
+					))}
+				</div>
+			</div>
+		</Dialog>
+	);
+}

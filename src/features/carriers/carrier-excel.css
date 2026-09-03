@@ -1,0 +1,56 @@
+.carrier-import-card .carrier-excel-actions {
+	display: flex;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.carrier-import-card .carrier-excel-actions .button {
+	white-space: nowrap;
+}
+
+.carrier-excel-dialog {
+	width: min(1120px, 100%);
+}
+
+.carrier-excel-summary {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.carrier-excel-summary article {
+	display: grid;
+	grid-template-columns: 1.5fr repeat(3, auto);
+	gap: 10px;
+	align-items: center;
+	padding: 10px 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface-subtle);
+	color: var(--muted);
+	font-size: var(--type-caption);
+}
+
+.carrier-excel-summary strong {
+	color: var(--ink);
+	font-size: var(--type-body-sm);
+}
+
+.carrier-excel-table {
+	min-width: 900px;
+}
+
+@media (max-width: 700px) {
+	.carrier-import-card .carrier-excel-actions {
+		width: 100%;
+		margin-left: 0;
+	}
+
+	.carrier-import-card .carrier-excel-actions .button {
+		flex: 1;
+	}
+
+	.carrier-excel-summary {
+		grid-template-columns: 1fr;
+	}
+}

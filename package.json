@@ -1,0 +1,85 @@
+{
+  "name": "app-cuoc-phi",
+  "version": "0.1.7",
+  "private": true,
+  "type": "module",
+  "description": "Quản lý cước phí giao hàng — dùng chung cho nhiều máy trong mạng nội bộ",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/start.cjs --dev-bypass-login",
+    "server:secure": "node server/start.cjs",
+    "server:dev": "node server/start.cjs --api-only --loopback",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json",
+    "lint": "biome check src tests vite.config.ts vitest.config.ts --error-on-warnings",
+    "check:server": "node --check electron/main.cjs && node --check electron/preload.cjs && node --check server/start.cjs",
+    "test": "vitest run",
+    "test:server": "node --test tests/server/foundation.test.cjs",
+    "test:performance": "node tests/performance/catalog.benchmark.cjs",
+    "test:performance:misa": "node tests/performance/misa.benchmark.cjs",
+    "check": "npm run lint && npm run typecheck && npm run check:server && npm test && npm run test:server",
+    "icon": "node tools/make-icon.cjs",
+    "start": "electron .",
+    "desktop": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "vn.naviva.cuocphi",
+    "productName": "Quản lý cước phí",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "server/**/*",
+      "dist/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "Quan-Ly-Cuoc-Phi-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerLanguages": [
+        "vi_VN",
+        "en_US"
+      ]
+    }
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "lucide-react": "^1.33.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "read-excel-file": "^9.3.10",
+    "xlsx-js-style": "^1.2.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.10",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.0",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
+    "jsdom": "^30.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}

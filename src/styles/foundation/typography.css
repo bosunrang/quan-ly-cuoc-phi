@@ -1,0 +1,88 @@
+/* Quy tắc typography theo vai trò — giữ nhất quán với QC Lab. */
+body{font-size:var(--type-body);line-height:var(--line-body)}
+
+/* Điều hướng và nhận diện */
+.brand-copy strong{font-size:var(--type-heading-sm);line-height:var(--line-heading)}
+.brand-copy span,.sync-status,.sidebar-footer strong{font-size:var(--type-caption);line-height:var(--line-compact)}
+.sidebar-footer span{font-size:var(--type-overline);line-height:var(--line-compact)}
+.nav-group-label{font-size:var(--type-nav-section);line-height:var(--line-compact)}
+.nav-item{font-size:var(--type-subhead);line-height:var(--line-compact)}
+
+/* Header ứng dụng */
+.eyebrow{font-size:var(--type-overline);line-height:var(--line-compact)}
+.topbar h1{font-size:var(--type-page-title);line-height:var(--line-display)}
+.topbar p{font-size:var(--type-body-sm);line-height:var(--line-compact)}
+.global-search input,.period-filter,.profile-copy strong{font-size:var(--type-meta);line-height:var(--line-compact)}
+.global-search kbd,.profile-copy span{font-size:var(--type-overline);line-height:var(--line-compact)}
+
+/* Nút và thao tác */
+.button{font-size:var(--type-meta);line-height:var(--line-compact)}
+.text-button,.kpi-link,.panel-action{font-size:var(--type-caption);line-height:var(--line-compact)}
+
+/* Tiêu đề và nội dung trang */
+.welcome-kicker{font-size:var(--type-caption);line-height:var(--line-compact)}
+.welcome-strip h2{font-size:var(--type-heading-lg);line-height:var(--line-heading)}
+.welcome-strip p{font-size:var(--type-body-sm);line-height:var(--line-body)}
+.section-actions h2,.import-strip h2{font-size:var(--type-heading-sm);line-height:var(--line-heading)}
+.section-actions p,.import-strip p{font-size:var(--type-meta);line-height:var(--line-body)}
+
+/* Thẻ giới thiệu đầu trang: nhấn rõ tiêu đề, mô tả vẫn gọn và dễ đọc. */
+.dashboard-intro h2,.entry-intro h2,.employee-intro h2,.fuel-intro h2,.reports-intro h2,.carrier-live-intro h2,.customer-import-copy h2,.audit-intro .panel-header h3,.user-intro .panel-header h3{font-size:var(--type-heading-sm);line-height:var(--line-heading)}
+.dashboard-intro p,.entry-intro p,.employee-intro p,.fuel-intro p,.reports-intro p,.carrier-live-intro p,.customer-import-copy p,.audit-intro .panel-header p,.user-intro .panel-header p{font-size:var(--type-meta);line-height:var(--line-compact)}
+
+/* KPI và thẻ tóm tắt */
+.kpi-label{font-size:var(--type-meta);line-height:var(--line-compact)}
+.kpi-value{font-size:var(--type-kpi);line-height:1.05}
+.kpi-meta{font-size:var(--type-caption);line-height:var(--line-compact)}
+.mini-stat-grid span{font-size:var(--type-meta);line-height:var(--line-compact)}
+.mini-stat-grid strong{font-size:var(--type-heading-sm);line-height:var(--line-heading)}
+
+/* Panel, biểu đồ và khối dữ liệu */
+.panel-header h3{font-size:var(--type-subhead);line-height:var(--line-heading)}
+.panel-header p,.chart-legend,.donut-legend{font-size:var(--type-caption);line-height:var(--line-compact)}
+.chart-y-labels,.bar-group,.donut-chart span{font-size:var(--type-overline);line-height:var(--line-compact)}
+.donut-chart strong{font-size:var(--type-heading-lg);line-height:var(--line-display)}
+
+/* Bảng dữ liệu */
+.table-scroll table,.large-table table{font-size:var(--type-body-sm);line-height:var(--line-compact)}
+.table-scroll th{font-size:var(--type-body-sm);line-height:var(--line-compact)}
+.table-scroll td strong{font-size:var(--type-body-sm);line-height:var(--line-compact)}
+.cell-meta{font-size:var(--type-caption);line-height:var(--line-compact)}
+.product-code{font-size:var(--type-caption);line-height:var(--line-compact)}
+.rate-cell strong{font-size:var(--type-overline)!important;line-height:var(--line-compact)}
+.empty-state{font-size:var(--type-body-sm);line-height:var(--line-body)}
+
+/* Thanh công cụ và trường nhập */
+.table-search input{font-size:var(--type-meta);line-height:var(--line-compact)}
+.segmented-control button,.toolbar-note{font-size:var(--type-caption);line-height:var(--line-compact)}
+
+/* Banner nghiệp vụ */
+.summary-banner>div:nth-child(2)>span{font-size:var(--type-overline);line-height:var(--line-compact)}
+.summary-banner h2{font-size:var(--type-dialog-title);line-height:var(--line-heading)}
+.summary-banner p{font-size:var(--type-body-sm);line-height:var(--line-body)}
+.summary-banner-metric span{font-size:var(--type-caption);line-height:var(--line-compact)}
+.summary-banner-metric strong{font-size:var(--type-heading-sm);line-height:var(--line-heading)}
+
+/* Nhật ký, cảnh báo và danh sách tính năng */
+.activity-item strong{font-size:var(--type-body-sm);line-height:var(--line-compact)}
+.activity-item span{font-size:var(--type-caption);line-height:var(--line-compact)}
+.activity-item small{font-size:var(--type-overline);line-height:var(--line-compact)}
+.validation-note strong{font-size:var(--type-meta);line-height:var(--line-compact)}
+.validation-note span{font-size:var(--type-caption);line-height:var(--line-body)}
+
+/* Biểu mẫu, hộp thoại và đăng nhập — riêng của app cước phí. */
+.field>label{font-size:var(--type-caption);line-height:var(--line-compact)}
+.field input,.field select,.field textarea{font-size:var(--type-meta);line-height:var(--line-compact)}
+.field-hint{font-size:var(--type-caption);line-height:var(--line-compact)}
+.page-option strong{font-size:var(--type-caption);line-height:var(--line-compact)}
+.page-option span{font-size:var(--type-caption);line-height:var(--line-compact)}
+.dialog-header h3{font-size:var(--type-subhead);line-height:var(--line-heading)}
+.dialog-header p{font-size:var(--type-caption);line-height:var(--line-compact)}
+.confirm-message{font-size:var(--type-meta);line-height:var(--line-body)}
+.form-alert{font-size:var(--type-caption);line-height:var(--line-compact)}
+.detail-json{font-size:var(--type-overline)}
+.login-brand .brand-copy strong{font-size:var(--type-heading-sm);line-height:var(--line-heading)}
+.login-brand .brand-copy span{font-size:var(--type-caption);line-height:var(--line-compact)}
+.login-field label{font-size:var(--type-caption);line-height:var(--line-compact)}
+.login-field input{font-size:var(--type-meta);line-height:var(--line-compact)}
+.login-hint{font-size:var(--type-caption);line-height:var(--line-compact)}

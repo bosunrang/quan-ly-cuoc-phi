@@ -1,0 +1,22 @@
+.user-intro .panel-header {
+	min-height: 84px;
+	padding: 14px 16px;
+}
+
+.user-intro .panel-header-icon {
+	width: 44px;
+	height: 44px;
+	border-radius: 9px;
+}
+
+.user-table-wrap { overflow-x: auto; }
+.user-table { width: 100%; min-width: 860px; table-layout: fixed; }
+.user-table th:nth-child(1) { width: 18%; }
+.user-table th:nth-child(2) { width: 18%; }
+.user-table th:nth-child(3) { width: 28%; }
+.user-table th:nth-child(4) { width: 18%; }
+.user-table th:nth-child(5) { width: 18%; }
+.user-table th:nth-child(n + 2),
+.user-table td:nth-child(n + 2) { text-align: center; }
+.user-table td:nth-child(n + 2) .inline-actions { justify-content: center; }
+.user-table td:nth-child(3) .inline-actions { flex-wrap: wrap; }

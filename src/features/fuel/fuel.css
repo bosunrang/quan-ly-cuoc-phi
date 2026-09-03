@@ -1,0 +1,86 @@
+.fuel-intro {
+  display: flex; align-items: center; gap: 13px; min-height: 84px; padding: 14px 16px;
+}
+.fuel-intro-icon { display: grid; width: 44px; height: 44px; flex: 0 0 auto; border-radius: 9px; place-items: center; background: var(--surface-accent-faint); color: var(--teal); }
+.fuel-intro h2 { margin: 0; font-size: var(--type-subhead); line-height: var(--line-heading); }
+.fuel-intro p { margin: 4px 0 0; color: var(--muted); font-size: var(--type-caption); line-height: var(--line-compact); }
+.fuel-intro > div:nth-child(2) { min-width: 0; }
+.fuel-intro > .button { margin-left: auto; }
+.fuel-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fuel-overview article { display: flex; align-items: center; justify-content: space-between; min-height: 70px; }
+.fuel-overview article:nth-child(3) strong { color: var(--teal); }
+.fuel-calculator, .fuel-history-panel { padding: 0; overflow: hidden; }
+.fuel-layout { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(540px,1fr); gap: 16px; align-items: start; }
+.fuel-section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 20px; border-bottom: 1px solid var(--line-soft); background: linear-gradient(100deg, var(--panel), var(--surface-subtle)); }
+.fuel-section-head strong, .fuel-section-head span { display: block; }
+.fuel-section-head strong { color: var(--ink); font-size: var(--type-subhead); line-height: var(--line-heading); }
+.fuel-section-head span { margin-top: 3px; color: var(--muted); font-size: var(--type-caption); }
+.fuel-settings { display: grid; grid-template-columns: minmax(180px,1fr) 156px 156px 184px; gap: 12px; padding: 18px 20px; background: var(--panel); }
+.fuel-default-settings { display: flex; grid-column: 1 / -1; align-items: start; gap: 12px; }
+.fuel-compact-field { max-width: 156px; }
+.fuel-settings > label, .fuel-settings > .fuel-date-field, .fuel-default-settings > label, .fuel-route label, .fuel-route-field { display: grid; align-self: start; gap: 6px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; }
+.fuel-settings input, .fuel-settings select, .fuel-route input { box-sizing: border-box; width: 100%; height: 36px; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text-body); font-size: var(--type-meta); line-height: var(--line-compact); transition: border-color .15s ease, box-shadow .15s ease; }
+.fuel-settings .manage-date { height: 36px; }
+.fuel-settings .manage-date input.date-text { height: 34px; }
+.fuel-settings .manage-date .datepick { min-height: 34px; }
+.fuel-settings input:focus, .fuel-settings select:focus, .fuel-route input:focus { outline: 0; border-color: var(--teal-border); box-shadow: 0 0 0 3px var(--surface-accent-faint); }
+.fuel-settings small { min-height: 15px; color: var(--muted); font-size: var(--type-overline); font-weight: 500; }
+.fuel-field-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.fuel-field-title small { min-height: 0; white-space: nowrap; }
+.fuel-route { margin: 0 20px 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-subtle); }
+.fuel-route-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.fuel-route-head strong { font-size: var(--type-body-sm); color: var(--ink); }
+.fuel-route-head span { color: var(--muted); font-size: var(--type-caption); }
+.fuel-leg { display: grid; grid-template-columns: minmax(180px,1.25fr) minmax(190px,1.3fr) 128px 96px; gap: 10px; align-items: end; padding: 13px 0; border-top: 1px solid var(--line-soft); }
+.fuel-leg-removable { grid-template-columns: minmax(180px,1.25fr) minmax(190px,1.3fr) 128px 96px 34px; }
+.fuel-leg:first-of-type { border-top: 0; }
+.fuel-leg input[readonly] { background: var(--surface-subtle); color: var(--muted); }
+.fuel-location-picker { position: relative; }
+.fuel-location-menu { position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; left: 0; max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); box-shadow: var(--shadow-elevated); }
+.fuel-location-menu button { display: grid; width: 100%; gap: 2px; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--line-soft); background: var(--panel); color: var(--text-body); font: inherit; text-align: left; cursor: pointer; }
+.fuel-location-menu button:last-child { border-bottom: 0; }
+.fuel-location-menu button:hover { background: var(--surface-accent-faint); }
+.fuel-location-menu strong { font-size: var(--type-body-sm); }
+.fuel-location-menu span, .fuel-location-menu p { margin: 0; color: var(--muted); font-size: var(--type-overline); }
+.fuel-location-menu p { padding: 10px; }
+.fuel-leg-fee-field { display: grid; align-self: start; gap: 6px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; }
+.fuel-leg-fee { display: grid; box-sizing: border-box; height: 36px; min-height: 36px; align-items: center; padding: 0 10px; border: 1px solid var(--status-success-border); border-radius: 7px; background: var(--status-success-bg); color: var(--status-success-text); }
+.fuel-leg-fee strong { font-size: var(--type-body-sm); font-variant-numeric: tabular-nums; }
+.fuel-delete-leg { width: 36px; height: 36px; }
+.fuel-delete-leg:focus-visible { outline: 0; border-color: var(--status-danger-border); box-shadow: 0 0 0 3px var(--status-danger-bg); color: var(--status-danger-text); }
+.fuel-route > .button { margin-top: 14px; }
+.fuel-calculator-footer { display: flex; align-items: stretch; justify-content: flex-end; gap: 18px; padding: 14px 20px; border-top: 1px solid var(--line-soft); background: var(--surface-subtle); }
+.fuel-calculator-footer > div { display: grid; min-width: 132px; align-content: center; gap: 2px; color: var(--muted); font-size: var(--type-caption); }
+.fuel-calculator-footer > div + div { padding-left: 18px; border-left: 1px solid var(--line); }
+.fuel-calculator-footer strong { color: var(--ink); font-size: var(--type-heading-sm); font-variant-numeric: tabular-nums; }
+.fuel-calculator-footer > div:nth-child(2) strong { color: var(--teal); }
+.fuel-calculator-footer .button { min-width: 142px; }
+.fuel-table { width: 100%; border-collapse: collapse; font-size: var(--type-body-sm); line-height: var(--line-compact); }
+.fuel-table th, .fuel-table td { padding: 12px 16px; border-top: 1px solid var(--line-soft); text-align: left; }
+.fuel-table th { background: var(--table-head-bg); color: var(--text-subtle); font-size: var(--type-body-sm); line-height: var(--line-compact); }
+.fuel-table tbody tr:hover { background: var(--surface-subtle); }
+.fuel-money { font-weight: 700; text-align: right !important; font-variant-numeric: tabular-nums; }
+.fuel-history-panel { min-height: 238px; }
+.fuel-history-panel .fuel-section-head { min-height: 0; padding: 15px 20px; }
+.fuel-history-filter { width: 230px; min-width: 230px; margin-left: auto; }
+.fuel-history-filter select { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text-body); font: inherit; font-size: var(--type-meta); font-weight: 400; }
+.fuel-history-panel .fuel-table th, .fuel-history-panel .fuel-table td { padding: 12px 10px; }
+.fuel-history-panel .fuel-table { table-layout: fixed; }
+.fuel-history-panel .fuel-table th:nth-child(1), .fuel-history-panel .fuel-table td:nth-child(1) { width: 27%; }
+.fuel-history-panel .fuel-table th:nth-child(2), .fuel-history-panel .fuel-table td:nth-child(2) { width: 27%; white-space: nowrap; }
+.fuel-history-panel .fuel-table th:nth-child(3), .fuel-history-panel .fuel-table td:nth-child(3) { width: 19%; }
+.fuel-history-panel .fuel-table th:nth-child(4), .fuel-history-panel .fuel-table td:nth-child(4) { width: 27%; }
+.fuel-history-panel .fuel-table th:nth-child(3), .fuel-history-panel .fuel-table td:nth-child(3) { text-align: center; white-space: nowrap; }
+.fuel-history-panel .fuel-table th:last-child, .fuel-history-panel .fuel-table td:last-child { text-align: center !important; }
+.fuel-history-pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:8px 12px;border-top:1px solid var(--line-soft);background:var(--surface-subtle)}.fuel-history-pagination .button{width:32px;min-width:32px;height:32px;padding:0}.fuel-history-pagination>span{min-width:68px;text-align:center;color:var(--text-subtle);font-size:var(--type-caption);font-weight:700}
+.fuel-online-choice { display: block; width: 100%; margin-top: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-subtle); color: var(--text-body); text-align: left; cursor: pointer; }
+.fuel-online-choice:hover { border-color: var(--teal-border); background: var(--surface-accent-faint); }
+.fuel-price-dialog .fuel-price-fields { display: grid; grid-template-columns: 170px 160px minmax(180px, 1fr); gap: 12px; padding: 0; }
+.fuel-price-dialog .fuel-price-fields > label, .fuel-price-dialog .fuel-date-field { display: grid; gap: 6px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; }
+.fuel-price-dialog .fuel-price-fields > label > input { box-sizing: border-box; width: 100%; height: 36px; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text-body); font-size: var(--type-meta); }
+.fuel-price-dialog > .button.secondary { width: 100%; margin-top: 14px; }
+@media (max-width: 640px) { .fuel-price-dialog .fuel-price-fields { grid-template-columns: 1fr; } }
+@media (max-width: 1450px) { .fuel-layout { grid-template-columns: 1fr; } }
+@media (max-width: 1250px) { .fuel-settings { grid-template-columns: minmax(180px,1fr) 140px 140px 164px; } .fuel-compact-field { max-width: 140px; } .fuel-leg { grid-template-columns: minmax(150px,1fr) minmax(160px,1fr) 120px 90px; } .fuel-leg-removable { grid-template-columns: minmax(150px,1fr) minmax(160px,1fr) 120px 90px 34px; } }
+@media (max-width: 820px) { .fuel-settings { grid-template-columns: repeat(2,minmax(0,1fr)); } .fuel-leg { grid-template-columns: 1fr 1fr; } .fuel-leg-fee { grid-column: span 1; } .fuel-delete-leg { justify-self: end; } .fuel-calculator-footer { justify-content: flex-start; flex-wrap: wrap; } }
+@media (max-width: 560px) { .fuel-intro { align-items: flex-start; flex-wrap: wrap; } .fuel-intro > .button { margin-left: 0; } .fuel-overview, .fuel-settings { grid-template-columns: 1fr; } .fuel-section-head { align-items: flex-start; padding: 14px; } .fuel-route { margin-left: 14px; margin-right: 14px; } .fuel-route-head { align-items: flex-start; flex-direction: column; } .fuel-leg { grid-template-columns: 1fr; } .fuel-delete-leg { grid-row: 1; grid-column: 1; justify-self: end; } .fuel-calculator-footer { gap: 12px; padding: 14px; } .fuel-calculator-footer > div + div { padding-left: 0; border-left: 0; } .fuel-calculator-footer .button { width: 100%; } }

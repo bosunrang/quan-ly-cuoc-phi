@@ -1,0 +1,20 @@
+:root{
+  font-family:Manrope,"Segoe UI",sans-serif;
+  color:var(--ink);
+  background:var(--bg);
+  font-synthesis:none;
+  text-rendering:optimizeLegibility;
+}
+
+*{box-sizing:border-box}
+.visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+html,body,#root{margin:0;min-width:320px;min-height:100%;height:100%}
+body{min-height:100vh;background:var(--bg);overflow:hidden}
+button,input,select,textarea{font:inherit}
+input,select,textarea{font-weight:400!important}
+/* Quy tắc focus của toàn app: trường nhập chỉ đổi viền teal nhạt sát cạnh,
+   tuyệt đối không dùng quầng sáng/viền xanh bên ngoài. */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea):focus,:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea):focus-visible{border-color:var(--focus-border)!important;box-shadow:none!important;outline:none!important}
+button{border:0}
+/* Nút dùng đường viền nằm bên trong để không tạo quầng xanh bên ngoài. */
+button:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--focus-border)}
