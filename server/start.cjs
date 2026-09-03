@@ -21,7 +21,7 @@ const ALLOW_DEV_LOGIN =
 
 async function main() {
   const app = createApp({
-    dbFile: process.env.DB_FILE || join(ROOT, 'data', 'cuoc-phi.sqlite'),
+    dbFile: process.env.DB_FILE || join(ROOT, 'data', 'cost-app.sqlite'),
     staticRoot: API_ONLY ? null : join(ROOT, 'dist'),
     allowDevLogin: ALLOW_DEV_LOGIN,
   });

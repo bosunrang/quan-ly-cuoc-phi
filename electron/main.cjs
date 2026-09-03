@@ -111,7 +111,7 @@ async function chooseMachine() {
 
 async function startBackend() {
   backend = createApp({
-    dbFile: path.join(app.getPath('userData'), 'data', 'cuoc-phi.sqlite'),
+    dbFile: path.join(app.getPath('userData'), 'data', 'cost-app.sqlite'),
     staticRoot: path.join(__dirname, '..', 'dist'),
   });
   const address = await backend.listen(DEFAULT_PORT, '0.0.0.0');
