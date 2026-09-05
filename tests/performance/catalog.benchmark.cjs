@@ -105,6 +105,20 @@ async function login(baseUrl, seeded) {
   return response.json();
 }
 
+async function prepareSeededAdmin(baseUrl, seeded) {
+  const initial = await login(baseUrl, seeded);
+  const changed = await fetch(`${baseUrl}/api/me/initial-password`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${initial.token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ newPassword: 'BenchmarkAdmin123' }),
+  });
+  assert.equal(changed.status, 200, 'Không đổi được mật khẩu khởi tạo cho benchmark.');
+  return login(baseUrl, { username: seeded.username, password: 'BenchmarkAdmin123' });
+}
+
 async function measure(baseUrl, token, label, path) {
   const request = async () => {
     const startedAt = performance.now();
@@ -137,7 +151,7 @@ async function main() {
     seedCatalog(app.db);
     const address = await app.listen(0, '127.0.0.1');
     const baseUrl = `http://127.0.0.1:${address.port}`;
-    const profile = await login(baseUrl, app.seeded);
+    const profile = await prepareSeededAdmin(baseUrl, app.seeded);
     const measurements = await Promise.all([
       measure(baseUrl, profile.token, 'Khách hàng: trang 50', '/api/customers?page=1&limit=50'),
       measure(baseUrl, profile.token, 'Khách hàng: tìm kiếm', '/api/customers?search=khach%20hang%201200&page=1&limit=50'),

@@ -16,11 +16,20 @@ export const settingsRepository = {
 	},
 
 	backup(): Promise<SettingsBackup> {
-		return api<SettingsBackup>("GET", "/api/settings/backup");
+		return api<SettingsBackup>("GET", "/api/settings/backup", undefined, {
+			timeoutMs: 120_000,
+		});
 	},
 
 	restore(backup: SettingsBackup): Promise<{ restored: boolean }> {
-		return api("POST", "/api/settings/backup/restore", { backup });
+		return api(
+			"POST",
+			"/api/settings/backup/restore",
+			{ backup },
+			{
+				timeoutMs: 120_000,
+			},
+		);
 	},
 
 	deleteData(groups: DataGroup[] | ["all"]): Promise<{ deleted: string[] }> {

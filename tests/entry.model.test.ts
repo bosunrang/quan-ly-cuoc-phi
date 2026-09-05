@@ -53,6 +53,7 @@ describe("chuyển phiếu sang dữ liệu biểu mẫu", () => {
 			spec: "Thùng 20kg",
 			ticketFee: 20_000,
 			transportFee: 350_000,
+			standardTransportFee: 350_000,
 			gateFee: 15_000,
 			totalFee: 385_000,
 			note: "",

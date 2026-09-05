@@ -101,5 +101,12 @@
 .entry-list-table td { height: 62px; vertical-align: middle; white-space: normal; }
 .entry-list-table td strong { color: var(--text-strong); }
 .entry-list-table .entry-money { color: var(--text-strong); font-weight: 750; font-variant-numeric: tabular-nums; text-align: center; }
-.entry-note-cell { color: var(--text-body); line-height: var(--line-body); }
+.entry-list-table .entry-money.is-over-rate { color: var(--status-danger-text); }
+.entry-list-table .entry-money.is-under-rate { color: var(--text-success); }
+.entry-note-heading,
+.entry-note-cell { color: var(--text-body); line-height: var(--line-body); text-align: center; }
 .entry-row-actions { display: flex; justify-content: center; gap: 6px; }
+.entry-pagination { min-height: 48px; padding: 8px 13px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); background: var(--table-footer-bg); color: var(--muted); font-size: var(--type-caption); font-weight: 650; }
+.entry-pagination button { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--teal); display: grid; place-items: center; cursor: pointer; }
+.entry-pagination button:hover:not(:disabled) { border-color: var(--teal-border); background: var(--surface-accent-faint); }
+.entry-pagination button:disabled { opacity: .4; cursor: not-allowed; }

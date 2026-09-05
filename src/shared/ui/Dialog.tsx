@@ -7,6 +7,7 @@ interface DialogProps {
 	title: string;
 	subtitle?: string;
 	confirmLabel?: string;
+	confirmClassName?: "primary" | "danger";
 	confirmDisabled?: boolean;
 	className?: string;
 	footer?: ReactNode;
@@ -20,6 +21,7 @@ export function Dialog({
 	title,
 	subtitle,
 	confirmLabel = "Lưu",
+	confirmClassName = "primary",
 	confirmDisabled = false,
 	className = "",
 	footer,
@@ -99,7 +101,7 @@ export function Dialog({
 							</button>
 							<button
 								type="submit"
-								className="button primary"
+								className={`button ${confirmClassName}`}
 								disabled={busy || confirmDisabled}
 							>
 								{busy ? "Đang lưu…" : confirmLabel}

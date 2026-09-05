@@ -38,7 +38,7 @@ body{font-size:var(--type-body);line-height:var(--line-body)}
 .mini-stat-grid strong{font-size:var(--type-heading-sm);line-height:var(--line-heading)}
 
 /* Panel, biểu đồ và khối dữ liệu */
-.panel-header h3{font-size:var(--type-subhead);line-height:var(--line-heading)}
+.panel-header h3{font-size:16px;line-height:var(--line-heading)}
 .panel-header p,.chart-legend,.donut-legend{font-size:var(--type-caption);line-height:var(--line-compact)}
 .chart-y-labels,.bar-group,.donut-chart span{font-size:var(--type-overline);line-height:var(--line-compact)}
 .donut-chart strong{font-size:var(--type-heading-lg);line-height:var(--line-display)}

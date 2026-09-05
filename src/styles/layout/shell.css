@@ -56,5 +56,5 @@
 .mobile-menu{display:none;background:transparent;color:var(--ink);padding:6px}
 
 .page-content{flex:1;min-height:0;overflow:auto;padding:22px 24px 30px}
-.page-stack{display:flex;flex-direction:column;gap:16px;max-width:1600px;margin:0 auto}
+.page-stack{display:flex;flex-direction:column;gap:var(--space-4);max-width:1600px;margin:0 auto}
 .app-shell.sidebar-collapsed .page-stack{max-width:none}

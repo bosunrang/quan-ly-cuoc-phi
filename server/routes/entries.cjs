@@ -4,14 +4,12 @@ const { normalizeSearchText, transaction } = require('../db.cjs');
 const { ensureCustomerCarrier, refreshCustomerCarrier } = require('../carrier-links.cjs');
 const { writeAudit } = require('../audit.cjs');
 const { canSeeEveryone } = require('../permissions.cjs');
-const { badRequest, notFound } = require('../http.cjs');
+const { badRequest, notFound, isIsoDate } = require('../http.cjs');
 
 const PAGE = 'entries';
 const MAX_LIMIT = 500;
 
 // ---------------------------------------------------------------- kiểm tra
-
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function text(value, field, { max = 200, required = false } = {}) {
   const result = String(value ?? '').trim();
@@ -34,11 +32,11 @@ function money(value, field) {
 
 function readEntryInput(body) {
   const entryDate = String(body.entryDate ?? '').trim();
-  if (!DATE_PATTERN.test(entryDate)) {
+  if (!isIsoDate(entryDate)) {
     throw badRequest('Ngày không hợp lệ (cần dạng YYYY-MM-DD).');
   }
   const misaDocumentDate = text(body.misaDocumentDate, 'Ngày chứng từ MISA', { max: 10 });
-  if (misaDocumentDate && !DATE_PATTERN.test(misaDocumentDate)) {
+  if (misaDocumentDate && !isIsoDate(misaDocumentDate)) {
     throw badRequest('Ngày chứng từ MISA không hợp lệ.');
   }
   return {
@@ -182,6 +180,9 @@ function toApi(row) {
     spec: row.spec,
     ticketFee: row.ticket_fee,
     transportFee: row.transport_fee,
+    standardTransportFee: row.standard_transport_fee == null
+      ? null
+      : Number(row.standard_transport_fee),
     gateFee: row.gate_fee,
     totalFee: row.total_fee,
     note: row.note,
@@ -196,6 +197,20 @@ function toApi(row) {
     updatedAt: row.updated_at,
   };
 }
+
+const STANDARD_TRANSPORT_RATE_SELECT = `(
+  SELECT rate.transport_fee
+    FROM customers customer
+    INNER JOIN carriers carrier
+      ON carrier.carrier_key = vn_normalize(e.carrier)
+    INNER JOIN carrier_customer_rates rate
+      ON rate.customer_id = customer.id AND rate.carrier_id = carrier.id
+   WHERE customer.customer_key = vn_normalize(e.customer)
+     AND (rate.spec_key = vn_normalize(e.spec) OR rate.is_default = 1)
+   ORDER BY CASE WHEN rate.spec_key = vn_normalize(e.spec) THEN 0 ELSE 1 END,
+            rate.id
+   LIMIT 1
+) AS standard_transport_fee`;
 
 /**
  * Đọc một phiếu và kiểm tra quyền chạm vào nó.
@@ -239,11 +254,17 @@ function register(router) {
       params.push(employeeId);
     }
 
-    if (DATE_PATTERN.test(c.query.from ?? '')) {
+    if (c.query.from && !isIsoDate(c.query.from)) {
+      throw badRequest('Từ ngày không hợp lệ.');
+    }
+    if (c.query.from) {
       where.push('e.entry_date >= ?');
       params.push(c.query.from);
     }
-    if (DATE_PATTERN.test(c.query.to ?? '')) {
+    if (c.query.to && !isIsoDate(c.query.to)) {
+      throw badRequest('Đến ngày không hợp lệ.');
+    }
+    if (c.query.to) {
       where.push('e.entry_date <= ?');
       params.push(c.query.to);
     }
@@ -254,18 +275,20 @@ function register(router) {
     }
 
     const clause = where.join(' AND ');
-    const limit = Math.min(Number(c.query.limit) || 200, MAX_LIMIT);
+    const limit = Math.min(Math.max(Number(c.query.limit) || 25, 1), MAX_LIMIT);
+    const offset = Math.max(Number(c.query.offset) || 0, 0);
 
     const rows = c.db
       .prepare(
-      `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name
+      `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name,
+              ${STANDARD_TRANSPORT_RATE_SELECT}
            FROM entries e JOIN users u ON u.id = e.created_by
            LEFT JOIN employees ON employees.id = e.employee_id
           WHERE ${clause}
           ORDER BY e.entry_date DESC, e.id DESC
-          LIMIT ?`,
+          LIMIT ? OFFSET ?`,
       )
-      .all(...params, limit);
+      .all(...params, limit, offset);
 
     const summary = c.db
       .prepare(
@@ -349,7 +372,7 @@ function register(router) {
     c.requirePage(PAGE);
     const customerId = Number(c.query.customerId);
     const endDate = String(c.query.endDate ?? '').trim();
-    if (!DATE_PATTERN.test(endDate)) throw badRequest('Ngày gửi không hợp lệ.');
+    if (!isIsoDate(endDate)) throw badRequest('Ngày gửi không hợp lệ.');
     const customer = c.db.prepare('SELECT customer_name FROM customers WHERE id = ?').get(customerId);
     if (!customer) throw notFound('Không tìm thấy khách hàng.');
     const rows = c.db.prepare(
@@ -437,7 +460,8 @@ function register(router) {
 		writeAudit(c.db, c.user, 'entry.create', 'entry', id, { ...input, employeeId, delivery });
       const row = c.db
         .prepare(
-          `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name
+          `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name,
+                  ${STANDARD_TRANSPORT_RATE_SELECT}
              FROM entries e JOIN users u ON u.id = e.created_by
              LEFT JOIN employees ON employees.id = e.employee_id WHERE e.id = ?`,
         )
@@ -489,7 +513,8 @@ function register(router) {
       });
       const row = c.db
         .prepare(
-          `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name
+          `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name,
+                  ${STANDARD_TRANSPORT_RATE_SELECT}
              FROM entries e JOIN users u ON u.id = e.created_by
              LEFT JOIN employees ON employees.id = e.employee_id WHERE e.id = ?`,
         )

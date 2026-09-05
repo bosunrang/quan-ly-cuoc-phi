@@ -118,24 +118,6 @@ export function DashboardPage() {
 					<p>Tình hình cước phí, nhiên liệu và giao hàng trong kỳ đã chọn.</p>
 				</div>
 				<div className="dashboard-filters">
-					<div className="dashboard-filter-field">
-						Từ ngày
-						<DateInput
-							value={filters.from}
-							ariaLabel="Từ ngày tổng quan"
-							onChange={(from) =>
-								rememberDate(DASHBOARD_FROM_DRAFT_KEY, "from", from)
-							}
-						/>
-					</div>
-					<div className="dashboard-filter-field">
-						Đến ngày
-						<DateInput
-							value={filters.to}
-							ariaLabel="Đến ngày tổng quan"
-							onChange={(to) => rememberDate(DASHBOARD_TO_DRAFT_KEY, "to", to)}
-						/>
-					</div>
 					{data.scope === "all" && (
 						<label className="dashboard-filter-field dashboard-employee-filter">
 							Nhân viên
@@ -157,6 +139,24 @@ export function DashboardPage() {
 							</select>
 						</label>
 					)}
+					<div className="dashboard-filter-field">
+						Từ ngày
+						<DateInput
+							value={filters.from}
+							ariaLabel="Từ ngày tổng quan"
+							onChange={(from) =>
+								rememberDate(DASHBOARD_FROM_DRAFT_KEY, "from", from)
+							}
+						/>
+					</div>
+					<div className="dashboard-filter-field">
+						Đến ngày
+						<DateInput
+							value={filters.to}
+							ariaLabel="Đến ngày tổng quan"
+							onChange={(to) => rememberDate(DASHBOARD_TO_DRAFT_KEY, "to", to)}
+						/>
+					</div>
 				</div>
 			</section>
 			{error && <Alert tone="error">{error}</Alert>}

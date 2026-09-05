@@ -56,8 +56,8 @@ const PAGES = [
     key: 'fuel',
     label: 'Tính giá xăng',
     description: 'Quy đổi chi phí nhiên liệu theo quãng đường.',
-    adminOnly: true,
-    ownScope: false,
+    adminOnly: false,
+    ownScope: true,
   },
   {
     key: 'reports_employee',

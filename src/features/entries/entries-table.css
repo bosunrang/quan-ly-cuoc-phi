@@ -12,3 +12,8 @@
 .entry-list-table.is-admin td:nth-child(8) {
 	text-align: center;
 }
+
+.entry-list-table th.entry-note-heading,
+.entry-list-table td.entry-note-cell {
+	text-align: center;
+}

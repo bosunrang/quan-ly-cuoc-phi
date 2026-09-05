@@ -1,9 +1,7 @@
 import {
 	ChevronLeft,
 	ChevronRight,
-	Eye,
 	History,
-	RefreshCw,
 	Search,
 	Trash2,
 } from "lucide-react";
@@ -16,7 +14,7 @@ import {
 	entityLabel,
 } from "../../domain/audit/audit.model";
 import { auditRepository } from "../../domain/audit/audit.repository";
-import { formatDateTime } from "../../shared/lib/format";
+import { formatDate, formatDateTime } from "../../shared/lib/format";
 import { Alert } from "../../shared/ui/Alert";
 
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
@@ -51,7 +49,13 @@ const detailLabels: Record<string, string> = {
 	periodFrom: "Từ ngày",
 	periodTo: "Đến ngày",
 	employeeId: "Nhân viên",
+	employeeName: "Nhân viên",
 	distanceKm: "Quãng đường",
+	consumptionLiters: "Mức tiêu hao",
+	consumptionBaseKm: "Định mức quãng đường",
+	fuelType: "Loại xăng",
+	region: "Khu vực",
+	fuelPrice: "Giá xăng",
 	totalFee: "Tổng tiền",
 	effectiveDate: "Ngày hiệu lực",
 	price: "Giá",
@@ -63,29 +67,128 @@ const detailLabels: Record<string, string> = {
 	sheetCount: "Số sheet",
 	from: "Từ ngày",
 	to: "Đến ngày",
+	beforeDate: "Trước ngày",
 	extraCosts: "Chi phí thêm",
+	isActive: "Trạng thái hoạt động",
+	groups: "Nhóm dữ liệu",
+	deleted: "Đã xóa",
+	detachedEmployeeLinks: "Liên kết nhân viên đã gỡ",
+	rows: "Số dòng",
+	reason: "Lý do",
+	customerIds: "Khách hàng được gán",
 };
 
-function detailValue(value: unknown): string {
+const dataGroupLabels: Record<string, string> = {
+	entries: "Phiếu cước",
+	misa: "Dữ liệu MISA",
+	customers: "Khách hàng",
+	carriers: "Nhà xe",
+	employees: "Nhân viên",
+	fuel: "Dữ liệu xăng",
+	users: "Tài khoản",
+};
+const pageLabels: Record<string, string> = {
+	dashboard: "Tổng quan",
+	entries: "Phiếu cước",
+	customers: "Khách hàng",
+	carriers: "Nhà xe",
+	employees: "Nhân viên",
+	fuel: "Tính xăng",
+	misa: "Dữ liệu MISA",
+	reports: "Báo cáo",
+	settings: "Cài đặt",
+	users: "Tài khoản",
+	audit: "Nhật ký hoạt động",
+};
+
+function detailValue(value: unknown, key = ""): string {
 	if (value === null || value === undefined || value === "") return "—";
-	if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
+	if (typeof value === "boolean") return value ? "Có" : "Không";
+	if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+		return formatDate(value);
+	}
+	if (Array.isArray(value)) {
+		if (!value.length) return "—";
+		if (key === "groups")
+			return value
+				.map((item) => dataGroupLabels[String(item)] ?? item)
+				.join(", ");
+		if (key === "pages")
+			return value.map((item) => pageLabels[String(item)] ?? item).join(", ");
+		return value.join(", ");
+	}
+	if (key === "type") {
+		return value === "annual"
+			? "Báo cáo năm"
+			: value === "daily"
+				? "Báo cáo ngày"
+				: String(value);
+	}
+	if (key === "region") {
+		return value === "region1"
+			? "Vùng 1"
+			: value === "region2"
+				? "Vùng 2"
+				: String(value);
+	}
 	if (typeof value === "object") return "Có dữ liệu chi tiết";
 	return String(value);
 }
 
 function detailRows(detail: unknown): Array<[string, string]> {
 	if (!detail || typeof detail !== "object" || Array.isArray(detail)) return [];
-	return Object.entries(detail as Record<string, unknown>)
+	const values = detail as Record<string, unknown>;
+	const before = values.before;
+	const after = values.after;
+	if (
+		before &&
+		after &&
+		typeof before === "object" &&
+		typeof after === "object" &&
+		!Array.isArray(before) &&
+		!Array.isArray(after)
+	) {
+		const beforeValues = before as Record<string, unknown>;
+		return Object.entries(after as Record<string, unknown>)
+			.filter(
+				([key, value]) =>
+					key !== "id" &&
+					key !== "updatedAt" &&
+					detailValue(beforeValues[key], key) !== detailValue(value, key),
+			)
+			.slice(0, 3)
+			.map(([key, value]) => [
+				detailLabels[key] ?? key,
+				`${detailValue(beforeValues[key], key)} → ${detailValue(value, key)}`,
+			]);
+	}
+	return Object.entries(values)
 		.filter(([key]) => key !== "before" && key !== "after" && key !== "legs")
 		.slice(0, 8)
-		.map(([key, value]) => [detailLabels[key] ?? key, detailValue(value)]);
+		.slice(0, 3)
+		.map(([key, value]) => [detailLabels[key] ?? key, detailValue(value, key)]);
+}
+
+function auditTimeParts(value: string): { time: string; date: string } {
+	const formatted = formatDateTime(value);
+	const [time = "", date = ""] = formatted.split(" ");
+	return { time, date };
+}
+
+function AuditTime({ value }: { value: string }) {
+	const { time, date } = auditTimeParts(value);
+	return (
+		<time dateTime={value}>
+			<strong>{time}</strong>
+			<span>{date}</span>
+		</time>
+	);
 }
 
 export function AuditPage({ isAdmin }: { isAdmin: boolean }) {
 	const [items, setItems] = useState<AuditEntry[] | null>(null);
 	const [total, setTotal] = useState(0);
 	const [error, setError] = useState<string | null>(null);
-	const [detail, setDetail] = useState<AuditEntry | null>(null);
 	const [query, setQuery] = useState("");
 	const [debouncedQuery, setDebouncedQuery] = useState("");
 	const [page, setPage] = useState(1);
@@ -145,18 +248,10 @@ export function AuditPage({ isAdmin }: { isAdmin: boolean }) {
 			<section className="panel audit-intro">
 				<PanelHeader
 					title="Nhật ký hoạt động"
-					description="Theo dõi các thay đổi quan trọng trong hệ thống."
+					description="Theo dõi ai đã làm gì, vào thời điểm nào và xem lại chi tiết khi cần."
 					icon={<History size={19} />}
 					actions={
 						<div className="audit-intro-actions">
-							<button
-								type="button"
-								className="button secondary"
-								disabled={loading}
-								onClick={() => void load(filters, page)}
-							>
-								<RefreshCw size={15} /> Làm mới
-							</button>
 							{isAdmin && (
 								<button
 									type="button"
@@ -172,7 +267,7 @@ export function AuditPage({ isAdmin }: { isAdmin: boolean }) {
 			</section>
 
 			<section className="panel data-panel audit-log-panel">
-				<PanelHeader title="Hoạt động gần đây" description={summary} />
+				<PanelHeader title="Dòng thời gian hoạt động" description={summary} />
 				<div className="audit-toolbar">
 					<label className="audit-search">
 						<Search size={16} />
@@ -203,8 +298,10 @@ export function AuditPage({ isAdmin }: { isAdmin: boolean }) {
 								<tbody>
 									{items.map((row) => (
 										<tr key={row.id}>
-											<td className="audit-time">{formatDateTime(row.at)}</td>
-											<td>
+											<td className="audit-time">
+												<AuditTime value={row.at} />
+											</td>
+											<td className="audit-user">
 												<strong>{row.username || "Hệ thống"}</strong>
 											</td>
 											<td>
@@ -213,17 +310,17 @@ export function AuditPage({ isAdmin }: { isAdmin: boolean }) {
 												</StatusPill>
 											</td>
 											<td className="audit-entity">
-												{entityLabel(row.entity, row.entityId)}
+												<span>{entityLabel(row.entity, row.entityId)}</span>
 											</td>
-											<td>
-												{row.detail ? (
-													<button
-														type="button"
-														className="text-button audit-detail-button"
-														onClick={() => setDetail(row)}
-													>
-														<Eye size={15} /> Xem
-													</button>
+											<td className="audit-detail">
+												{detailRows(row.detail).length ? (
+													<div className="audit-detail-content">
+														{detailRows(row.detail).map(([label, value]) => (
+															<span key={label} title={`${label}: ${value}`}>
+																<strong>{label}:</strong> {value}
+															</span>
+														))}
+													</div>
 												) : (
 													<span className="cell-meta">—</span>
 												)}
@@ -263,46 +360,6 @@ export function AuditPage({ isAdmin }: { isAdmin: boolean }) {
 					</>
 				)}
 			</section>
-
-			{detail && (
-				<Dialog
-					title={actionLabel(detail.action)}
-					subtitle={`${detail.username || "Hệ thống"} · ${formatDateTime(detail.at)}`}
-					confirmLabel="Đóng"
-					onConfirm={async () => setDetail(null)}
-					onClose={() => setDetail(null)}
-					footer={
-						<button
-							type="button"
-							className="button primary"
-							onClick={() => setDetail(null)}
-						>
-							Đóng
-						</button>
-					}
-				>
-					<div className="audit-detail-grid">
-						<div>
-							<span>Đối tượng</span>
-							<strong>{entityLabel(detail.entity, detail.entityId)}</strong>
-						</div>
-						{detailRows(detail.detail).map(([label, value]) => (
-							<div key={label}>
-								<span>{label}</span>
-								<strong>{value}</strong>
-							</div>
-						))}
-					</div>
-					{detail.detail !== null && detail.detail !== undefined && (
-						<details className="audit-raw-detail">
-							<summary>Dữ liệu kỹ thuật</summary>
-							<pre className="detail-json">
-								{JSON.stringify(detail.detail, null, 2)}
-							</pre>
-						</details>
-					)}
-				</Dialog>
-			)}
 
 			{cleanupOpen && (
 				<Dialog

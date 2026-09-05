@@ -9,6 +9,8 @@ export interface Entry {
 	spec: string;
 	ticketFee: number;
 	transportFee: number;
+	/** Cước đang thiết lập trong bảng giá; null khi không tìm thấy mức phù hợp. */
+	standardTransportFee: number | null;
 	gateFee: number;
 	/** Máy chủ tự cộng ba khoản phí, giao diện không tự tính. */
 	totalFee: number;
@@ -83,6 +85,8 @@ export interface EntryFilters {
 	to?: string;
 	search?: string;
 	employeeId?: string;
+	limit?: string;
+	offset?: string;
 }
 
 export interface EntryListResult {

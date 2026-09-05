@@ -121,6 +121,16 @@ function register(router) {
   router.delete('/api/employees/:id', async (c) => {
     c.requirePage(PAGE);
     const row = load(c.db, Number(c.params.id));
+    const references = c.db.prepare(
+      `SELECT
+        (SELECT COUNT(*) FROM entries WHERE employee_id = ?) +
+        (SELECT COUNT(*) FROM fuel_records WHERE employee_id = ?) AS count`,
+    ).get(row.id, row.id);
+    if (Number(references.count) > 0) {
+      throw badRequest(
+        'Nhân viên này đã có phiếu cước hoặc lịch sử tính xăng. Hãy khóa nhân viên để giữ lịch sử.',
+      );
+    }
     return transaction(c.db, () => {
       c.db.prepare('DELETE FROM employees WHERE id = ?').run(row.id);
       writeAudit(c.db, c.user, 'employee.delete', 'employee', row.id, toApi(row));

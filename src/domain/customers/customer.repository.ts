@@ -29,6 +29,7 @@ export const customerRepository = {
 			"POST",
 			"/api/customers/import",
 			{ rows },
+			{ timeoutMs: 120_000 },
 		);
 	},
 };

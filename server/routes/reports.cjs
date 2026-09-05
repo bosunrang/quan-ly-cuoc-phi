@@ -3,18 +3,17 @@
 const XLSX = require('xlsx-js-style');
 const { writeAudit } = require('../audit.cjs');
 const { canSeeEveryone } = require('../permissions.cjs');
-const { badRequest } = require('../http.cjs');
+const { badRequest, isIsoDate } = require('../http.cjs');
 
 const EMPLOYEE_PAGE = 'reports_employee';
 const CARRIER_PAGE = 'reports_carrier';
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const number = (value) => Number(value || 0);
 
 function filters(query) {
   const from = String(query.from ?? '').trim();
   const to = String(query.to ?? '').trim();
   const employeeId = String(query.employeeId ?? '').trim();
-  if (!DATE.test(from) || !DATE.test(to)) throw badRequest('Vui lòng chọn khoảng ngày hợp lệ.');
+  if (!isIsoDate(from) || !isIsoDate(to)) throw badRequest('Vui lòng chọn khoảng ngày hợp lệ.');
   if (from > to) throw badRequest('Từ ngày không thể sau đến ngày.');
   if (employeeId && (!Number.isInteger(Number(employeeId)) || Number(employeeId) < 1)) {
     throw badRequest('Nhân viên không hợp lệ.');
@@ -37,7 +36,11 @@ function extraCosts(query) {
     if (!name) throw badRequest('Vui lòng nhập tên chi phí khác.');
     const amount = Number(rawAmount.replace(/[^\d]/g, ''));
     if (!Number.isFinite(amount) || amount <= 0) throw badRequest('Số tiền chi phí khác phải lớn hơn 0.');
-    return { name, amount };
+    const employeeId = String(item?.employeeId ?? '').trim();
+    if (employeeId && (!Number.isInteger(Number(employeeId)) || Number(employeeId) < 1)) {
+      throw badRequest('Nhân viên chịu chi phí khác không hợp lệ.');
+    }
+    return { name, amount, employeeId: employeeId ? Number(employeeId) : null };
   }).filter(Boolean);
 }
 
@@ -57,7 +60,7 @@ function reportData(db, input) {
       WHERE ${where.join(' AND ')}
       ORDER BY e.entry_date ASC, e.id ASC`,
   ).all(...params);
-  const fuelWhere = ['f.period_from >= ?', 'f.period_to <= ?'];
+  const fuelWhere = ["f.status = 'active'", 'f.period_from >= ?', 'f.period_to <= ?'];
   const fuelParams = [input.from, input.to];
   if (input.employeeId) { fuelWhere.push('f.employee_id = ?'); fuelParams.push(input.employeeId); }
   const fuels = db.prepare(
@@ -77,7 +80,12 @@ function carrierVariance(db, input) {
   const params = [input.from, input.to];
   if (input.employeeId) { where.push('e.employee_id = ?'); params.push(input.employeeId); }
   return db.prepare(
-    `SELECT e.id, ca.name AS carrier, cu.customer_name AS customer, e.spec,
+    `SELECT e.id, ca.name AS carrier, cu.customer_name AS customer,
+       COALESCE((
+         SELECT province_city FROM misa_rows
+          WHERE customer_key = cu.customer_key AND province_city <> ''
+          ORDER BY document_date DESC, id DESC LIMIT 1
+       ), '') AS province_city, e.spec,
        r.transport_fee AS standard_fee, e.transport_fee AS actual_fee,
        e.transport_fee - r.transport_fee AS difference, e.rate_variance_note
      FROM entries e
@@ -94,6 +102,7 @@ function carrierVariance(db, input) {
      ORDER BY ca.name COLLATE NOCASE, cu.customer_name COLLATE NOCASE, e.entry_date ASC, e.id ASC`,
   ).all(...params).map((row) => ({
     id: Number(row.id), carrier: row.carrier, customer: row.customer,
+    provinceCity: row.province_city || '',
     spec: row.spec || '—', actualFee: Number(row.actual_fee),
     standardFee: Number(row.standard_fee), difference: Number(row.difference),
     varianceNote: row.rate_variance_note || '',
@@ -101,7 +110,7 @@ function carrierVariance(db, input) {
 }
 
 const formatDate = (value) => `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
-const customerWithProvince = (row) => row.province_city ? `${row.customer} - ${row.province_city}` : row.customer;
+const formatFileDate = (value) => `${value.slice(8, 10)}-${value.slice(5, 7)}-${value.slice(0, 4)}`;
 const baseStyle = { font: { name: 'Times New Roman', sz: 11 }, alignment: { vertical: 'center', wrapText: true }, border: { top: { style: 'thin', color: { rgb: '000000' } }, bottom: { style: 'thin', color: { rgb: '000000' } }, left: { style: 'thin', color: { rgb: '000000' } }, right: { style: 'thin', color: { rgb: '000000' } } } };
 const centered = { ...baseStyle, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } };
 const money = { ...baseStyle, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '#,##0' };
@@ -109,28 +118,33 @@ const heading = { ...centered, font: { name: 'Times New Roman', sz: 11, bold: tr
 function set(ws, cell, value, style) { ws[cell] = { t: typeof value === 'number' ? 'n' : 's', v: value, s: style }; }
 function merge(ws, range) { (ws['!merges'] ??= []).push(XLSX.utils.decode_range(range)); }
 
-function dailySheet(data, input, employee, extras) {
-  const ws = XLSX.utils.aoa_to_sheet([]);
-  const rows = data.entries.filter((row) => row.employee_id === employee.id);
-  const fuel = data.fuels.filter((row) => row.employee_id === employee.id).reduce((sum, row) => sum + number(row.total_fee), 0);
+function employeeCosts(data, employeeId) {
+  const rows = data.entries.filter((row) => row.employee_id === employeeId);
+  const fuel = data.fuels.filter((row) => row.employee_id === employeeId).reduce((sum, row) => sum + number(row.total_fee), 0);
   const transport = rows.reduce((sum, row) => sum + number(row.transport_fee), 0);
   const gate = rows.reduce((sum, row) => sum + number(row.gate_fee), 0);
+  return { rows, transport, gate, fuel, total: transport + gate + fuel };
+}
+
+function dailySheet(data, input, employee, extras) {
+  const ws = XLSX.utils.aoa_to_sheet([]);
+  const { rows, transport, gate, fuel, total } = employeeCosts(data, employee.id);
   const companyName = data.company.company_name || 'CÔNG TY';
   const companyAddress = data.company.company_address || '';
-  ws['!cols'] = [{ wch: 7.5 }, { wch: 15.5 }, { wch: 38.5 }, { wch: 18.5 }, { wch: 18.5 }, { wch: 40.5 }];
-  set(ws, 'A1', companyName, { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center', vertical: 'center' } }); merge(ws, 'A1:C1');
-  set(ws, 'D1', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'D1:F1');
-  set(ws, 'D2', 'Độc lập - Tự do - Hạnh phúc', { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'D2:F2');
-  set(ws, 'A4', 'BẢNG KÊ CƯỚC GỬI HÀNG', { font: { name: 'Times New Roman', sz: 16, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A4:F4');
-  set(ws, 'A5', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, { font: { name: 'Times New Roman', sz: 11, italic: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A5:F5');
+  ws['!cols'] = [{ wch: 7.5 }, { wch: 15.5 }, { wch: 22 }, { wch: 38.5 }, { wch: 18.5 }, { wch: 18.5 }, { wch: 18.5 }, { wch: 40.5 }];
+  set(ws, 'A1', companyName, { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }); merge(ws, 'A1:C2');
+  set(ws, 'G1', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'G1:H1');
+  set(ws, 'G2', 'Độc lập - Tự do - Hạnh phúc', { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'G2:H2');
+  set(ws, 'A4', 'BẢNG KÊ CƯỚC GỬI HÀNG', { font: { name: 'Times New Roman', sz: 16, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A4:H4');
+  set(ws, 'A5', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, { font: { name: 'Times New Roman', sz: 11, italic: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A5:H5');
   const companyInfo = { font: { name: 'Times New Roman', sz: 11 } };
-  set(ws, 'A7', `Đơn vị: ${companyName}`, companyInfo); merge(ws, 'A7:F7');
-  set(ws, 'A8', `Địa chỉ: ${companyAddress}`, companyInfo); merge(ws, 'A8:F8');
-  set(ws, 'A9', `Nhân viên phụ trách: ${employee.full_name}`, companyInfo); merge(ws, 'A9:F9');
-  ['STT', 'Ngày gửi', 'Khách hàng', 'Quy cách', 'Cước vận chuyển', 'Ghi chú'].forEach((value, index) => set(ws, XLSX.utils.encode_cell({ r: 10, c: index }), value, heading));
+  set(ws, 'A7', `Đơn vị: ${companyName}`, companyInfo); merge(ws, 'A7:H7');
+  set(ws, 'A8', `Địa chỉ: ${companyAddress}`, companyInfo); merge(ws, 'A8:H8');
+  set(ws, 'A9', `Nhân viên phụ trách: ${employee.full_name}`, companyInfo); merge(ws, 'A9:H9');
+  ['STT', 'Ngày gửi', 'Nhà xe', 'Khách hàng', 'Tỉnh/TP', 'Quy cách', 'Cước vận chuyển', 'Ghi chú'].forEach((value, index) => set(ws, XLSX.utils.encode_cell({ r: 10, c: index }), value, heading));
   rows.forEach((row, index) => {
-    const values = [index + 1, formatDate(row.entry_date), customerWithProvince(row), row.spec, number(row.transport_fee), row.note || ''];
-    values.forEach((value, column) => set(ws, XLSX.utils.encode_cell({ r: 11 + index, c: column }), value, column === 4 ? money : [0, 1, 3].includes(column) ? centered : baseStyle));
+    const values = [index + 1, formatDate(row.entry_date), row.carrier, row.customer, row.province_city || '', row.spec, number(row.transport_fee), row.note || ''];
+    values.forEach((value, column) => set(ws, XLSX.utils.encode_cell({ r: 11 + index, c: column }), value, column === 6 ? money : [0, 1, 2, 4, 5].includes(column) ? centered : baseStyle));
     ws['!rows'] ??= [];
     ws['!rows'][11 + index] = { hpt: (row.note || '').length > 80 ? 45 : 30 };
   });
@@ -152,30 +166,84 @@ function dailySheet(data, input, employee, extras) {
   });
   const grandTotalRow = summaryRow + 3 + extras.length;
   const extraTotal = extras.reduce((sum, item) => sum + item.amount, 0);
-  addSummary(grandTotalRow, 'TỔNG THANH TOÁN', transport + gate + fuel + extraTotal, true);
+  addSummary(grandTotalRow, 'TỔNG THANH TOÁN', total + extraTotal, true);
   const signDateRow = grandTotalRow + 2;
   const signRow = grandTotalRow + 3;
   const signature = { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center', vertical: 'center' } };
-  set(ws, `F${signDateRow}`, 'Ngày… tháng…năm….', { font: { name: 'Times New Roman', sz: 11, italic: true }, alignment: { horizontal: 'center', vertical: 'center' } });
+  set(ws, `H${signDateRow}`, 'Ngày… tháng…năm….', { font: { name: 'Times New Roman', sz: 11, italic: true }, alignment: { horizontal: 'center', vertical: 'center' } });
   set(ws, `A${signRow}`, 'Giám Đốc Duyệt', signature); set(ws, `B${signRow}`, '', signature); merge(ws, `A${signRow}:B${signRow}`);
   set(ws, `D${signRow}`, 'Kế Toán Trưởng', signature);
-  set(ws, `F${signRow}`, 'Người lập', signature);
+  set(ws, `H${signRow}`, 'Người lập', signature);
   ws['!rows'] ??= [];
+  ws['!rows'][0] = { hpt: 18 };
+  ws['!rows'][1] = { hpt: 18 };
   ws['!rows'][3] = { hpt: 20.25 };
-  ws['!ref'] = `A1:F${signRow}`;
+  ws['!ref'] = `A1:H${signRow}`;
+  return ws;
+}
+
+function dailySummarySheet(data, input, employees, extras) {
+  const ws = XLSX.utils.aoa_to_sheet([]);
+  const companyName = data.company.company_name || 'CÔNG TY';
+  const companyAddress = data.company.company_address || '';
+  const rows = employees.map((employee) => ({
+    employee,
+    ...employeeCosts(data, employee.id),
+    extra: extras.filter((item) => item.employeeId === employee.id).reduce((sum, item) => sum + item.amount, 0),
+  }));
+  rows.forEach((row) => { row.totalPayment = row.total + row.extra; });
+  ws['!cols'] = [{ wch: 7.5 }, { wch: 28 }, { wch: 19 }, { wch: 17 }, { wch: 17 }, { wch: 17 }, { wch: 21 }];
+  set(ws, 'A1', companyName, { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }); merge(ws, 'A1:C2');
+  set(ws, 'E1', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'E1:G1');
+  set(ws, 'E2', 'Độc lập - Tự do - Hạnh phúc', { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'E2:G2');
+  set(ws, 'A4', 'BẢNG TỔNG HỢP CƯỚC NHÂN VIÊN', { font: { name: 'Times New Roman', sz: 16, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A4:G4');
+  set(ws, 'A5', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, { font: { name: 'Times New Roman', sz: 11, italic: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A5:G5');
+  const companyInfo = { font: { name: 'Times New Roman', sz: 11 } };
+  set(ws, 'A7', `Đơn vị: ${companyName}`, companyInfo); merge(ws, 'A7:G7');
+  set(ws, 'A8', `Địa chỉ: ${companyAddress}`, companyInfo); merge(ws, 'A8:G8');
+  ['STT', 'Nhân viên', 'Cước vận chuyển', 'Phí vào cổng', 'Tiền xăng', 'Chi phí khác', 'Tổng cộng'].forEach((value, index) => set(ws, XLSX.utils.encode_cell({ r: 9, c: index }), value, heading));
+  rows.forEach((row, index) => {
+    const values = [index + 1, row.employee.full_name, row.transport, row.gate, row.fuel, row.extra, row.totalPayment];
+    values.forEach((value, column) => set(ws, XLSX.utils.encode_cell({ r: 10 + index, c: column }), value, column === 0 ? centered : column === 1 ? baseStyle : money));
+  });
+  const totalRow = 10 + rows.length;
+  const totals = rows.reduce((sum, row) => ({
+    transport: sum.transport + row.transport,
+    gate: sum.gate + row.gate,
+    fuel: sum.fuel + row.fuel,
+    extra: sum.extra + row.extra,
+    total: sum.total + row.totalPayment,
+  }), { transport: 0, gate: 0, fuel: 0, extra: 0, total: 0 });
+  const totalStyle = { ...heading, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } };
+  set(ws, XLSX.utils.encode_cell({ r: totalRow, c: 0 }), 'TỔNG CỘNG', totalStyle);
+  set(ws, XLSX.utils.encode_cell({ r: totalRow, c: 1 }), '', totalStyle);
+  merge(ws, `A${totalRow + 1}:B${totalRow + 1}`);
+  [totals.transport, totals.gate, totals.fuel, totals.extra, totals.total].forEach((value, index) => set(ws, XLSX.utils.encode_cell({ r: totalRow, c: index + 2 }), value, { ...money, font: { name: 'Times New Roman', sz: 11, bold: true } }));
+  const grandTotalRow = totalRow + 2;
+  set(ws, XLSX.utils.encode_cell({ r: grandTotalRow, c: 4 }), 'TỔNG THANH TOÁN', totalStyle);
+  set(ws, XLSX.utils.encode_cell({ r: grandTotalRow, c: 5 }), '', totalStyle);
+  merge(ws, `E${grandTotalRow + 1}:F${grandTotalRow + 1}`);
+  set(ws, XLSX.utils.encode_cell({ r: grandTotalRow, c: 6 }), totals.total, { ...money, font: { name: 'Times New Roman', sz: 11, bold: true } });
+  ws['!rows'] = [{ hpt: 18 }, { hpt: 18 }, {}, { hpt: 20.25 }];
+  ws['!ref'] = `A1:G${grandTotalRow + 1}`;
   return ws;
 }
 
 function annualSheet(data, year, employee) {
   const ws = XLSX.utils.aoa_to_sheet([]);
   const rows = data.entries.filter((row) => row.employee_id === employee.id);
-  ws['!cols'] = [{ wch: 15 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 38 }, { wch: 42 }];
-  set(ws, 'A1', `BẢNG TỔNG HỢP CƯỚC GỬI HÀNG NĂM ${year} — ${employee.full_name}`, { font: { name: 'Times New Roman', sz: 15, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A1:I1');
-  ['Ngày gửi', 'Nhà xe', 'Người nhận', 'Quy cách', 'Cước vận chuyển', 'Phí vào cổng', 'Tổng phiếu', 'Khách hàng', 'Ghi chú'].forEach((value, index) => set(ws, XLSX.utils.encode_cell({ r: 2, c: index }), value, heading));
+  ws['!cols'] = [{ wch: 15 }, { wch: 22 }, { wch: 38 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 42 }];
+  set(ws, 'A1', `BẢNG TỔNG HỢP CƯỚC GỬI HÀNG NĂM ${year} — ${employee.full_name}`, { font: { name: 'Times New Roman', sz: 16, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A1:I1');
+  ['Ngày gửi', 'Nhà xe', 'Khách hàng', 'Tỉnh/ TP', 'Người nhận', 'Quy cách', 'Cước vận chuyển', 'Phí vào cổng', 'Ghi chú'].forEach((value, index) => set(ws, XLSX.utils.encode_cell({ r: 2, c: index }), value, heading));
   rows.forEach((row, index) => {
-    const values = [formatDate(row.entry_date), row.carrier, row.recipient, row.spec, number(row.transport_fee), number(row.gate_fee), number(row.total_fee), customerWithProvince(row), row.note || ''];
-    values.forEach((value, column) => set(ws, XLSX.utils.encode_cell({ r: 3 + index, c: column }), value, [4, 5, 6].includes(column) ? money : [0, 1, 2, 3].includes(column) ? centered : baseStyle));
+    const values = [formatDate(row.entry_date), row.carrier, row.customer, row.province_city || '', row.recipient, row.spec, number(row.transport_fee), number(row.gate_fee), row.note || ''];
+    values.forEach((value, column) => set(ws, XLSX.utils.encode_cell({ r: 3 + index, c: column }), value, [6, 7].includes(column) ? money : [0, 1, 3, 4, 5].includes(column) ? centered : baseStyle));
+    ws['!rows'] ??= [];
+    ws['!rows'][3 + index] = { hpt: (row.note || '').length > 80 ? 45 : 30 };
   });
+  ws['!rows'] ??= [];
+  ws['!rows'][0] = { hpt: 24 };
+  ws['!rows'][2] = { hpt: 30 };
   ws['!ref'] = `A1:I${Math.max(4, rows.length + 3)}`;
   return ws;
 }
@@ -183,44 +251,44 @@ function annualSheet(data, year, employee) {
 function carrierVarianceSheet(items, input) {
   const ws = XLSX.utils.aoa_to_sheet([]);
   ws['!cols'] = [
-    { wch: 7 }, { wch: 22 }, { wch: 32 }, { wch: 22 },
+    { wch: 7 }, { wch: 22 }, { wch: 32 }, { wch: 18 }, { wch: 22 },
     { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 46 },
   ];
   set(ws, 'A1', 'BÁO CÁO CHÊNH LỆCH CƯỚC NHÀ XE', {
     font: { name: 'Times New Roman', sz: 15, bold: true },
     alignment: { horizontal: 'center' },
   });
-  merge(ws, 'A1:H1');
+  merge(ws, 'A1:I1');
   set(ws, 'A2', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, {
     font: { name: 'Times New Roman', sz: 11, italic: true },
     alignment: { horizontal: 'center' },
   });
-  merge(ws, 'A2:H2');
-  ['STT', 'Nhà xe', 'Khách hàng', 'Quy cách', 'Giá thiết lập', 'Giá nhập', 'Chênh lệch', 'Ghi chú'].forEach(
+  merge(ws, 'A2:I2');
+  ['STT', 'Nhà xe', 'Khách hàng', 'Tỉnh/TP', 'Quy cách', 'Giá thiết lập', 'Giá nhập', 'Chênh lệch', 'Ghi chú'].forEach(
     (value, index) => set(ws, XLSX.utils.encode_cell({ r: 3, c: index }), value, heading),
   );
   items.forEach((item, index) => {
     const values = [
-      index + 1, item.carrier, item.customer, item.spec,
+      index + 1, item.carrier, item.customer, item.provinceCity || '', item.spec,
       item.standardFee, item.actualFee, item.difference, item.varianceNote,
     ];
     values.forEach((value, column) => set(
       ws,
       XLSX.utils.encode_cell({ r: 4 + index, c: column }),
       value,
-      [0, 1, 3].includes(column) ? centered : [4, 5, 6].includes(column) ? money : baseStyle,
+      [0, 1, 3, 4].includes(column) ? centered : [5, 6, 7].includes(column) ? money : baseStyle,
     ));
   });
   const totalRow = 4 + items.length;
   const totalDifference = items.reduce((sum, item) => sum + item.difference, 0);
   const totalBorder = { ...baseStyle.border, bottom: { style: 'thin', color: { rgb: '000000' } } };
   const totalLabel = { ...heading, border: totalBorder };
-  for (let column = 0; column < 6; column += 1) {
+  for (let column = 0; column < 7; column += 1) {
     set(ws, XLSX.utils.encode_cell({ r: totalRow, c: column }), column === 0 ? 'TỔNG CHÊNH LỆCH' : '', totalLabel);
   }
-  merge(ws, `A${totalRow + 1}:F${totalRow + 1}`);
-  set(ws, `G${totalRow + 1}`, totalDifference, { ...money, font: { name: 'Times New Roman', sz: 11, bold: true }, border: totalBorder });
-  ws['!ref'] = `A1:H${totalRow + 1}`;
+  merge(ws, `A${totalRow + 1}:G${totalRow + 1}`);
+  set(ws, `H${totalRow + 1}`, totalDifference, { ...money, font: { name: 'Times New Roman', sz: 11, bold: true }, border: totalBorder });
+  ws['!ref'] = `A1:I${totalRow + 1}`;
   return ws;
 }
 
@@ -238,12 +306,14 @@ function register(router) {
   router.get('/api/reports/carrier-variance', async (c) => {
     c.requirePage(CARRIER_PAGE);
     if (!canSeeEveryone(c.user)) throw badRequest('Bạn không có quyền xem báo cáo tổng hợp.');
-    const items = carrierVariance(c.db, filters(c.query));
+    const input = filters(c.query);
+    const items = carrierVariance(c.db, input);
+    const employees = c.db.prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE').all();
     return {
+      employees: employees.map((item) => ({ id: item.id, fullName: item.full_name })),
       items,
       summary: {
         entries: items.length,
-        absoluteDifference: items.reduce((sum, item) => sum + Math.abs(item.difference), 0),
         difference: items.reduce((sum, item) => sum + item.difference, 0),
       },
     };
@@ -272,9 +342,22 @@ function register(router) {
     const selected = input.employeeId ? data.employees.filter((item) => item.id === input.employeeId) : data.employees;
     const workbook = XLSX.utils.book_new();
     if (type === 'daily') {
-      if (!input.employeeId) throw badRequest('Vui lòng chọn nhân viên để xuất bảng kê theo khoảng ngày.');
-      if (!selected.length) throw badRequest('Nhân viên không còn hoạt động hoặc không tồn tại.');
-      XLSX.utils.book_append_sheet(workbook, dailySheet(data, input, selected[0], extras), 'Bảng kê cước');
+      if (!selected.length) throw badRequest('Không có nhân viên đang hoạt động để xuất báo cáo.');
+      if (!input.employeeId && extras.some((item) => !selected.some((employee) => employee.id === item.employeeId))) {
+        throw badRequest('Vui lòng chọn nhân viên chịu phí cho từng chi phí khác.');
+      }
+      if (input.employeeId) {
+        XLSX.utils.book_append_sheet(workbook, dailySheet(data, input, selected[0], extras), 'Bảng kê cước');
+      } else {
+        XLSX.utils.book_append_sheet(workbook, dailySummarySheet(data, input, selected, extras), 'Tổng hợp');
+        for (const employee of selected) {
+          XLSX.utils.book_append_sheet(
+            workbook,
+            dailySheet(data, input, employee, extras.filter((item) => item.employeeId === employee.id)),
+            employee.full_name.slice(0, 31),
+          );
+        }
+      }
     } else if (type === 'annual') {
       const year = input.from.slice(0, 4);
       for (const employee of selected) {
@@ -283,7 +366,17 @@ function register(router) {
       if (!workbook.SheetNames.length) throw badRequest('Không có phiếu chi phí trong năm đã chọn.');
     } else throw badRequest('Loại báo cáo không hợp lệ.');
     const contentBase64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx', compression: true });
-    const suffix = type === 'annual' ? `Tong hop nam ${input.from.slice(0, 4)}` : `Bang ke ${selected[0].full_name} ${input.from} den ${input.to}`;
+    const suffix = type === 'annual'
+      ? `Tổng hợp năm ${input.from.slice(0, 4)}`
+      : input.employeeId
+        ? `Bảng kê ${selected[0].full_name} từ ${formatFileDate(input.from)} đến ${formatFileDate(input.to)}`
+        : `Bảng kê tất cả nhân viên từ ${formatFileDate(input.from)} đến ${formatFileDate(input.to)}`;
+    if (type === 'daily') {
+      const finalWhere = ["status = 'active'", 'period_from >= ?', 'period_to <= ?'];
+      const finalParams = [input.from, input.to];
+      if (input.employeeId) { finalWhere.push('employee_id = ?'); finalParams.push(input.employeeId); }
+      c.db.prepare(`UPDATE fuel_records SET finalized_at = COALESCE(finalized_at, ?), finalized_by = COALESCE(finalized_by, ?), updated_at = ? WHERE ${finalWhere.join(' AND ')}`).run(new Date().toISOString(), c.user.id, new Date().toISOString(), ...finalParams);
+    }
     writeAudit(c.db, c.user, 'report.export', 'report', null, { type, ...input, extraCosts: extras, sheetCount: workbook.SheetNames.length });
     return { fileName: `${suffix}.xlsx`, contentBase64 };
   });

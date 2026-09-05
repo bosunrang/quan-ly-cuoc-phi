@@ -65,7 +65,14 @@ export const carrierRepository = {
 		carriers: CarrierExcelCarrierInput[],
 		rates: CarrierExcelRateInput[],
 	): Promise<CarrierExcelPreview> =>
-		api("POST", "/api/carriers/excel/preview", { carriers, rates }),
+		api(
+			"POST",
+			"/api/carriers/excel/preview",
+			{ carriers, rates },
+			{
+				timeoutMs: 120_000,
+			},
+		),
 	excelImport: (
 		carriers: CarrierExcelCarrierInput[],
 		rates: CarrierExcelRateInput[],
@@ -75,7 +82,17 @@ export const carrierRepository = {
 		ratesCreated: number;
 		ratesUpdated: number;
 		skipped: number;
-	}> => api("POST", "/api/carriers/excel/import", { carriers, rates }),
+	}> =>
+		api(
+			"POST",
+			"/api/carriers/excel/import",
+			{ carriers, rates },
+			{
+				timeoutMs: 120_000,
+			},
+		),
 	excelExport: (): Promise<CarrierExcelExport> =>
-		api("GET", "/api/carriers/excel-export"),
+		api("GET", "/api/carriers/excel-export", undefined, {
+			timeoutMs: 120_000,
+		}),
 };

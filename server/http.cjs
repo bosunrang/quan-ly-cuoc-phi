@@ -5,6 +5,7 @@ const { extname, join, normalize, sep } = require('node:path');
 
 // Backup có thể chứa nhiều dòng MISA, nên cần lớn hơn các biểu mẫu thông thường.
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Lỗi có mã HTTP. Ném cái này ở route, lớp dưới tự dịch thành phản hồi. */
 class HttpError extends Error {
@@ -22,6 +23,21 @@ const forbidden = (message = 'Bạn không có quyền thực hiện việc này
   new HttpError(403, message);
 const notFound = (message = 'Không tìm thấy dữ liệu.') =>
   new HttpError(404, message);
+
+/** Kiểm tra ngày lịch thực, không chỉ đúng hình thức YYYY-MM-DD. */
+function isIsoDate(value) {
+  if (typeof value !== 'string' || !ISO_DATE.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+/** Ngày hiện tại theo múi giờ của máy chủ, không quy đổi sang UTC. */
+function localIsoDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 // ---------------------------------------------------------------- phản hồi
 
@@ -166,6 +182,8 @@ module.exports = {
   unauthorized,
   forbidden,
   notFound,
+  isIsoDate,
+  localIsoDate,
   sendJson,
   sendError,
   readJsonBody,

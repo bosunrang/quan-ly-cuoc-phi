@@ -5,6 +5,7 @@ const { transaction } = require('../db.cjs');
 const auth = require('../auth.cjs');
 const { writeAudit } = require('../audit.cjs');
 const { badRequest } = require('../http.cjs');
+const { invalidateDefaultOverview } = require('./misa.cjs');
 
 const PAGE = 'settings';
 const MAX_LOGO_LENGTH = 1_500_000;
@@ -17,9 +18,9 @@ const BACKUP_TABLES = {
   carrierCustomers: { table: 'carrier_customers', columns: ['carrier_id', 'customer_id', 'assigned_at'] },
   carrierRates: { table: 'carrier_customer_rates', columns: ['id', 'carrier_id', 'customer_id', 'spec', 'spec_key', 'is_default', 'transport_fee', 'gate_fee', 'note', 'created_at', 'updated_at'] },
   employees: { table: 'employees', columns: ['id', 'full_name', 'user_id', 'is_active', 'search_text', 'created_at', 'updated_at', 'address'] },
-  entries: { table: 'entries', columns: ['id', 'entry_date', 'customer', 'carrier', 'recipient', 'address', 'spec', 'ticket_fee', 'transport_fee', 'gate_fee', 'note', 'created_by', 'created_at', 'updated_at', 'misa_document_date', 'misa_document_code', 'employee_id'] },
+  entries: { table: 'entries', columns: ['id', 'entry_date', 'customer', 'carrier', 'recipient', 'address', 'spec', 'ticket_fee', 'transport_fee', 'gate_fee', 'note', 'created_by', 'created_at', 'updated_at', 'misa_document_date', 'misa_document_code', 'employee_id', 'rate_variance_note'] },
   fuelPrices: { table: 'fuel_prices', columns: ['id', 'effective_date', 'fuel_type', 'region', 'price', 'source', 'created_by', 'created_at', 'updated_at'] },
-  fuelRecords: { table: 'fuel_records', columns: ['id', 'entry_date', 'employee_id', 'distance_km', 'consumption_liters', 'consumption_base_km', 'fuel_type', 'region', 'fuel_price', 'total_fee', 'note', 'created_by', 'created_at', 'period_from', 'period_to'] },
+  fuelRecords: { table: 'fuel_records', columns: ['id', 'entry_date', 'employee_id', 'distance_km', 'consumption_liters', 'consumption_base_km', 'fuel_type', 'region', 'fuel_price', 'total_fee', 'note', 'created_by', 'created_at', 'period_from', 'period_to', 'updated_at', 'finalized_at', 'finalized_by', 'voided_at', 'voided_by', 'void_reason', 'status'] },
   routeDistances: { table: 'route_distances', columns: ['id', 'from_name', 'to_name', 'from_key', 'to_key', 'distance_km', 'updated_at'] },
   fuelLegs: { table: 'fuel_record_legs', columns: ['id', 'fuel_record_id', 'sequence_no', 'from_name', 'to_name', 'distance_km'] },
 };
@@ -30,7 +31,7 @@ const GROUPS = {
   customers: ['customers'],
   carriers: ['carriers'],
   employees: ['employees'],
-  fuel: ['fuelLegs', 'fuelRecords', 'fuelPrices', 'routeDistances'],
+  fuel: ['fuelLegs', 'fuelRecords'],
 };
 
 const CLEAR_ORDER = [
@@ -65,9 +66,20 @@ function importRows(db, name, rows, userId, knownUserIds) {
     }
     const value = { ...row };
     // Backup từ máy khác vẫn nhập được, không tham chiếu một tài khoản đã không có.
-    if ('created_by' in value && !knownUserIds.has(Number(value.created_by))) value.created_by = userId;
-    if ('imported_by' in value && !knownUserIds.has(Number(value.imported_by))) value.imported_by = userId;
+    // Các cột chốt/hủy cũng là khóa ngoại tới users, dù không phải lúc nào cũng có giá trị.
+    for (const column of ['created_by', 'imported_by', 'finalized_by', 'voided_by']) {
+      if (value[column] != null && !knownUserIds.has(Number(value[column]))) {
+        value[column] = userId;
+      }
+    }
     if (name === 'employees' && value.user_id !== null && !knownUserIds.has(Number(value.user_id))) value.user_id = null;
+    // Backup phiên bản 1 trước khi có ghi chú chênh lệch vẫn khôi phục được.
+    if (name === 'entries') value.rate_variance_note ??= '';
+    if (name === 'fuelRecords') {
+      value.updated_at ??= value.created_at ?? new Date().toISOString();
+      value.status ??= 'active';
+      value.void_reason ??= '';
+    }
     insert.run(...spec.columns.map((column) => value[column] ?? null));
   }
 }
@@ -184,7 +196,7 @@ function register(router) {
       throw badRequest('Dữ liệu backup không hợp lệ.');
     }
 
-    return transaction(c.db, () => {
+    const result = transaction(c.db, () => {
       const knownUserIds = new Set(c.db.prepare('SELECT id FROM users').all().map((row) => Number(row.id)));
       clearTables(c.db, CLEAR_ORDER);
       for (const name of ['settings', 'customers', 'carriers', 'carrierCustomers', 'carrierRates', 'employees', 'misa', 'entries', 'fuelPrices', 'fuelRecords', 'routeDistances', 'fuelLegs']) {
@@ -195,6 +207,8 @@ function register(router) {
       });
       return { restored: true };
     });
+    invalidateDefaultOverview(c.db);
+    return result;
   });
 
   router.post('/api/settings/data/delete', async (c) => {
@@ -205,12 +219,28 @@ function register(router) {
       : [...new Set(requested.filter((name) => Object.hasOwn(GROUPS, name)))];
     if (selected.length === 0) throw badRequest('Hãy chọn ít nhất một nhóm dữ liệu để xóa.');
 
-    return transaction(c.db, () => {
+    const result = transaction(c.db, () => {
+      const detachedEmployeeLinks = { entries: 0, fuelRecords: 0 };
+      // Xóa cả nhóm nhân viên là yêu cầu dọn dữ liệu có chủ ý. Phiếu và lịch sử
+      // xăng vẫn được giữ, nhưng không còn trỏ đến danh mục nhân viên đã xóa.
+      if (selected.includes('employees')) {
+        detachedEmployeeLinks.entries = Number(
+          c.db.prepare('UPDATE entries SET employee_id = NULL WHERE employee_id IS NOT NULL').run().changes,
+        );
+        detachedEmployeeLinks.fuelRecords = Number(
+          c.db.prepare('UPDATE fuel_records SET employee_id = NULL WHERE employee_id IS NOT NULL').run().changes,
+        );
+      }
       const tables = new Set(selected.flatMap((name) => GROUPS[name]));
       clearTables(c.db, CLEAR_ORDER.filter((name) => tables.has(name)));
-      writeAudit(c.db, c.user, 'settings.data_delete', 'data', null, { groups: selected });
-      return { deleted: selected };
+      writeAudit(c.db, c.user, 'settings.data_delete', 'data', null, {
+        groups: selected,
+        detachedEmployeeLinks,
+      });
+      return { deleted: selected, detachedEmployeeLinks };
     });
+    if (selected.includes('misa')) invalidateDefaultOverview(c.db);
+    return result;
   });
 }
 

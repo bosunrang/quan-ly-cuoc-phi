@@ -2,12 +2,18 @@
 
 const { normalizeSearchText, transaction } = require('../db.cjs');
 const { writeAudit } = require('../audit.cjs');
-const { badRequest } = require('../http.cjs');
+const { badRequest, isIsoDate } = require('../http.cjs');
 
 const PAGE = 'misa';
 const MAX_ROWS = 25_000;
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const SQLITE_PARAMETER_CHUNK = 900;
+// Cache theo từng CSDL để nhiều ứng dụng chạy trong cùng tiến trình vẫn không
+// dùng nhầm tổng quan của nhau.
+const defaultOverviewByDatabase = new WeakMap();
+
+function invalidateDefaultOverview(db) {
+  defaultOverviewByDatabase.delete(db);
+}
 
 function text(value, field, max) {
   const result = String(value ?? '').trim();
@@ -39,7 +45,7 @@ function normalizeRow(row) {
       ? Number.NaN
       : Number(rawQuantity);
   let reason = '';
-  if (!DATE_PATTERN.test(documentDate)) reason = 'Ngày chứng từ không hợp lệ';
+  if (!isIsoDate(documentDate)) reason = 'Ngày chứng từ không hợp lệ';
   else if (!customerName) reason = 'Thiếu tên khách hàng';
   else if (!productName) reason = 'Thiếu tên mặt hàng';
   else if (!Number.isFinite(quantitySold)) reason = 'Số lượng bán không hợp lệ';
@@ -160,10 +166,6 @@ function readDefaultOverview(db) {
 }
 
 function register(router) {
-  // Tổng quan không lọc chỉ đổi khi nhập file. Giữ tại bộ nhớ tiến trình để
-  // chuyển trang không phải quét lại toàn bộ dữ liệu nhiều tháng.
-  let defaultOverview = null;
-
   router.get('/api/misa', async (c) => {
     c.requirePage(PAGE);
     const where = ['1 = 1'];
@@ -187,8 +189,12 @@ function register(router) {
     const pageSize = 50;
     const requestedPage = Math.max(Number(c.query.page) || 1, 1);
     const isDefaultQuery = !search && !province;
-    if (isDefaultQuery && !defaultOverview) {
+    // Tổng quan không lọc chỉ đổi khi nhập, xóa hoặc khôi phục dữ liệu. Giữ
+    // theo từng CSDL để chuyển trang không phải quét lại toàn bộ dữ liệu.
+    let defaultOverview = defaultOverviewByDatabase.get(c.db);
+    if (!defaultOverview) {
       defaultOverview = readDefaultOverview(c.db);
+      defaultOverviewByDatabase.set(c.db, defaultOverview);
     }
     const overview = isDefaultQuery
       ? defaultOverview
@@ -204,7 +210,6 @@ function register(router) {
           ORDER BY document_date DESC, id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize);
-    if (!defaultOverview) defaultOverview = readDefaultOverview(c.db);
     const defaultMeta = defaultOverview;
 
     return {
@@ -289,9 +294,9 @@ function register(router) {
       return { inserted, duplicates };
     });
     // Nhập thành công thì lần xem tiếp theo phải lấy số tổng quan mới.
-    defaultOverview = null;
+    invalidateDefaultOverview(c.db);
     return result;
   });
 }
 
-module.exports = { register };
+module.exports = { register, invalidateDefaultOverview };

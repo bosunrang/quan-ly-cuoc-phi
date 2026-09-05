@@ -2,13 +2,14 @@
 
 const { normalizeSearchText, transaction } = require('../db.cjs');
 const { writeAudit } = require('../audit.cjs');
-const { badRequest, notFound } = require('../http.cjs');
+const { badRequest, notFound, isIsoDate } = require('../http.cjs');
 const { canSeeEveryone } = require('../permissions.cjs');
 
 const PAGE = 'fuel';
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TYPES = ['Xăng E10', 'Xăng RON 95-III', 'Xăng E5 RON 92', 'Dầu Diesel 0.05S'];
 const regions = new Set(['region1', 'region2']);
+const routeEstimateCache = new Map();
+const googleRouteEstimateCache = new Map();
 const clean = (value, max = 100) => String(value ?? '').trim().slice(0, max);
 const number = (value, field, integer = false) => {
   const result = Number(value);
@@ -17,7 +18,7 @@ const number = (value, field, integer = false) => {
 };
 function priceInput(body) {
   const effectiveDate = clean(body.effectiveDate, 10);
-  if (!DATE.test(effectiveDate)) throw badRequest('Ngày hiệu lực không hợp lệ.');
+  if (!isIsoDate(effectiveDate)) throw badRequest('Ngày hiệu lực không hợp lệ.');
   const fuelType = clean(body.fuelType);
   if (!fuelType) throw badRequest('Vui lòng chọn loại nhiên liệu.');
   const region = clean(body.region);
@@ -25,20 +26,107 @@ function priceInput(body) {
   return { effectiveDate, fuelType, region, price: number(body.price, 'Giá xăng', true), source: clean(body.source, 150) || 'Nhập tay' };
 }
 function toPrice(row) { return { id: row.id, effectiveDate: row.effective_date, fuelType: row.fuel_type, region: row.region, price: row.price, source: row.source }; }
+function recordInput(body) {
+  const periodFrom = clean(body.periodFrom ?? body.entryDate, 10);
+  const periodTo = clean(body.periodTo ?? body.entryDate, 10);
+  if (!isIsoDate(periodFrom) || !isIsoDate(periodTo) || periodFrom > periodTo) throw badRequest('Khoảng ngày tính không hợp lệ.');
+  const consumptionLiters = number(body.consumptionLiters, 'Mức tiêu hao');
+  const consumptionBaseKm = number(body.consumptionBaseKm, 'Định mức km');
+  if (!consumptionBaseKm) throw badRequest('Định mức km phải lớn hơn 0.');
+  const legs = Array.isArray(body.legs) ? body.legs.slice(0, 50).map((leg) => ({ from: clean(leg?.from), to: clean(leg?.to), km: number(leg?.km, 'Quãng đường') })).filter((leg) => leg.from && leg.to && leg.km > 0) : [];
+  const distanceKm = legs.length ? legs.reduce((sum, leg) => sum + leg.km, 0) : number(body.distanceKm, 'Quãng đường');
+  if (!distanceKm) throw badRequest('Vui lòng nhập quãng đường.');
+  const fuelPrice = number(body.fuelPrice, 'Giá xăng', true);
+  return { periodFrom, periodTo, consumptionLiters, consumptionBaseKm, legs, distanceKm, fuelPrice, fuelType: clean(body.fuelType) || TYPES[0], region: regions.has(clean(body.region)) ? clean(body.region) : 'region1' };
+}
+function saveRecordLegs(db, recordId, legs, at) {
+  const saveLeg = db.prepare('INSERT INTO fuel_record_legs (fuel_record_id, sequence_no, from_name, to_name, distance_km) VALUES (?, ?, ?, ?, ?)');
+  const saveDistance = db.prepare('INSERT INTO route_distances (from_name, to_name, from_key, to_key, distance_km, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(from_key, to_key) DO UPDATE SET from_name = excluded.from_name, to_name = excluded.to_name, distance_km = excluded.distance_km, updated_at = excluded.updated_at');
+  legs.forEach((leg, index) => {
+    saveLeg.run(recordId, index + 1, leg.from, leg.to, leg.km);
+    saveDistance.run(leg.from, leg.to, normalizeSearchText(leg.from), normalizeSearchText(leg.to), leg.km, at);
+  });
+}
+async function estimateGoogleRouteDistance(from, to, apiKey) {
+  const cacheKey = `${normalizeSearchText(from)}>${normalizeSearchText(to)}`;
+  if (googleRouteEstimateCache.has(cacheKey)) return googleRouteEstimateCache.get(cacheKey);
+  const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': 'routes.distanceMeters',
+    },
+    body: JSON.stringify({
+      origin: { address: from },
+      destination: { address: to },
+      travelMode: 'DRIVE',
+      routingPreference: 'TRAFFIC_UNAWARE',
+      units: 'METRIC',
+      languageCode: 'vi',
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const detail = clean(payload?.error?.message, 300);
+    throw new Error(detail || 'Google Maps không thể tính tuyến đường');
+  }
+  const payload = await response.json();
+  const meters = Number(payload?.routes?.[0]?.distanceMeters);
+  if (!Number.isFinite(meters) || meters <= 0) throw new Error('Google Maps không trả về quãng đường');
+  const result = { km: Math.round((meters / 1000) * 10) / 10, source: 'Google Maps', estimated: false };
+  googleRouteEstimateCache.set(cacheKey, result);
+  return result;
+}
+async function geocodeVietnameseAddress(address) {
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=vn&q=${encodeURIComponent(address)}`, {
+    headers: { 'User-Agent': 'QuanLyCuocPhi/1.0.2', 'Accept-Language': 'vi' },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error('Không tìm được địa chỉ');
+  const items = await response.json();
+  const item = Array.isArray(items) ? items[0] : null;
+  const lat = Number(item?.lat), lon = Number(item?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error('Không tìm được địa chỉ');
+  return { lat, lon };
+}
+async function estimateRouteDistance(from, to) {
+  const fromKey = normalizeSearchText(from), toKey = normalizeSearchText(to);
+  const cacheKey = `${fromKey}>${toKey}`;
+  if (routeEstimateCache.has(cacheKey)) return routeEstimateCache.get(cacheKey);
+  const [start, end] = await Promise.all([geocodeVietnameseAddress(from), geocodeVietnameseAddress(to)]);
+  const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${start.lon},${start.lat};${end.lon},${end.lat}?overview=false`, {
+    headers: { 'User-Agent': 'QuanLyCuocPhi/1.0.2' },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error('Không tính được tuyến đường');
+  const payload = await response.json();
+  const meters = Number(payload?.routes?.[0]?.distance);
+  if (!Number.isFinite(meters) || meters <= 0) throw new Error('Không tính được tuyến đường');
+  const result = { km: Math.round((meters / 1000) * 10) / 10, source: 'OpenStreetMap / OSRM', estimated: true };
+  routeEstimateCache.set(cacheKey, result);
+  return result;
+}
 function register(router) {
   router.get('/api/fuel', async (c) => {
     c.requirePage(PAGE);
     const prices = c.db.prepare('SELECT * FROM fuel_prices ORDER BY effective_date DESC, fuel_type, region').all();
-    const employees = c.db.prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE').all();
     const scope = canSeeEveryone(c.user);
+    const currentEmployee = scope ? null : c.db.prepare('SELECT id, full_name FROM employees WHERE user_id = ? AND is_active = 1').get(c.user.id);
+    const employees = scope
+      ? c.db.prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE').all()
+      : currentEmployee ? [currentEmployee] : [];
     const limit = Math.min(Math.max(Number(c.query.limit) || 50, 1), 100);
     const offset = Math.max(Number(c.query.offset) || 0, 0);
     const employeeId = Number(c.query.employeeId) || null;
     const conditions = [];
     const params = [];
     if (!scope) {
-      conditions.push('f.created_by = ?');
-      params.push(c.user.id);
+      // Nhân viên xem toàn bộ lịch sử được gán cho mình, kể cả lần Admin lập hộ.
+      // Quyền sửa/xóa phía dưới vẫn giới hạn theo người tạo bản ghi.
+      conditions.push('f.employee_id = ?');
+      params.push(currentEmployee?.id ?? -1);
     }
     if (employeeId) {
       conditions.push('f.employee_id = ?');
@@ -55,7 +143,8 @@ function register(router) {
       ...c.db.prepare("SELECT id, name, address, 'carrier' AS type FROM carriers WHERE is_active = 1 AND trim(address) <> ''").all(),
       ...c.db.prepare("SELECT id, full_name AS name, address, 'employee' AS type FROM employees WHERE is_active = 1 AND trim(address) <> ''").all(),
     ].sort((left, right) => left.name.localeCompare(right.name, 'vi'));
-    return { prices: prices.map(toPrice), employees: employees.map((item) => ({ id: item.id, name: item.full_name })), locations, distances: distances.map((item) => ({ id: item.id, from: item.from_name, to: item.to_name, km: item.distance_km })), records: records.map((item) => ({ id: item.id, entryDate: item.entry_date, periodFrom: item.period_from || item.entry_date, periodTo: item.period_to || item.entry_date, employeeId: item.employee_id, employeeName: item.employee_name, distanceKm: item.distance_km, fuelType: item.fuel_type, region: item.region, fuelPrice: item.fuel_price, totalFee: item.total_fee })), recordsTotal, fuelTypes: TYPES, isAdmin: scope };
+    const legsForRecord = c.db.prepare('SELECT sequence_no, from_name, to_name, distance_km FROM fuel_record_legs WHERE fuel_record_id = ? ORDER BY sequence_no');
+    return { prices: prices.map(toPrice), employees: employees.map((item) => ({ id: item.id, name: item.full_name })), currentEmployee: currentEmployee ? { id: currentEmployee.id, name: currentEmployee.full_name } : null, locations, distances: distances.map((item) => ({ id: item.id, from: item.from_name, to: item.to_name, km: item.distance_km })), records: records.map((item) => ({ id: item.id, entryDate: item.entry_date, periodFrom: item.period_from || item.entry_date, periodTo: item.period_to || item.entry_date, employeeId: item.employee_id, employeeName: item.employee_name, distanceKm: item.distance_km, consumptionLiters: item.consumption_liters, consumptionBaseKm: item.consumption_base_km, fuelType: item.fuel_type, region: item.region, fuelPrice: item.fuel_price, totalFee: item.total_fee, status: item.status, voidReason: item.void_reason, finalizedAt: item.finalized_at, legs: legsForRecord.all(item.id).map((leg) => ({ from: leg.from_name, to: leg.to_name, km: leg.distance_km })), canEdit: item.status === 'active' && !item.finalized_at && (scope || item.created_by === c.user.id), canDelete: item.status === 'active' && !item.finalized_at && (scope || item.created_by === c.user.id), canVoid: scope && item.status === 'active' && Boolean(item.finalized_at) })), recordsTotal, fuelTypes: TYPES, isAdmin: scope };
   });
   router.post('/api/fuel/prices', async (c) => {
     c.requirePage(PAGE); if (!canSeeEveryone(c.user)) throw badRequest('Chỉ quản trị viên được cập nhật giá xăng.');
@@ -81,26 +170,84 @@ function register(router) {
       return { priceDate: date ? `${date[3]}-${date[2]}-${date[1]}` : '', source: 'Giá Hôm Nay · Petrolimex', items };
     } catch { throw badRequest('Không lấy được giá xăng online lúc này. Bạn vẫn có thể nhập tay.'); }
   });
+  router.post('/api/fuel/route-estimate', async (c) => {
+    c.requirePage(PAGE);
+    const from = clean(c.body.from, 250), to = clean(c.body.to, 250);
+    if (!from || !to) throw badRequest('Vui lòng nhập điểm đi và điểm đến trước khi lấy km.');
+    const fromKey = normalizeSearchText(from), toKey = normalizeSearchText(to);
+    const saved = c.db.prepare('SELECT distance_km FROM route_distances WHERE from_key = ? AND to_key = ?').get(fromKey, toKey);
+    if (saved) return { km: saved.distance_km, source: 'Chặng đã lưu trong ứng dụng', estimated: false };
+    const reverseSaved = c.db.prepare('SELECT distance_km FROM route_distances WHERE from_key = ? AND to_key = ?').get(toKey, fromKey);
+    if (reverseSaved) return { km: reverseSaved.distance_km, source: 'Chặng ngược đã lưu trong ứng dụng', estimated: true };
+    const googleApiKey = clean(process.env.GOOGLE_MAPS_API_KEY, 250);
+    try { return googleApiKey ? await estimateGoogleRouteDistance(from, to, googleApiKey) : await estimateRouteDistance(from, to); }
+    catch (cause) {
+      const message = cause instanceof Error ? clean(cause.message, 320) : '';
+      throw badRequest(googleApiKey ? `Google Maps không lấy được km: ${message || 'kiểm tra lại key và thanh toán.'}` : 'Không lấy được km tự động lúc này. Bạn có thể nhập km theo Google Maps.');
+    }
+  });
   router.post('/api/fuel/records', async (c) => {
     c.requirePage(PAGE);
-    const periodFrom = clean(c.body.periodFrom ?? c.body.entryDate, 10), periodTo = clean(c.body.periodTo ?? c.body.entryDate, 10);
-    if (!DATE.test(periodFrom) || !DATE.test(periodTo) || periodFrom > periodTo) throw badRequest('Khoảng ngày tính không hợp lệ.');
-    const consumptionLiters = number(c.body.consumptionLiters, 'Mức tiêu hao'), consumptionBaseKm = number(c.body.consumptionBaseKm, 'Định mức km');
-    if (!consumptionBaseKm) throw badRequest('Định mức km phải lớn hơn 0.');
-    const legs = Array.isArray(c.body.legs) ? c.body.legs.slice(0, 50).map((leg) => ({ from: clean(leg?.from), to: clean(leg?.to), km: number(leg?.km, 'Quãng đường') })).filter((leg) => leg.from && leg.to && leg.km > 0) : [];
-    const distanceKm = legs.length ? legs.reduce((sum, leg) => sum + leg.km, 0) : number(c.body.distanceKm, 'Quãng đường');
-    if (!distanceKm) throw badRequest('Vui lòng nhập quãng đường.');
-    const fuelPrice = number(c.body.fuelPrice, 'Giá xăng', true), employeeId = Number(c.body.employeeId);
-    const employee = c.db.prepare('SELECT id FROM employees WHERE id = ? AND is_active = 1').get(employeeId);
+    const input = recordInput(c.body);
+    const employee = canSeeEveryone(c.user)
+      ? c.db.prepare('SELECT id FROM employees WHERE id = ? AND is_active = 1').get(Number(c.body.employeeId))
+      : c.db.prepare('SELECT id FROM employees WHERE user_id = ? AND is_active = 1').get(c.user.id);
     if (!employee) throw badRequest('Vui lòng chọn nhân viên đang hoạt động.');
-    const totalFee = Math.round(distanceKm * consumptionLiters / consumptionBaseKm * fuelPrice), at = new Date().toISOString();
+    const employeeId = employee.id;
+    const totalFee = Math.round(input.distanceKm * input.consumptionLiters / input.consumptionBaseKm * input.fuelPrice), at = new Date().toISOString();
     return transaction(c.db, () => {
-      const result = c.db.prepare('INSERT INTO fuel_records (entry_date, period_from, period_to, employee_id, distance_km, consumption_liters, consumption_base_km, fuel_type, region, fuel_price, total_fee, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(periodTo, periodFrom, periodTo, employeeId, distanceKm, consumptionLiters, consumptionBaseKm, clean(c.body.fuelType) || TYPES[0], regions.has(clean(c.body.region)) ? clean(c.body.region) : 'region1', fuelPrice, totalFee, c.user.id, at);
-      const id = Number(result.lastInsertRowid), saveLeg = c.db.prepare('INSERT INTO fuel_record_legs (fuel_record_id, sequence_no, from_name, to_name, distance_km) VALUES (?, ?, ?, ?, ?)'), saveDistance = c.db.prepare('INSERT INTO route_distances (from_name, to_name, from_key, to_key, distance_km, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(from_key, to_key) DO UPDATE SET from_name = excluded.from_name, to_name = excluded.to_name, distance_km = excluded.distance_km, updated_at = excluded.updated_at');
-      legs.forEach((leg, index) => { saveLeg.run(id, index + 1, leg.from, leg.to, leg.km); saveDistance.run(leg.from, leg.to, normalizeSearchText(leg.from), normalizeSearchText(leg.to), leg.km, at); });
-      writeAudit(c.db, c.user, 'fuel.record.create', 'fuel_record', id, { periodFrom, periodTo, employeeId, distanceKm, totalFee, legs });
+      const result = c.db.prepare('INSERT INTO fuel_records (entry_date, period_from, period_to, employee_id, distance_km, consumption_liters, consumption_base_km, fuel_type, region, fuel_price, total_fee, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(input.periodTo, input.periodFrom, input.periodTo, employeeId, input.distanceKm, input.consumptionLiters, input.consumptionBaseKm, input.fuelType, input.region, input.fuelPrice, totalFee, c.user.id, at, at);
+      const id = Number(result.lastInsertRowid);
+      saveRecordLegs(c.db, id, input.legs, at);
+      writeAudit(c.db, c.user, 'fuel.record.create', 'fuel_record', id, { ...input, employeeId, totalFee });
       return { id, totalFee };
     });
+  });
+  router.patch('/api/fuel/records/:id', async (c) => {
+    c.requirePage(PAGE);
+    const id = Number(c.params.id);
+    const record = c.db.prepare('SELECT * FROM fuel_records WHERE id = ?').get(id);
+    if (!record) throw notFound('Không tìm thấy lần tính xăng.');
+    const scope = canSeeEveryone(c.user);
+    if (record.status !== 'active' || record.finalized_at) throw badRequest('Lần tính đã chốt; chỉ quản trị viên có thể hủy kèm lý do.');
+    if (!scope && record.created_by !== c.user.id) throw badRequest('Bạn chỉ được sửa lần tính do mình tạo.');
+    const input = recordInput(c.body);
+    const employee = scope
+      ? c.db.prepare('SELECT id FROM employees WHERE id = ? AND is_active = 1').get(Number(c.body.employeeId))
+      : c.db.prepare('SELECT id FROM employees WHERE user_id = ? AND is_active = 1').get(c.user.id);
+    if (!employee) throw badRequest('Vui lòng chọn nhân viên đang hoạt động.');
+    const totalFee = Math.round(input.distanceKm * input.consumptionLiters / input.consumptionBaseKm * input.fuelPrice);
+    const at = new Date().toISOString();
+    return transaction(c.db, () => {
+      c.db.prepare('UPDATE fuel_records SET entry_date = ?, period_from = ?, period_to = ?, employee_id = ?, distance_km = ?, consumption_liters = ?, consumption_base_km = ?, fuel_type = ?, region = ?, fuel_price = ?, total_fee = ?, updated_at = ? WHERE id = ?').run(input.periodTo, input.periodFrom, input.periodTo, employee.id, input.distanceKm, input.consumptionLiters, input.consumptionBaseKm, input.fuelType, input.region, input.fuelPrice, totalFee, at, id);
+      c.db.prepare('DELETE FROM fuel_record_legs WHERE fuel_record_id = ?').run(id);
+      saveRecordLegs(c.db, id, input.legs, at);
+      writeAudit(c.db, c.user, 'fuel.record.update', 'fuel_record', id, { ...input, employeeId: employee.id, totalFee });
+      return { id, totalFee };
+    });
+  });
+  router.delete('/api/fuel/records/:id', async (c) => {
+    c.requirePage(PAGE);
+    const id = Number(c.params.id);
+    const record = c.db.prepare('SELECT * FROM fuel_records WHERE id = ?').get(id);
+    if (!record) throw notFound('Không tìm thấy lần tính xăng.');
+    const scope = canSeeEveryone(c.user);
+    if (record.status !== 'active') throw badRequest('Lần tính này đã được hủy.');
+    if (record.finalized_at) {
+      if (!scope) throw badRequest('Lần tính đã chốt; vui lòng liên hệ quản trị viên để hủy.');
+      const reason = clean(c.body.reason, 300);
+      if (!reason) throw badRequest('Vui lòng nhập lý do hủy lần tính đã chốt.');
+      const at = new Date().toISOString();
+      c.db.prepare("UPDATE fuel_records SET status = 'voided', voided_at = ?, voided_by = ?, void_reason = ?, updated_at = ? WHERE id = ?").run(at, c.user.id, reason, at, id);
+      writeAudit(c.db, c.user, 'fuel.record.void', 'fuel_record', id, { reason });
+      return { ok: true, voided: true };
+    }
+    if (!scope && record.created_by !== c.user.id) throw badRequest('Bạn chỉ được xóa lần tính do mình tạo.');
+    transaction(c.db, () => {
+      c.db.prepare('DELETE FROM fuel_records WHERE id = ?').run(id);
+      writeAudit(c.db, c.user, 'fuel.record.delete', 'fuel_record', id, { periodFrom: record.period_from, periodTo: record.period_to, totalFee: record.total_fee });
+    });
+    return { ok: true, voided: false };
   });
 }
 module.exports = { register };

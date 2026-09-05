@@ -63,6 +63,35 @@ async function request(baseUrl, token, path) {
   return { data, milliseconds: milliseconds(startedAt) };
 }
 
+async function prepareSeededAdmin(baseUrl, seeded) {
+  const initialLogin = await fetch(`${baseUrl}/api/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(seeded),
+  });
+  const initial = await initialLogin.json();
+  assert.equal(initialLogin.status, 200, 'Không đăng nhập được cho benchmark MISA.');
+
+  const changed = await fetch(`${baseUrl}/api/me/initial-password`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${initial.token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ newPassword: 'BenchmarkAdmin123' }),
+  });
+  assert.equal(changed.status, 200, 'Không đổi được mật khẩu khởi tạo cho benchmark MISA.');
+
+  const login = await fetch(`${baseUrl}/api/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: seeded.username, password: 'BenchmarkAdmin123' }),
+  });
+  const profile = await login.json();
+  assert.equal(login.status, 200, 'Không đăng nhập lại được cho benchmark MISA.');
+  return profile;
+}
+
 async function main() {
   const workDir = mkdtempSync(join(tmpdir(), 'cuocphi-misa-performance-'));
   const app = createApp({ dbFile: join(workDir, 'benchmark.sqlite'), staticRoot: null });
@@ -72,13 +101,7 @@ async function main() {
     const seedMilliseconds = milliseconds(startedAt);
     const address = await app.listen(0, '127.0.0.1');
     const baseUrl = `http://127.0.0.1:${address.port}`;
-    const login = await fetch(`${baseUrl}/api/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(app.seeded),
-    });
-    const profile = await login.json();
-    assert.equal(login.status, 200, 'Không đăng nhập được cho benchmark MISA.');
+    const profile = await prepareSeededAdmin(baseUrl, app.seeded);
 
     const coldDefault = await request(baseUrl, profile.token, '/api/misa?page=1');
     const warmDefault = await request(baseUrl, profile.token, '/api/misa?page=2');

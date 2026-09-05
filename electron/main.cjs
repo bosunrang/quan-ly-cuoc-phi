@@ -9,6 +9,7 @@ const { createApp } = require('../server/index.cjs');
 const DEFAULT_PORT = 3100;
 const ICON = path.join(__dirname, '..', 'build', 'icon.png');
 const MACHINE_CONFIG_FILE = 'machine-mode.json';
+const USER_DATA_DIRECTORY = 'Quản lý cước phí';
 let backend;
 let mainWindow;
 let tray;
@@ -16,6 +17,8 @@ let origin = '';
 let machine;
 let quitting = false;
 
+// Cố định tên thư mục dữ liệu theo tên sản phẩm, không phụ thuộc tên package npm.
+app.setPath('userData', path.join(app.getPath('appData'), USER_DATA_DIRECTORY));
 app.enableSandbox();
 
 function lanAddresses(port) {

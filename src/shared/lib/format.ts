@@ -26,8 +26,16 @@ export function formatDateTime(iso: string): string {
 	return `${time} ${day}`;
 }
 
-/** Ngày hôm nay theo định dạng của input[type=date]. */
-export const todayIso = (): string => new Date().toISOString().slice(0, 10);
+/** Đổi ngày theo múi giờ của máy sang định dạng input[type=date]. */
+export function localIsoDate(date: Date): string {
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	const day = String(date.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
+}
+
+/** Ngày hôm nay theo múi giờ của máy, dùng cho input[type=date]. */
+export const todayIso = (): string => localIsoDate(new Date());
 
 /** "Nguyễn Thị Lan" -> "TL" cho ô avatar. */
 export function initials(name: string): string {

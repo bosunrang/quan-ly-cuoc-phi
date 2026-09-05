@@ -20,3 +20,21 @@
 .user-table td:nth-child(n + 2) { text-align: center; }
 .user-table td:nth-child(n + 2) .inline-actions { justify-content: center; }
 .user-table td:nth-child(3) .inline-actions { flex-wrap: wrap; }
+.user-delete-action { border-color: var(--status-danger-border); color: var(--status-danger-text); }
+.user-delete-action:hover { background: var(--status-danger-bg); }
+.user-delete-note { margin: 0; color: var(--text-subtle); line-height: var(--line-body); }
+
+.user-access-field { gap: 7px; }
+.user-access-hint { color: var(--muted); font-size: var(--type-caption); }
+.user-dialog .dialog-body { gap: 10px; }
+.user-dialog .field-grid { gap: 10px; }
+.user-dialog .field { gap: 4px; }
+.user-page-picker { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.user-page-option { position: relative; min-height: 94px; gap: 10px; padding: 12px; border-radius: 9px; background: var(--panel); transition: border-color .15s ease, background .15s ease, box-shadow .15s ease; }
+.user-page-option:hover { background: var(--surface-accent-faint); }
+.user-page-option.is-selected { border-color: var(--teal-border); background: var(--surface-accent-faint); box-shadow: inset 3px 0 0 var(--teal); }
+.user-page-option input { position: absolute; top: 12px; right: 12px; margin: 0; }
+.user-page-icon { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 9px; background: var(--teal-soft); color: var(--teal); }
+.user-page-option strong { padding-right: 18px; }
+.user-page-option span { line-height: var(--line-compact); }
+@media (max-width: 640px) { .user-page-picker { grid-template-columns: 1fr; } }

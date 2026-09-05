@@ -471,8 +471,8 @@ export function SettingsPage({
 								["employees", "Nhân viên", "Danh sách nhân viên phụ trách"],
 								[
 									"fuel",
-									"Tính giá xăng",
-									"Mốc giá, lộ trình và lịch sử tính xăng",
+									"Lịch sử tính xăng",
+									"Các lần tính xăng đã lưu; giữ nguyên mốc giá và quãng đường",
 								],
 							] as const
 						).map(([group, title, description]) => (

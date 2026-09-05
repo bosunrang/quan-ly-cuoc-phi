@@ -19,7 +19,10 @@ const SEARCH_ALIASES = {
   'khach hang': ['customer.'],
   'nha xe': ['carrier.'],
   'nguoi dung': ['user.', 'login', 'logout', 'password.'],
-  'tai khoan': ['user.', 'login', 'logout', 'password.'],
+	'tai khoan': ['user.', 'login', 'logout', 'password.'],
+	'dang nhap': ['login'],
+	'thay doi': ['entry.update', 'user.update', 'employee.update', 'customer.update', 'carrier.update', 'carrier.rate.update', 'fuel.price.upsert', 'settings.update', 'password.'],
+	'xoa': ['entry.delete', 'user.delete', 'employee.delete', 'customer.delete', 'carrier.delete', 'carrier.rate.delete', 'fuel.price.delete', 'audit.cleanup'],
   'cai dat': ['settings.'],
 };
 const normalize = (value) => String(value)

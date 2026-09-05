@@ -1,3 +1,4 @@
+import { Fuel, LayoutGrid, Receipt } from "lucide-react";
 import { useState } from "react";
 import type {
 	GrantablePage,
@@ -32,6 +33,11 @@ export function UserDialog({
 	const [fullName, setFullName] = useState(user?.fullName ?? "");
 	const [password, setPassword] = useState("");
 	const [pages, setPages] = useState<PageId[]>(user?.pages ?? []);
+	const pageIcons: Partial<Record<PageId, typeof LayoutGrid>> = {
+		dashboard: LayoutGrid,
+		entries: Receipt,
+		fuel: Fuel,
+	};
 
 	const toggle = (key: PageId) =>
 		setPages((current) =>
@@ -52,6 +58,7 @@ export function UserDialog({
 
 	return (
 		<Dialog
+			className="user-dialog"
 			title={isEdit ? `Sửa ${user?.fullName}` : "Thêm người dùng"}
 			subtitle="Tick những thẻ người này được phép mở"
 			confirmLabel={isEdit ? "Lưu thay đổi" : "Tạo tài khoản"}
@@ -103,23 +110,36 @@ export function UserDialog({
 				</Field>
 			)}
 
-			<div className="field">
+			<div className="field user-access-field">
 				{/* biome-ignore lint/a11y/noLabelWithoutControl: nhãn cho cả nhóm ô tick bên dưới */}
 				<label>Thẻ được truy cập</label>
-				<div className="page-picker">
-					{grantable.map((page) => (
-						<label className="page-option" key={page.key}>
-							<input
-								type="checkbox"
-								checked={pages.includes(page.key)}
-								onChange={() => toggle(page.key)}
-							/>
-							<div>
-								<strong>{page.label}</strong>
-								<span>{page.description}</span>
-							</div>
-						</label>
-					))}
+				<span className="user-access-hint">
+					Chọn các màn hình nhân viên được phép sử dụng.
+				</span>
+				<div className="page-picker user-page-picker">
+					{grantable.map((page) => {
+						const Icon = pageIcons[page.key];
+						const isSelected = pages.includes(page.key);
+						return (
+							<label
+								className={`page-option user-page-option${isSelected ? " is-selected" : ""}`}
+								key={page.key}
+							>
+								<input
+									type="checkbox"
+									checked={isSelected}
+									onChange={() => toggle(page.key)}
+								/>
+								<span className="user-page-icon">
+									{Icon && <Icon size={18} />}
+								</span>
+								<div>
+									<strong>{page.label}</strong>
+									<span>{page.description}</span>
+								</div>
+							</label>
+						);
+					})}
 				</div>
 			</div>
 		</Dialog>

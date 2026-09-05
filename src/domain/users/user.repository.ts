@@ -32,4 +32,8 @@ export const userRepository = {
 	resetPassword(id: number, password: string): Promise<{ ok: true }> {
 		return api<{ ok: true }>("POST", `/api/users/${id}/password`, { password });
 	},
+
+	remove(id: number): Promise<{ ok: true }> {
+		return api<{ ok: true }>("DELETE", `/api/users/${id}`);
+	},
 };

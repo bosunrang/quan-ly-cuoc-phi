@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 22;
+const SCHEMA_VERSION = 23;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -30,6 +30,12 @@ function migrate(db) {
       `Cơ sở dữ liệu phiên bản ${current} mới hơn ứng dụng (${SCHEMA_VERSION}). Hãy cập nhật ứng dụng.`,
     );
   }
+
+  // DDL của SQLite có thể chạy trong transaction. Nhờ đó, nếu một bước nâng
+  // cấp lỗi hoặc ứng dụng bị ngắt giữa chừng, user_version và schema cùng
+  // quay về trạng thái cũ thay vì để cơ sở dữ liệu dở dang.
+  db.exec('BEGIN IMMEDIATE');
+  try {
 
   if (current < 1) {
     db.exec(`
@@ -460,7 +466,28 @@ function migrate(db) {
     `);
   }
 
-  db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  if (current < 23) {
+    db.exec(`
+      -- Bản ghi xăng được khóa khi đã xuất báo cáo; hủy vẫn giữ lại dấu vết.
+      ALTER TABLE fuel_records ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+      UPDATE fuel_records SET updated_at = created_at WHERE updated_at = '';
+      ALTER TABLE fuel_records ADD COLUMN finalized_at TEXT;
+      ALTER TABLE fuel_records ADD COLUMN finalized_by INTEGER REFERENCES users(id);
+      ALTER TABLE fuel_records ADD COLUMN voided_at TEXT;
+      ALTER TABLE fuel_records ADD COLUMN voided_by INTEGER REFERENCES users(id);
+      ALTER TABLE fuel_records ADD COLUMN void_reason TEXT NOT NULL DEFAULT '';
+      ALTER TABLE fuel_records ADD COLUMN status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'voided'));
+      CREATE INDEX fuel_records_status_idx ON fuel_records(status, period_from, period_to);
+    `);
+  }
+
+    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 function openDatabase(file) {

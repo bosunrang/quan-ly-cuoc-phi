@@ -212,6 +212,53 @@ describe('cài đặt dùng chung', () => {
     assert.equal(restored.status, 200);
     assert.equal(restored.data.restored, true);
   });
+
+  test('backup giữ ghi chú chênh lệch và ánh xạ người chốt/hủy không còn tồn tại', async () => {
+    const at = new Date().toISOString();
+    app.db.prepare(
+      `INSERT INTO entries
+        (entry_date, customer, carrier, recipient, address, spec, ticket_fee,
+         transport_fee, gate_fee, note, rate_variance_note, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      '2026-01-01', 'Khách backup', 'Nhà xe backup', '', '', '', 0, 100000,
+      0, '', 'Lý do chênh lệch cần giữ lại', 1, at, at,
+    );
+    app.db.prepare(
+      `INSERT INTO fuel_records
+        (entry_date, employee_id, distance_km, consumption_liters, consumption_base_km,
+         fuel_type, region, fuel_price, total_fee, note, created_by, created_at,
+         period_from, period_to, updated_at, finalized_at, finalized_by, voided_at,
+         voided_by, void_reason, status)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      '2026-01-01', 10, 3.5, 40, 'Xăng E10', 'region1', 20000, 17500, '',
+      1, at, '2026-01-01', '2026-01-01', at, at, 1, at, 1, 'Hủy để kiểm tra backup', 'voided',
+    );
+
+    const exported = await call('GET', '/api/settings/backup', { token: adminToken });
+    const backedUpEntry = exported.data.data.entries.find((row) => row.customer === 'Khách backup');
+    const backedUpFuel = exported.data.data.fuelRecords.find((row) => row.note === '');
+    assert.equal(backedUpEntry.rate_variance_note, 'Lý do chênh lệch cần giữ lại');
+
+    // Mô phỏng backup từ máy khác: các tài khoản đã chốt/hủy không tồn tại tại máy này.
+    backedUpFuel.finalized_by = 999998;
+    backedUpFuel.voided_by = 999999;
+    const restored = await call('POST', '/api/settings/backup/restore', {
+      token: adminToken,
+      body: { backup: exported.data },
+    });
+    assert.equal(restored.status, 200);
+
+    const entry = app.db.prepare("SELECT rate_variance_note FROM entries WHERE customer = 'Khách backup'").get();
+    const fuel = app.db.prepare("SELECT finalized_by, voided_by FROM fuel_records WHERE void_reason = 'Hủy để kiểm tra backup'").get();
+    assert.equal(entry.rate_variance_note, 'Lý do chênh lệch cần giữ lại');
+    assert.equal(fuel.finalized_by, 1);
+    assert.equal(fuel.voided_by, 1);
+
+    app.db.prepare("DELETE FROM fuel_records WHERE void_reason = 'Hủy để kiểm tra backup'").run();
+    app.db.prepare("DELETE FROM entries WHERE customer = 'Khách backup'").run();
+  });
 });
 
 describe('nhập dữ liệu MISA', () => {
@@ -599,6 +646,10 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     });
     assert.equal(offRate.status, 200);
 
+    const entryList = await call('GET', '/api/entries', { token: adminToken });
+    const listedOverRate = entryList.data.items.find((item) => item.id === offRate.data.id);
+    assert.equal(listedOverRate.standardTransportFee, 50000);
+
     const variance = await call(
       'GET',
       '/api/reports/carrier-variance?from=2026-08-01&to=2026-08-01',
@@ -817,6 +868,18 @@ describe('kiểm tra dữ liệu đầu vào', () => {
     assert.equal(result.status, 400);
   });
 
+  test('từ chối ngày đúng định dạng nhưng không tồn tại', async () => {
+    const entry = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: newEntry({ entryDate: '2026-02-30' }),
+    });
+    const report = await call('GET', '/api/reports/carrier-variance?from=2026-02-30&to=2026-03-01', {
+      token: adminToken,
+    });
+    assert.equal(entry.status, 400);
+    assert.equal(report.status, 400);
+  });
+
   test('từ chối số tiền âm', async () => {
     const result = await call('POST', '/api/entries', {
       token: staffAToken,
@@ -855,6 +918,27 @@ describe('kiểm tra dữ liệu đầu vào', () => {
 });
 
 describe('khóa tài khoản và đổi mật khẩu', () => {
+
+  test('chỉ xóa được tài khoản nhân viên chưa có dữ liệu', async () => {
+    const created = await call('POST', '/api/users', {
+      token: adminToken,
+      body: { username: 'taikhoanxoatest', fullName: 'Tài khoản xóa test', password: 'MatKhau123', pages: [] },
+    });
+    assert.equal(created.status, 200);
+
+    const removed = await call('DELETE', `/api/users/${created.data.id}`, { token: adminToken });
+    assert.equal(removed.status, 200);
+
+    const list = await call('GET', '/api/users', { token: adminToken });
+    const staffA = list.data.items.find((user) => user.username === 'nhanviena');
+    const hasData = await call('DELETE', `/api/users/${staffA.id}`, { token: adminToken });
+    assert.equal(hasData.status, 400);
+
+    const me = await call('GET', '/api/me', { token: adminToken });
+    const admin = await call('DELETE', `/api/users/${me.data.user.id}`, { token: adminToken });
+    assert.equal(admin.status, 400);
+  });
+
   test('khóa tài khoản thì cắt phiên đang mở', async () => {
     const list = await call('GET', '/api/users', { token: adminToken });
     const staffB = list.data.items.find((u) => u.username === 'nhanvienb');
@@ -964,6 +1048,68 @@ describe('xóa dữ liệu theo nhóm', () => {
     });
     assert.equal(removeCarriers.status, 200);
     assert.deepEqual(removeCarriers.data.deleted, ['carriers']);
+  });
+
+  test('xóa MISA cũng làm mới thẻ tổng quan', async () => {
+    const primeOverview = await call('GET', '/api/misa', { token: adminToken });
+    assert.equal(primeOverview.status, 200);
+    assert.ok(primeOverview.data.count > 0);
+
+    const removed = await call('POST', '/api/settings/data/delete', {
+      token: adminToken,
+      body: { groups: ['misa'] },
+    });
+    assert.equal(removed.status, 200);
+
+    const afterDelete = await call('GET', '/api/misa', { token: adminToken });
+    assert.equal(afterDelete.status, 200);
+    assert.deepEqual(
+      {
+        count: afterDelete.data.count,
+        totalQuantity: afterDelete.data.totalQuantity,
+        customerCount: afterDelete.data.customerCount,
+        provinceCount: afterDelete.data.provinceCount,
+        provinces: afterDelete.data.provinces,
+        lastImport: afterDelete.data.lastImport,
+      },
+      {
+        count: 0,
+        totalQuantity: 0,
+        customerCount: 0,
+        provinceCount: 0,
+        provinces: [],
+        lastImport: null,
+      },
+    );
+  });
+
+  test('xóa nhóm nhân viên tháo liên kết lịch sử, còn xóa lẻ thì bị chặn', async () => {
+    const linkedEmployee = app.db.prepare(
+      'SELECT id FROM employees WHERE id IN (SELECT employee_id FROM entries WHERE employee_id IS NOT NULL) LIMIT 1',
+    ).get();
+    assert.ok(linkedEmployee);
+
+    const individual = await call('DELETE', `/api/employees/${linkedEmployee.id}`, {
+      token: adminToken,
+    });
+    assert.equal(individual.status, 400);
+
+    const removed = await call('POST', '/api/settings/data/delete', {
+      token: adminToken,
+      body: { groups: ['employees'] },
+    });
+    assert.equal(removed.status, 200);
+    assert.deepEqual(removed.data.deleted, ['employees']);
+    assert.ok(removed.data.detachedEmployeeLinks.entries > 0);
+    assert.equal(app.db.prepare('SELECT COUNT(*) AS count FROM employees').get().count, 0);
+    assert.equal(
+      app.db.prepare('SELECT COUNT(*) AS count FROM entries WHERE employee_id IS NOT NULL').get().count,
+      0,
+    );
+    assert.equal(
+      app.db.prepare('SELECT COUNT(*) AS count FROM fuel_records WHERE employee_id IS NOT NULL').get().count,
+      0,
+    );
   });
 });
 

@@ -14,7 +14,12 @@ const HEADER_ALIASES = {
 	productName: ["ten hang", "ten mat hang"],
 	quantitySold: ["tong so luong ban", "so luong ban", "so luong"],
 	lotNumber: ["so lo"],
-	provinceCity: ["tinh/thanh pho", "tinh thanh pho", "tinh/thanh"],
+	provinceCity: [
+		"tinh/thanh pho",
+		"tinh thanh pho",
+		"tinh/thanh",
+		"ten nhom khach hang",
+	],
 };
 
 interface ColumnMap {
@@ -76,7 +81,6 @@ function findHeaders(sheet: SheetData): {
 		if (
 			columns.documentDate >= 0 &&
 			columns.customerName >= 0 &&
-			columns.address >= 0 &&
 			columns.productName >= 0 &&
 			columns.quantitySold >= 0 &&
 			columns.provinceCity >= 0
@@ -85,7 +89,7 @@ function findHeaders(sheet: SheetData): {
 		}
 	}
 	throw new Error(
-		"Không nhận ra cấu trúc file. Cần có các cột Ngày chứng từ, Tên khách hàng, Địa chỉ, Tên hàng, Tổng số lượng bán và Tỉnh/Thành phố.",
+		"Không nhận ra cấu trúc file. Cần có các cột Ngày chứng từ, Tên khách hàng, Tên hàng, Tổng số lượng bán và Tỉnh/Thành phố.",
 	);
 }
 
@@ -147,7 +151,7 @@ function sourceKey(
 		normalizeVietnamese(optionalCell(row, columns.documentNumber)),
 		normalizeVietnamese(optionalCell(row, columns.customerCode)),
 		normalizeVietnamese(row[columns.customerName]),
-		normalizeVietnamese(row[columns.address]),
+		normalizeVietnamese(optionalCell(row, columns.address)),
 		normalizeVietnamese(optionalCell(row, columns.productCode)),
 		normalizeVietnamese(optionalCell(row, columns.lotNumber)),
 		String(quantity),
@@ -163,7 +167,7 @@ export function parseMisaRows(
 
 	for (const [offset, source] of sheet.slice(dataStartIndex).entries()) {
 		const customerName = normalizeText(source[columns.customerName]);
-		const address = normalizeText(source[columns.address]);
+		const address = normalizeText(optionalCell(source, columns.address));
 		const productName = normalizeText(source[columns.productName]);
 		const provinceCity = normalizeText(source[columns.provinceCity]);
 		const rawDate = source[columns.documentDate];

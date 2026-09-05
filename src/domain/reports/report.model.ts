@@ -14,15 +14,17 @@ export interface ReportExport {
 }
 
 export interface CarrierVarianceReport {
+	employees: ReportEmployee[];
 	items: Array<{
 		id: number;
 		carrier: string;
 		customer: string;
+		provinceCity: string;
 		spec: string;
 		actualFee: number;
 		standardFee: number;
 		difference: number;
 		varianceNote: string;
 	}>;
-	summary: { entries: number; absoluteDifference: number; difference: number };
+	summary: { entries: number; difference: number };
 }

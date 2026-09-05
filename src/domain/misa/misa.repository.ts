@@ -17,16 +17,23 @@ export const misaRepository = {
 	},
 
 	preview(parsed: MisaParsedFile): Promise<MisaImportPreview> {
-		return api<MisaImportPreview>("POST", "/api/misa/preview", parsed);
+		return api<MisaImportPreview>("POST", "/api/misa/preview", parsed, {
+			timeoutMs: 120_000,
+		});
 	},
 
 	import(preview: MisaImportPreview): Promise<{
 		inserted: number;
 		duplicates: number;
 	}> {
-		return api("POST", "/api/misa/import", {
-			fileName: preview.fileName,
-			rows: preview.rows.filter((row) => row.status === "ready"),
-		});
+		return api(
+			"POST",
+			"/api/misa/import",
+			{
+				fileName: preview.fileName,
+				rows: preview.rows.filter((row) => row.status === "ready"),
+			},
+			{ timeoutMs: 120_000 },
+		);
 	},
 };

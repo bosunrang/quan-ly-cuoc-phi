@@ -66,6 +66,102 @@ describe("đọc file MISA", () => {
 		});
 	});
 
+	it("đọc được mẫu Sổ chi tiết bán hàng không có cột địa chỉ", () => {
+		const secondTemplateHeaders = [
+			"Ngày hạch toán",
+			"Số chứng từ",
+			"Mã khách hàng",
+			"Tên nhóm khách hàng",
+			"Tên khách hàng",
+			"Mã hàng",
+			"Tên hàng",
+			"Tổng số lượng bán",
+			"Số lô",
+		] as Row;
+		const result = parseMisaRows("SO_CHI_TIET_BAN_HANG T8.xlsx", [
+			["SỔ CHI TIẾT BÁN HÀNG"],
+			["Tháng 8 năm 2026"],
+			secondTemplateHeaders,
+			[
+				new Date(2026, 7, 1),
+				"PX001/08",
+				"26PYBVVIETMY",
+				"Phú Yên",
+				"Bệnh viện Việt Mỹ Phú Yên",
+				"VXABBOTTINFLU",
+				"Influvac Tetra 0.5ml",
+				30,
+				"N10",
+			] as Row,
+		]);
+
+		expect(result.rows).toEqual([
+			expect.objectContaining({
+				rowNumber: 4,
+				documentDate: "2026-08-01",
+				documentCode: "PX001/08",
+				customerName: "Bệnh viện Việt Mỹ Phú Yên",
+				address: "",
+				productName: "Influvac Tetra 0.5ml",
+				quantitySold: 30,
+				provinceCity: "Phú Yên",
+				status: "ready",
+			}),
+		]);
+	});
+
+	it("đọc được mẫu WINBIO có tiêu đề ở dòng thứ tư", () => {
+		const winbioHeaders = [
+			"Ngày chứng từ",
+			"Số chứng từ",
+			"Mã khách hàng",
+			"Tên khách hàng",
+			"Địa chỉ",
+			"Mã hàng",
+			"Tên hàng",
+			"ĐVT",
+			"Tổng số lượng bán",
+			"Số lô",
+			"Tên nhóm khách hàng",
+		] as Row;
+		const result = parseMisaRows(
+			"So_chi_tiet_ban_hang WINBIO tháng 8.2026 mẫu.xlsx",
+			[
+				[],
+				[],
+				[],
+				winbioHeaders,
+				[
+					new Date(2026, 7, 1),
+					"BH0001/08",
+					"19HNTAMAN",
+					"Công Ty TNHH Dịch Vụ Y Tế Tâm An",
+					"36/99 đường La Thành, Hà Nội",
+					"VX-VABIOTECHBC",
+					"Vắc xin VA-MENGOC BC",
+					"Lọ",
+					50,
+					"562M",
+					"Hà Nam",
+				] as Row,
+			],
+		);
+
+		expect(result.rows).toEqual([
+			expect.objectContaining({
+				rowNumber: 5,
+				documentDate: "2026-08-01",
+				documentCode: "BH0001/08",
+				customerName: "Công Ty TNHH Dịch Vụ Y Tế Tâm An",
+				address: "36/99 đường La Thành, Hà Nội",
+				productName: "Vắc xin VA-MENGOC BC",
+				quantitySold: 50,
+				provinceCity: "Hà Nam",
+				status: "ready",
+			}),
+		]);
+	});
+
 	it("đánh dấu bỏ qua khi thiếu trường bắt buộc", () => {
 		const result = parseMisaRows("misa.xlsx", [
 			headers,

@@ -1,4 +1,6 @@
 import {
+	ChevronLeft,
+	ChevronRight,
 	Pencil,
 	Plus,
 	RefreshCw,
@@ -41,6 +43,7 @@ interface EditorState {
 }
 
 const ENTRY_DATE_DRAFT_KEY = "cuocphi.entry-date-draft";
+const ENTRY_PAGE_SIZE = 25;
 
 function initialEntryDate(): string {
 	const saved = sessionStorage.getItem(ENTRY_DATE_DRAFT_KEY) ?? "";
@@ -51,6 +54,7 @@ export function EntriesPage() {
 	const [data, setData] = useState<EntryListResult | null>(null);
 	const [options, setOptions] = useState<EntryFormOptions | null>(null);
 	const [filters, setFilters] = useState<EntryFilters>({});
+	const [page, setPage] = useState(1);
 	const [error, setError] = useState<string | null>(null);
 	const [editor, setEditor] = useState<EditorState | null>(null);
 	const [removing, setRemoving] = useState<Entry | null>(null);
@@ -60,13 +64,19 @@ export function EntriesPage() {
 		() => ({
 			...filters,
 			search: deferredSearch || undefined,
+			limit: String(ENTRY_PAGE_SIZE),
+			offset: String((page - 1) * ENTRY_PAGE_SIZE),
 		}),
-		[deferredSearch, filters],
+		[deferredSearch, filters, page],
 	);
 	const loadRequest = useRef(0);
 	const rememberEntryDate = (entryDate: string) => {
 		setDraftEntryDate(entryDate);
 		sessionStorage.setItem(ENTRY_DATE_DRAFT_KEY, entryDate);
+	};
+	const updateFilters = (patch: Partial<EntryFilters>) => {
+		setPage(1);
+		setFilters((current) => ({ ...current, ...patch }));
 	};
 	const load = useCallback(async () => {
 		const requestId = loadRequest.current + 1;
@@ -102,6 +112,7 @@ export function EntriesPage() {
 	if (!data)
 		return error ? <Alert tone="error">{error}</Alert> : <LoadingState />;
 	const isAdmin = data.scope === "all";
+	const pageCount = Math.max(1, Math.ceil(data.count / ENTRY_PAGE_SIZE));
 	const selectedEmployee = options?.employees.find(
 		(employee) => employee.id === Number(filters.employeeId),
 	);
@@ -174,10 +185,7 @@ export function EntriesPage() {
 							<select
 								value={filters.employeeId ?? ""}
 								onChange={(event) =>
-									setFilters((current) => ({
-										...current,
-										employeeId: event.target.value || undefined,
-									}))
+									updateFilters({ employeeId: event.target.value || undefined })
 								}
 							>
 								<option value="">Tất cả nhân viên</option>
@@ -199,10 +207,7 @@ export function EntriesPage() {
 								value={filters.search ?? ""}
 								placeholder="Khách hàng, nhà xe, người nhận..."
 								onChange={(event) =>
-									setFilters((current) => ({
-										...current,
-										search: event.target.value,
-									}))
+									updateFilters({ search: event.target.value })
 								}
 							/>
 						</div>
@@ -213,12 +218,7 @@ export function EntriesPage() {
 							id="entry-filter-from"
 							value={filters.from ?? ""}
 							ariaLabel="Từ ngày"
-							onChange={(from) =>
-								setFilters((current) => ({
-									...current,
-									from: from || undefined,
-								}))
-							}
+							onChange={(from) => updateFilters({ from: from || undefined })}
 						/>
 					</label>
 					<label className="entry-date-filter" htmlFor="entry-filter-to">
@@ -227,12 +227,7 @@ export function EntriesPage() {
 							id="entry-filter-to"
 							value={filters.to ?? ""}
 							ariaLabel="Đến ngày"
-							onChange={(to) =>
-								setFilters((current) => ({
-									...current,
-									to: to || undefined,
-								}))
-							}
+							onChange={(to) => updateFilters({ to: to || undefined })}
 						/>
 					</label>
 					<button
@@ -248,72 +243,120 @@ export function EntriesPage() {
 						Chưa có phiếu cước phù hợp với điều kiện đang chọn.
 					</EmptyState>
 				) : (
-					<div className="table-scroll entry-list-table-wrap">
-						<table className={`entry-list-table${isAdmin ? " is-admin" : ""}`}>
-							<thead>
-								<tr>
-									<th>Ngày gửi</th>
-									<th>Tên khách hàng</th>
-									<th>Tên chành xe</th>
-									<th>Người nhận hàng</th>
-									<th>Quy cách</th>
-									<th>Cước phí</th>
-									<th>Phí vào cổng</th>
-									{isAdmin && <th>Nhân viên phụ trách</th>}
-									<th>Ghi chú</th>
-									<th>Thao tác</th>
-								</tr>
-							</thead>
-							<tbody>
-								{data.items.map((entry) => (
-									<tr key={entry.id}>
-										<td>{formatDate(entry.entryDate)}</td>
-										<td>
-											<strong>{entry.customer}</strong>
-										</td>
-										<td>{entry.carrier}</td>
-										<td>{entry.recipient || "—"}</td>
-										<td>{entry.spec || "—"}</td>
-										<td className="entry-money">
-											{formatMoney(entry.transportFee)}
-										</td>
-										<td className="entry-money">
-											{entry.gateFee ? formatMoney(entry.gateFee) : "—"}
-										</td>
-										{isAdmin && <td>{entry.employeeName || "Chưa gán"}</td>}
-										<td className="entry-note-cell">{entry.note || "—"}</td>
-										<td>
-											<div className="entry-row-actions">
-												<button
-													type="button"
-													className="row-action"
-													title="Sửa phiếu"
-													aria-label="Sửa phiếu"
-													onClick={() =>
-														setEditor({
-															initial: toEntryInput(entry),
-															editingId: entry.id,
-														})
-													}
-												>
-													<Pencil size={14} />
-												</button>
-												<button
-													type="button"
-													className="row-action is-danger"
-													title="Xóa phiếu"
-													aria-label="Xóa phiếu"
-													onClick={() => setRemoving(entry)}
-												>
-													<Trash2 size={14} />
-												</button>
-											</div>
-										</td>
+					<>
+						<div className="table-scroll entry-list-table-wrap">
+							<table
+								className={`entry-list-table${isAdmin ? " is-admin" : ""}`}
+							>
+								<thead>
+									<tr>
+										<th>Ngày gửi</th>
+										<th>Tên khách hàng</th>
+										<th>Tên chành xe</th>
+										<th>Người nhận hàng</th>
+										<th>Quy cách</th>
+										<th>Cước phí</th>
+										<th>Phí vào cổng</th>
+										{isAdmin && <th>Nhân viên phụ trách</th>}
+										<th className="entry-note-heading">Ghi chú</th>
+										<th>Thao tác</th>
 									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
+								</thead>
+								<tbody>
+									{data.items.map((entry) => {
+										const standardTransportFee = entry.standardTransportFee;
+										const rateDifference =
+											standardTransportFee == null
+												? null
+												: entry.transportFee - standardTransportFee;
+										const rateTone =
+											rateDifference == null || rateDifference === 0
+												? ""
+												: rateDifference > 0
+													? " is-over-rate"
+													: " is-under-rate";
+										return (
+											<tr key={entry.id}>
+												<td>{formatDate(entry.entryDate)}</td>
+												<td>
+													<strong>{entry.customer}</strong>
+												</td>
+												<td>{entry.carrier}</td>
+												<td>{entry.recipient || "—"}</td>
+												<td>{entry.spec || "—"}</td>
+												<td className={`entry-money${rateTone}`}>
+													{formatMoney(entry.transportFee)}
+												</td>
+												<td className="entry-money">
+													{entry.gateFee ? formatMoney(entry.gateFee) : "—"}
+												</td>
+												{isAdmin && <td>{entry.employeeName || "Chưa gán"}</td>}
+												<td className="entry-note-cell">{entry.note || "—"}</td>
+												<td>
+													<div className="entry-row-actions">
+														<button
+															type="button"
+															className="row-action"
+															title="Sửa phiếu"
+															aria-label="Sửa phiếu"
+															onClick={() =>
+																setEditor({
+																	initial: toEntryInput(entry),
+																	editingId: entry.id,
+																})
+															}
+														>
+															<Pencil size={14} />
+														</button>
+														<button
+															type="button"
+															className="row-action is-danger"
+															title="Xóa phiếu"
+															aria-label="Xóa phiếu"
+															onClick={() => setRemoving(entry)}
+														>
+															<Trash2 size={14} />
+														</button>
+													</div>
+												</td>
+											</tr>
+										);
+									})}
+								</tbody>
+							</table>
+						</div>
+						{pageCount > 1 && (
+							<nav
+								className="entry-pagination"
+								aria-label="Phân trang phiếu cước"
+							>
+								<button
+									type="button"
+									title="Trang trước"
+									aria-label="Trang trước"
+									disabled={page === 1}
+									onClick={() => setPage((current) => Math.max(1, current - 1))}
+								>
+									<ChevronLeft size={16} />
+								</button>
+								<span>
+									Trang {page}/{pageCount}
+								</span>
+								<button
+									type="button"
+									className="button secondary"
+									title="Trang sau"
+									aria-label="Trang sau"
+									disabled={page === pageCount}
+									onClick={() =>
+										setPage((current) => Math.min(pageCount, current + 1))
+									}
+								>
+									<ChevronRight size={16} />
+								</button>
+							</nav>
+						)}
+					</>
 				)}
 			</section>
 			{editor && (

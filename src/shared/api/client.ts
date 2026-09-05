@@ -6,7 +6,12 @@
  */
 
 const TOKEN_KEY = "cuocphi.token";
-const REQUEST_TIMEOUT_MS = 12_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+export interface ApiRequestOptions {
+	/** Tăng cho các thao tác nhập/xuất hoặc khôi phục dữ liệu lớn. */
+	timeoutMs?: number;
+}
 
 let token: string | null = sessionStorage.getItem(TOKEN_KEY);
 let onUnauthorized: () => void = () => {};
@@ -39,12 +44,13 @@ export async function api<T>(
 	method: Method,
 	path: string,
 	body?: unknown,
+	options: ApiRequestOptions = {},
 ): Promise<T> {
 	let response: Response;
 	const controller = new AbortController();
 	const timeout = window.setTimeout(
 		() => controller.abort(),
-		REQUEST_TIMEOUT_MS,
+		options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
 	);
 	try {
 		response = await fetch(path, {
@@ -57,6 +63,12 @@ export async function api<T>(
 			body: body ? JSON.stringify(body) : undefined,
 		});
 	} catch {
+		if (controller.signal.aborted) {
+			throw new ApiError(
+				"Máy chủ đang xử lý lâu hơn dự kiến. Yêu cầu có thể vẫn đang hoàn tất; hãy tải lại trang trước khi thử lại.",
+				0,
+			);
+		}
 		throw new ApiError(
 			"Không kết nối được máy chủ. Kiểm tra máy chính đã bật chưa.",
 			0,

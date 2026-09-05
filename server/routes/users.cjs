@@ -185,6 +185,35 @@ function register(router) {
       return { ok: true };
     });
   });
+
+  router.delete('/api/users/:id', async (c) => {
+    c.requirePage(PAGE);
+    const id = Number(c.params.id);
+    const target = c.db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!target) throw notFound('Không tìm thấy người dùng.');
+    if (target.is_admin) throw badRequest('Không thể xóa tài khoản quản trị viên.');
+    if (target.id === c.user.id) throw badRequest('Không thể xóa chính tài khoản đang đăng nhập.');
+
+    const used = c.db.prepare(
+      `SELECT
+        (SELECT COUNT(*) FROM entries WHERE created_by = ?) +
+        (SELECT COUNT(*) FROM misa_rows WHERE imported_by = ?) +
+        (SELECT COUNT(*) FROM fuel_prices WHERE created_by = ?) +
+        (SELECT COUNT(*) FROM fuel_records WHERE created_by = ? OR finalized_by = ? OR voided_by = ?) AS count`,
+    ).get(id, id, id, id, id, id);
+    if (Number(used.count) > 0) {
+      throw badRequest('Tài khoản này đã có dữ liệu nghiệp vụ. Hãy khóa tài khoản để giữ lịch sử.');
+    }
+
+    return transaction(c.db, () => {
+      c.db.prepare('DELETE FROM users WHERE id = ?').run(id);
+      writeAudit(c.db, c.user, 'user.delete', 'user', id, {
+        username: target.username,
+        fullName: target.full_name,
+      });
+      return { ok: true };
+    });
+  });
 }
 
 module.exports = { register };

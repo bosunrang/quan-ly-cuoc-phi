@@ -1,9 +1,13 @@
 import {
 	ChevronLeft,
 	ChevronRight,
-	Fuel,
+	ClipboardList,
+	Eye,
+	MapPin,
+	Pencil,
 	Plus,
 	RefreshCw,
+	SlidersHorizontal,
 	Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,11 +20,15 @@ import { formatDate, formatMoney, todayIso } from "../../shared/lib/format";
 import { Alert } from "../../shared/ui/Alert";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
 import { Dialog } from "../../shared/ui/Dialog";
-import { EmptyState, LoadingState } from "../../shared/ui/Panel";
+import { LoadingState } from "../../shared/ui/Panel";
 
-type Leg = { id: string; destination: string; km: string };
+type Leg = { id: string; destination: string; km: string; source?: string };
+const newLegId = () =>
+	typeof globalThis.crypto?.randomUUID === "function"
+		? globalThis.crypto.randomUUID()
+		: `leg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const newLeg = (): Leg => ({
-	id: crypto.randomUUID(),
+	id: newLegId(),
 	destination: "",
 	km: "",
 });
@@ -30,7 +38,7 @@ const CONSUMPTION_DRAFT_KEY = "fuel-consumption-liters";
 const BASE_KM_DRAFT_KEY = "fuel-consumption-base-km";
 const PERIOD_FROM_DRAFT_KEY = "fuel-period-from";
 const PERIOD_TO_DRAFT_KEY = "fuel-period-to";
-const HISTORY_PAGE_SIZE = 50;
+const HISTORY_PAGE_SIZE = 10;
 const decimal = (value: string) => Number(value.replace(",", ".")) || 0;
 const savedDraft = (key: string, fallback: string) => {
 	const value = localStorage.getItem(key);
@@ -133,7 +141,20 @@ function LocationInput({
 export function FuelPage() {
 	const [data, setData] = useState<FuelData | null>(null),
 		[error, setError] = useState<string | null>(null),
-		[priceEditor, setPriceEditor] = useState(false);
+		[priceEditor, setPriceEditor] = useState(false),
+		[consumptionEditor, setConsumptionEditor] = useState(false),
+		[editingRecord, setEditingRecord] = useState<
+			FuelData["records"][number] | null
+		>(null),
+		[voidingRecord, setVoidingRecord] = useState<
+			FuelData["records"][number] | null
+		>(null),
+		[deletingRecord, setDeletingRecord] = useState<
+			FuelData["records"][number] | null
+		>(null),
+		[detailRecord, setDetailRecord] = useState<
+			FuelData["records"][number] | null
+		>(null);
 	const [employeeId, setEmployeeId] = useState(""),
 		[historyEmployeeId, setHistoryEmployeeId] = useState(""),
 		[historyPage, setHistoryPage] = useState(1),
@@ -149,7 +170,8 @@ export function FuelPage() {
 		),
 		[baseKm, setBaseKm] = useState(() => savedDraft(BASE_KM_DRAFT_KEY, "40")),
 		[origin, setOrigin] = useState(""),
-		[legs, setLegs] = useState<Leg[]>([newLeg()]);
+		[legs, setLegs] = useState<Leg[]>([newLeg()]),
+		[estimatingLegId, setEstimatingLegId] = useState<string | null>(null);
 	const initialPeriodTo = useRef(periodTo);
 	const hasLoadedInitialPrice = useRef(false);
 	const load = useCallback(async () => {
@@ -180,6 +202,12 @@ export function FuelPage() {
 	useEffect(() => {
 		void load();
 	}, [load]);
+	useEffect(() => {
+		if (!data?.isAdmin && data?.currentEmployee) {
+			setEmployeeId(String(data.currentEmployee.id));
+			setHistoryEmployeeId(String(data.currentEmployee.id));
+		}
+	}, [data?.currentEmployee, data?.isAdmin]);
 	const findStoredPrice = (date: string) =>
 		data?.prices.find(
 			(item) =>
@@ -207,15 +235,85 @@ export function FuelPage() {
 		);
 	const setDestination = (index: number, destination: string) => {
 		const from = index ? legs[index - 1].destination : origin;
+		const liveDirect = legs.find((leg, legIndex) => {
+			const legFrom = legIndex ? legs[legIndex - 1].destination : origin;
+			return (
+				decimal(leg.km) > 0 &&
+				locationKey(legFrom) === locationKey(from) &&
+				locationKey(leg.destination) === locationKey(destination)
+			);
+		});
+		const liveReverse = legs.find((leg, legIndex) => {
+			const legFrom = legIndex ? legs[legIndex - 1].destination : origin;
+			return (
+				decimal(leg.km) > 0 &&
+				locationKey(legFrom) === locationKey(destination) &&
+				locationKey(leg.destination) === locationKey(from)
+			);
+		});
 		const saved = data?.distances.find(
 			(item) =>
 				locationKey(item.from) === locationKey(from) &&
 				locationKey(item.to) === locationKey(destination),
 		);
+		const reverseSaved = data?.distances.find(
+			(item) =>
+				locationKey(item.from) === locationKey(destination) &&
+				locationKey(item.to) === locationKey(from),
+		);
+		const reusableDistance = liveDirect ?? liveReverse ?? saved ?? reverseSaved;
+		const reusableSource = liveDirect
+			? "Chặng vừa nhập trong lộ trình"
+			: liveReverse
+				? "Chặng ngược vừa nhập trong lộ trình"
+				: saved
+					? "Chặng đã lưu trong ứng dụng"
+					: reverseSaved
+						? "Chặng ngược đã lưu trong ứng dụng"
+						: undefined;
 		setLeg(index, {
 			destination,
-			...(legs[index].km || !saved ? {} : { km: String(saved.km) }),
+			source: reusableSource,
+			...(legs[index].km || !reusableDistance
+				? {}
+				: { km: String(reusableDistance.km) }),
 		});
+	};
+	const estimateAllLegs = async () => {
+		const completeLegs = legs.filter((leg, index) => {
+			const from = index ? legs[index - 1].destination : origin;
+			return Boolean(from.trim() && leg.destination.trim());
+		});
+		if (!completeLegs.length) {
+			setError("Vui lòng nhập điểm đi và điểm đến trước khi cập nhật km.");
+			return;
+		}
+		setEstimatingLegId("all");
+		const next = [...legs];
+		let failed = false;
+		let failureMessage = "";
+		for (let index = 0; index < legs.length; index += 1) {
+			const from = index ? legs[index - 1].destination : origin;
+			const destination = legs[index].destination;
+			if (!from.trim() || !destination.trim()) continue;
+			try {
+				const result = await fuelRepository.estimateRoute(from, destination);
+				next[index] = {
+					...next[index],
+					km: String(result.km),
+					source: result.source,
+				};
+			} catch (cause) {
+				failed = true;
+				failureMessage =
+					cause instanceof Error ? cause.message : "Không lấy được km tự động.";
+			}
+		}
+		setLegs(next);
+		setEstimatingLegId(null);
+		setError(
+			failed ? failureMessage || "Một vài chặng chưa lấy được km." : null,
+		);
 	};
 	const setSavedConsumption = (value: string) => {
 		setConsumption(value);
@@ -234,6 +332,36 @@ export function FuelPage() {
 		localStorage.setItem(PERIOD_TO_DRAFT_KEY, value);
 		fillStoredPrice(value);
 	};
+	const resetRecordForm = () => {
+		setEditingRecord(null);
+		setOrigin("");
+		setLegs([newLeg()]);
+	};
+	const editRecord = (record: FuelData["records"][number]) => {
+		const recordLegs = record.legs ?? [];
+		setEditingRecord(record);
+		setEmployeeId(String(record.employeeId ?? ""));
+		setSavedPeriodFrom(record.periodFrom);
+		setSavedPeriodTo(record.periodTo);
+		setFuelPrice(formatMoney(record.fuelPrice));
+		setSavedConsumption(String(record.consumptionLiters));
+		setSavedBaseKm(String(record.consumptionBaseKm));
+		setOrigin(recordLegs[0]?.from ?? "");
+		setLegs(
+			recordLegs.length
+				? recordLegs.map((leg) => ({
+						id: newLegId(),
+						destination: leg.to,
+						km: String(leg.km),
+					}))
+				: [newLeg()],
+		);
+		setError(null);
+	};
+	const deleteRecord = async (record: FuelData["records"][number]) => {
+		await fuelRepository.deleteRecord(record.id);
+		await load();
+	};
 	const save = async () => {
 		if (!employeeId) throw new Error("Vui lòng chọn nhân viên.");
 		if (!origin.trim() || !totalKm)
@@ -247,7 +375,7 @@ export function FuelPage() {
 			.filter((leg) => leg.from.trim() && leg.to.trim() && leg.km > 0);
 		if (!routeLegs.length)
 			throw new Error("Mỗi chặng cần có điểm đến và số km.");
-		await fuelRepository.saveRecord({
+		const input = {
 			periodFrom,
 			periodTo,
 			employeeId,
@@ -257,117 +385,106 @@ export function FuelPage() {
 			region: DEFAULT_REGION,
 			fuelPrice: appliedPrice,
 			legs: routeLegs,
-		});
-		setOrigin("");
-		setLegs([newLeg()]);
+		};
+		if (editingRecord)
+			await fuelRepository.updateRecord(editingRecord.id, input);
+		else await fuelRepository.saveRecord(input);
+		resetRecordForm();
 		await load();
 	};
 	if (!data)
 		return error ? <Alert tone="error">{error}</Alert> : <LoadingState />;
 	return (
 		<>
-			<section className="panel fuel-intro">
-				<div className="fuel-intro-icon">
-					<Fuel size={22} />
-				</div>
-				<div>
-					<h2>Tính giá xăng</h2>
-					<p>
-						Tính theo từng chặng di chuyển và lưu vào kỳ tính xăng của nhân
-						viên.
-					</p>
-				</div>
-				{data.isAdmin && (
-					<button
-						className="button secondary"
-						type="button"
-						onClick={() => setPriceEditor(true)}
-					>
-						<RefreshCw size={16} />
-						Cập nhật giá xăng
-					</button>
-				)}
-			</section>
 			{error && <Alert tone="error">{error}</Alert>}
 			<div className="fuel-layout">
 				<section className="panel fuel-calculator fuel-workspace">
 					<div className="fuel-section-head">
-						<div>
-							<strong>Lập tuyến tính xăng</strong>
-							<span>
-								Nhập theo thứ tự A → B → C. Chặng cũ sẽ gợi lại km đã lưu.
+						<div className="fuel-section-title">
+							<span className="fuel-section-icon">
+								<MapPin size={18} />
 							</span>
+							<div>
+								<strong>Lập tuyến tính xăng</strong>
+								<span>Nhập theo thứ tự A → B → C.</span>
+							</div>
+						</div>
+						<div className="fuel-calculator-tools">
+							<button
+								className="button secondary fuel-consumption-action"
+								type="button"
+								onClick={() => setConsumptionEditor(true)}
+							>
+								<SlidersHorizontal size={15} />
+								Định mức: {consumption || "—"}L / {baseKm || "—"}km
+							</button>
+							{data.isAdmin && (
+								<button
+									className="button primary fuel-price-action"
+									type="button"
+									onClick={() => setPriceEditor(true)}
+								>
+									<RefreshCw size={15} />
+									Cập nhật giá xăng
+								</button>
+							)}
 						</div>
 					</div>
 					<div className="fuel-settings">
-						<label>
-							Nhân viên
-							<select
-								value={employeeId}
-								onChange={(event) => setEmployeeId(event.target.value)}
-							>
-								<option value="">Chọn nhân viên</option>
-								{data.employees.map((employee) => (
-									<option key={employee.id} value={employee.id}>
-										{employee.name}
-									</option>
-								))}
-							</select>
-						</label>
-						<div className="fuel-date-field">
-							Từ ngày
-							<DateInput
-								value={periodFrom}
-								ariaLabel="Từ ngày"
-								onChange={setSavedPeriodFrom}
-							/>
-						</div>
-						<div className="fuel-date-field">
-							Đến ngày
-							<DateInput
-								value={periodTo}
-								ariaLabel="Đến ngày"
-								onChange={setSavedPeriodTo}
-							/>
-						</div>
-						<label className="fuel-price-field">
-							Giá xăng (đ/lít)
-							<input
-								value={fuelPrice}
-								inputMode="numeric"
-								placeholder="Chưa có giá"
-								onChange={(event) => {
-									const digits = event.target.value.replace(/\D/g, "");
-									setFuelPrice(digits ? formatMoney(Number(digits)) : "");
-								}}
-							/>
-						</label>
-						<div className="fuel-default-settings">
-							<label className="fuel-compact-field">
-								<span className="fuel-field-title">
-									Mức tiêu hao
-									<small>lít / {baseKm || 0} km</small>
-								</span>
-								<input
-									value={consumption}
-									inputMode="decimal"
-									onChange={(event) => setSavedConsumption(event.target.value)}
-								/>
-							</label>
-							<label className="fuel-compact-field">
-								Định mức km
-								<input
-									value={baseKm}
-									inputMode="decimal"
-									onChange={(event) => setSavedBaseKm(event.target.value)}
-								/>
-							</label>
+						<div className="fuel-settings-group fuel-period-settings">
+							<div className="fuel-settings-group-title">
+								<strong>Thông tin kỳ tính</strong>
+							</div>
+							<div className="fuel-period-fields">
+								<label>
+									Nhân viên
+									<select
+										value={employeeId}
+										disabled={!data.isAdmin}
+										onChange={(event) => setEmployeeId(event.target.value)}
+									>
+										{data.isAdmin && <option value="">Chọn nhân viên</option>}
+										{data.employees.map((employee) => (
+											<option key={employee.id} value={employee.id}>
+												{employee.name}
+											</option>
+										))}
+									</select>
+								</label>
+								<div className="fuel-date-field">
+									Từ ngày
+									<DateInput
+										value={periodFrom}
+										ariaLabel="Từ ngày"
+										onChange={setSavedPeriodFrom}
+									/>
+								</div>
+								<div className="fuel-date-field">
+									Đến ngày
+									<DateInput
+										value={periodTo}
+										ariaLabel="Đến ngày"
+										onChange={setSavedPeriodTo}
+									/>
+								</div>
+								<label className="fuel-price-field">
+									Giá xăng (đ/lít)
+									<input
+										value={fuelPrice}
+										inputMode="numeric"
+										placeholder="Chưa có giá"
+										onChange={(event) => {
+											const digits = event.target.value.replace(/\D/g, "");
+											setFuelPrice(digits ? formatMoney(Number(digits)) : "");
+										}}
+									/>
+								</label>
+							</div>
 						</div>
 					</div>
 					<div className="fuel-route">
 						<div className="fuel-route-head">
 							<strong>Lộ trình</strong>
-							<span>Điểm đến của chặng trước là điểm đi của chặng sau.</span>
 						</div>
 						{legs.map((leg, index) => {
 							const from = index ? legs[index - 1].destination : origin;
@@ -381,13 +498,21 @@ export function FuelPage() {
 									className={`fuel-leg${legs.length > 1 ? " fuel-leg-removable" : ""}`}
 									key={leg.id}
 								>
+									<div className="fuel-leg-step" aria-hidden="true">
+										<span>{index + 1}</span>
+										{index < legs.length - 1 && <i />}
+									</div>
 									<div className="fuel-route-field">
 										Điểm {String.fromCharCode(65 + index)}
 										<LocationInput
 											value={from}
 											ariaLabel={`Điểm ${String.fromCharCode(65 + index)}`}
 											readOnly={index > 0}
-											placeholder="Ví dụ: Công ty Naviva"
+											placeholder={
+												index
+													? "Điểm đến của chặng trước"
+													: "Ví dụ: Công ty Naviva"
+											}
 											locations={data.locations}
 											onChange={(value) => !index && setOrigin(value)}
 										/>
@@ -403,12 +528,15 @@ export function FuelPage() {
 										/>
 									</div>
 									<label>
-										Quãng đường (km)
+										Km
 										<input
 											value={leg.km}
 											inputMode="decimal"
 											onChange={(event) =>
-												setLeg(index, { km: event.target.value })
+												setLeg(index, {
+													km: event.target.value,
+													source: undefined,
+												})
 											}
 										/>
 									</label>
@@ -433,24 +561,47 @@ export function FuelPage() {
 								</div>
 							);
 						})}
-						<button
-							className="button secondary"
-							type="button"
-							onClick={() => setLegs((rows) => [...rows, newLeg()])}
-						>
-							<Plus size={15} />
-							Thêm điểm giao
-						</button>
+						<div className="fuel-route-actions">
+							<button
+								className="button secondary"
+								type="button"
+								onClick={() => setLegs((rows) => [...rows, newLeg()])}
+							>
+								<Plus size={15} />
+								Thêm điểm giao
+							</button>
+							<button
+								className={`button secondary fuel-update-distance${estimatingLegId === "all" ? " is-loading" : ""}`}
+								type="button"
+								disabled={estimatingLegId !== null}
+								onClick={() => void estimateAllLegs()}
+							>
+								<RefreshCw size={15} />
+								Cập nhật km
+							</button>
+						</div>
 					</div>
 					<div className="fuel-calculator-footer">
-						<div>
+						<div className="fuel-footer-caption">
+							<strong>Kết quả dự kiến</strong>
+						</div>
+						<div className="fuel-footer-metric">
 							<span>Tổng quãng đường</span>
 							<strong>{totalKm.toLocaleString("vi-VN")} km</strong>
 						</div>
-						<div>
+						<div className="fuel-footer-metric is-total">
 							<span>Tổng tiền xăng</span>
 							<strong>{formatMoney(total)} đ</strong>
 						</div>
+						{editingRecord && (
+							<button
+								className="button secondary"
+								type="button"
+								onClick={resetRecordForm}
+							>
+								Hủy sửa
+							</button>
+						)}
 						<button
 							className="button primary"
 							type="button"
@@ -465,28 +616,31 @@ export function FuelPage() {
 								)
 							}
 						>
-							Lưu tính xăng
+							{editingRecord ? "Cập nhật tính xăng" : "Lưu tính xăng"}
 						</button>
 					</div>
 				</section>
 				<section className="panel fuel-history-panel">
 					<div className="fuel-section-head">
-						<div>
-							<strong>Lịch sử tính tiền xăng</strong>
-							<span>
-								Lưu theo nhân viên và khoảng ngày để dùng trong báo cáo.
+						<div className="fuel-section-title">
+							<span className="fuel-section-icon history">
+								<ClipboardList size={19} />
 							</span>
+							<div>
+								<strong>Lịch sử tính tiền xăng</strong>
+							</div>
 						</div>
 						<div className="fuel-history-filter">
 							<select
 								aria-label="Lọc lịch sử theo nhân viên"
 								value={historyEmployeeId}
+								disabled={!data.isAdmin}
 								onChange={(event) => {
 									setHistoryEmployeeId(event.target.value);
 									setHistoryPage(1);
 								}}
 							>
-								<option value="">Tất cả nhân viên</option>
+								{data.isAdmin && <option value="">Tất cả nhân viên</option>}
 								{data.employees.map((employee) => (
 									<option value={employee.id} key={employee.id}>
 										{employee.name}
@@ -497,32 +651,51 @@ export function FuelPage() {
 					</div>
 					{historyRecords.length ? (
 						<>
-							<div className="table-scroll">
-								<table className="fuel-table">
-									<thead>
-										<tr>
-											<th>Nhân viên</th>
-											<th>Khoảng ngày</th>
-											<th>Quãng đường</th>
-											<th>Tổng tiền</th>
-										</tr>
-									</thead>
-									<tbody>
-										{historyRecords.map((item) => (
-											<tr key={item.id}>
-												<td>{item.employeeName ?? "—"}</td>
-												<td>
+							<div className="fuel-history-list">
+								{historyRecords.map((item) => {
+									return (
+										<article
+											key={item.id}
+											className={item.status === "voided" ? "is-voided" : ""}
+										>
+											<div className="fuel-history-main">
+												<strong>
+													{item.employeeName ?? "Chưa gán nhân viên"}
+												</strong>
+												<span>
 													{formatDate(item.periodFrom)} –{" "}
 													{formatDate(item.periodTo)}
-												</td>
-												<td>{item.distanceKm.toLocaleString("vi-VN")} km</td>
-												<td className="fuel-money">
-													{formatMoney(item.totalFee)} đ
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
+												</span>
+												{item.status === "voided" && (
+													<span className="fuel-history-status">
+														Đã hủy: {item.voidReason}
+													</span>
+												)}
+											</div>
+											<div className="fuel-history-metric">
+												<span>Quãng đường</span>
+												<strong>
+													{item.distanceKm.toLocaleString("vi-VN")} km
+												</strong>
+											</div>
+											<div className="fuel-history-metric is-total">
+												<span>Tổng tiền</span>
+												<strong>{formatMoney(item.totalFee)} đ</strong>
+											</div>
+											<div className="fuel-history-actions">
+												<button
+													className="row-action"
+													type="button"
+													title="Xem chi tiết"
+													aria-label="Xem chi tiết"
+													onClick={() => setDetailRecord(item)}
+												>
+													<Eye size={15} />
+												</button>
+											</div>
+										</article>
+									);
+								})}
 							</div>
 							{historyPageCount > 1 && (
 								<footer className="fuel-history-pagination">
@@ -553,9 +726,11 @@ export function FuelPage() {
 							)}
 						</>
 					) : (
-						<EmptyState>
-							Chưa có lần tính xăng cho nhân viên đã chọn.
-						</EmptyState>
+						<div className="fuel-history-empty">
+							<ClipboardList size={24} />
+							<strong>Chưa có dữ liệu tính xăng</strong>
+							<span>Chọn nhân viên khác hoặc lưu lần tính đầu tiên.</span>
+						</div>
 					)}
 				</section>
 			</div>
@@ -572,9 +747,285 @@ export function FuelPage() {
 					}}
 				/>
 			)}
+			{consumptionEditor && (
+				<ConsumptionDialog
+					consumption={consumption}
+					baseKm={baseKm}
+					close={() => setConsumptionEditor(false)}
+					saved={(nextConsumption, nextBaseKm) => {
+						setSavedConsumption(nextConsumption);
+						setSavedBaseKm(nextBaseKm);
+						setConsumptionEditor(false);
+					}}
+				/>
+			)}
+			{voidingRecord && (
+				<VoidFuelRecordDialog
+					record={voidingRecord}
+					close={() => setVoidingRecord(null)}
+					saved={async (reason) => {
+						await fuelRepository.deleteRecord(voidingRecord.id, reason);
+						setVoidingRecord(null);
+						await load();
+					}}
+				/>
+			)}
+			{deletingRecord && (
+				<DeleteFuelRecordDialog
+					record={deletingRecord}
+					close={() => setDeletingRecord(null)}
+					saved={async () => {
+						await deleteRecord(deletingRecord);
+						setDeletingRecord(null);
+					}}
+				/>
+			)}
+			{detailRecord && (
+				<FuelRecordDetailDialog
+					record={detailRecord}
+					close={() => setDetailRecord(null)}
+					edit={() => {
+						editRecord(detailRecord);
+						setDetailRecord(null);
+					}}
+					remove={() => {
+						setDeletingRecord(detailRecord);
+						setDetailRecord(null);
+					}}
+					voidRecord={() => {
+						setVoidingRecord(detailRecord);
+						setDetailRecord(null);
+					}}
+				/>
+			)}
 		</>
 	);
 }
+
+function ConsumptionDialog({
+	consumption: initialConsumption,
+	baseKm: initialBaseKm,
+	close,
+	saved,
+}: {
+	consumption: string;
+	baseKm: string;
+	close: () => void;
+	saved: (consumption: string, baseKm: string) => void;
+}) {
+	const [consumption, setConsumption] = useState(initialConsumption);
+	const [baseKm, setBaseKm] = useState(initialBaseKm);
+	return (
+		<Dialog
+			className="fuel-consumption-dialog"
+			title="Định mức nhiên liệu"
+			subtitle="Thiết lập mức tiêu hao dùng để tính tiền xăng cho các chặng."
+			onClose={close}
+			confirmLabel="Lưu định mức"
+			onConfirm={async () => {
+				if (decimal(consumption) <= 0 || decimal(baseKm) <= 0)
+					throw new Error("Mức tiêu hao và định mức km phải lớn hơn 0.");
+				saved(consumption, baseKm);
+			}}
+		>
+			<div className="fuel-consumption-fields">
+				<label>
+					Mức tiêu hao (lít)
+					<input
+						value={consumption}
+						inputMode="decimal"
+						autoFocus
+						onChange={(event) => setConsumption(event.target.value)}
+					/>
+				</label>
+				<label>
+					Định mức quãng đường (km)
+					<input
+						value={baseKm}
+						inputMode="decimal"
+						onChange={(event) => setBaseKm(event.target.value)}
+					/>
+				</label>
+			</div>
+		</Dialog>
+	);
+}
+
+function VoidFuelRecordDialog({
+	record,
+	close,
+	saved,
+}: {
+	record: FuelData["records"][number];
+	close: () => void;
+	saved: (reason: string) => Promise<void>;
+}) {
+	const [reason, setReason] = useState("");
+	return (
+		<Dialog
+			className="fuel-void-dialog"
+			title="Hủy lần tính xăng đã chốt"
+			subtitle={`Bản ghi ${formatDate(record.periodFrom)} – ${formatDate(record.periodTo)} sẽ không còn được tính vào báo cáo sau này.`}
+			onClose={close}
+			confirmLabel="Xác nhận hủy"
+			onConfirm={async () => {
+				if (!reason.trim()) throw new Error("Vui lòng nhập lý do hủy.");
+				await saved(reason.trim());
+			}}
+		>
+			<label className="field">
+				Lý do hủy
+				<textarea
+					autoFocus
+					value={reason}
+					placeholder="Ví dụ: Nhân viên nhập nhầm quãng đường"
+					onChange={(event) => setReason(event.target.value)}
+				/>
+			</label>
+		</Dialog>
+	);
+}
+
+function DeleteFuelRecordDialog({
+	record,
+	close,
+	saved,
+}: {
+	record: FuelData["records"][number];
+	close: () => void;
+	saved: () => Promise<void>;
+}) {
+	return (
+		<Dialog
+			className="fuel-delete-dialog"
+			title="Xóa lần tính xăng?"
+			subtitle={`${record.employeeName ?? "Nhân viên"} · ${formatDate(record.periodFrom)} – ${formatDate(record.periodTo)}`}
+			onClose={close}
+			confirmLabel="Xóa lần tính"
+			confirmClassName="danger"
+			onConfirm={saved}
+		>
+			<p className="fuel-delete-note">
+				Thao tác này không thể hoàn tác. Lần tính xăng sẽ bị xóa khỏi hệ thống.
+			</p>
+		</Dialog>
+	);
+}
+
+function FuelRecordDetailDialog({
+	record,
+	close,
+	edit,
+	remove,
+	voidRecord,
+}: {
+	record: FuelData["records"][number];
+	close: () => void;
+	edit: () => void;
+	remove: () => void;
+	voidRecord: () => void;
+}) {
+	const legs = record.legs ?? [];
+	return (
+		<Dialog
+			className="fuel-record-detail-dialog"
+			title="Chi tiết lần tính xăng"
+			subtitle={`${record.employeeName ?? "Chưa gán nhân viên"} · ${formatDate(record.periodFrom)} – ${formatDate(record.periodTo)}`}
+			onClose={close}
+			onConfirm={async () => {}}
+			footer={
+				<>
+					{record.canEdit && (
+						<button className="button secondary" type="button" onClick={edit}>
+							<Pencil size={15} /> Sửa lần tính
+						</button>
+					)}
+					{record.canDelete && (
+						<button className="button danger" type="button" onClick={remove}>
+							<Trash2 size={15} /> Xóa lần tính
+						</button>
+					)}
+					{record.canVoid && (
+						<button
+							className="button danger"
+							type="button"
+							onClick={voidRecord}
+						>
+							<Trash2 size={15} /> Hủy lần tính
+						</button>
+					)}
+					<button
+						className="button secondary fuel-record-detail-close"
+						type="button"
+						onClick={close}
+					>
+						Đóng
+					</button>
+				</>
+			}
+		>
+			<div className="fuel-record-detail-table-wrap">
+				<table className="fuel-record-detail-table">
+					<thead>
+						<tr>
+							<th>Lộ trình</th>
+							<th>Giá xăng</th>
+							<th>Quãng đường</th>
+							<th>Số tiền tính</th>
+						</tr>
+					</thead>
+					<tbody>
+						{legs.length ? (
+							legs.map((leg, index) => {
+								const legFee = Math.round(
+									(leg.km * record.consumptionLiters * record.fuelPrice) /
+										(record.consumptionBaseKm || 1),
+								);
+								return (
+									<tr key={`${record.id}-${leg.from}-${leg.to}-${leg.km}`}>
+										<td>
+											<div className="fuel-record-route-leg">
+												<span className="fuel-record-route-step">
+													{index + 1}
+												</span>
+												<span>
+													{leg.from} → {leg.to}
+												</span>
+											</div>
+										</td>
+										<td>{formatMoney(record.fuelPrice)} đ/lít</td>
+										<td>{leg.km.toLocaleString("vi-VN")} km</td>
+										<td>{formatMoney(legFee)} đ</td>
+									</tr>
+								);
+							})
+						) : (
+							<tr>
+								<td>Chưa lưu chi tiết lộ trình</td>
+								<td>{formatMoney(record.fuelPrice)} đ/lít</td>
+								<td>{record.distanceKm.toLocaleString("vi-VN")} km</td>
+								<td>{formatMoney(record.totalFee)} đ</td>
+							</tr>
+						)}
+					</tbody>
+					{legs.length > 1 && (
+						<tfoot>
+							<tr>
+								<th colSpan={2}>Tổng toàn bộ lộ trình</th>
+								<th>{record.distanceKm.toLocaleString("vi-VN")} km</th>
+								<th>{formatMoney(record.totalFee)} đ</th>
+							</tr>
+						</tfoot>
+					)}
+				</table>
+			</div>
+			{record.status === "voided" && (
+				<p className="fuel-record-void-reason">Đã hủy: {record.voidReason}</p>
+			)}
+		</Dialog>
+	);
+}
+
 function PriceDialog({
 	defaultDate,
 	defaultPrice,
@@ -590,33 +1041,44 @@ function PriceDialog({
 }) {
 	const [date, setDate] = useState(defaultDate),
 		[price, setPrice] = useState(defaultPrice),
+		[region, setRegion] = useState<FuelPrice["region"]>(DEFAULT_REGION),
 		[source, setSource] = useState("Nhập tay"),
 		[online, setOnline] = useState<
 			Array<{ name: string; region1: number; region2: number }>
 		>([]);
-	const selectDate = (nextDate: string) => {
-		setDate(nextDate);
+	const fillStoredPrice = (
+		nextDate: string,
+		nextRegion: FuelPrice["region"],
+	) => {
 		const stored = prices.find(
 			(item) =>
 				item.fuelType === DEFAULT_FUEL_TYPE &&
-				item.region === DEFAULT_REGION &&
+				item.region === nextRegion &&
 				item.effectiveDate <= nextDate,
 		);
 		setPrice(stored ? formatMoney(stored.price) : "");
 		setSource(stored?.source ?? "Nhập tay");
 	};
+	const selectDate = (nextDate: string) => {
+		setDate(nextDate);
+		fillStoredPrice(nextDate, region);
+	};
+	const selectRegion = (nextRegion: FuelPrice["region"]) => {
+		setRegion(nextRegion);
+		fillStoredPrice(date, nextRegion);
+	};
 	return (
 		<Dialog
 			className="fuel-price-dialog"
 			title="Cập nhật giá xăng"
-			subtitle="Chọn ngày để xem hoặc cập nhật mốc giá; giá online chỉ là gợi ý."
+			subtitle="Chọn ngày và khu vực để xem hoặc cập nhật mốc giá; giá online chỉ là gợi ý."
 			onClose={close}
 			confirmLabel="Lưu mốc giá"
 			onConfirm={async () => {
 				const savedPrice = await fuelRepository.savePrice({
 					effectiveDate: date,
 					fuelType: DEFAULT_FUEL_TYPE,
-					region: DEFAULT_REGION,
+					region,
 					price: Number(price.replace(/\D/g, "")),
 					source,
 				});
@@ -632,6 +1094,18 @@ function PriceDialog({
 						onChange={selectDate}
 					/>
 				</div>
+				<label>
+					Khu vực
+					<select
+						value={region}
+						onChange={(event) =>
+							selectRegion(event.target.value as FuelPrice["region"])
+						}
+					>
+						<option value="region1">Vùng 1</option>
+						<option value="region2">Vùng 2</option>
+					</select>
+				</label>
 				<label>
 					Giá
 					<input
@@ -663,18 +1137,35 @@ function PriceDialog({
 			>
 				Lấy giá online
 			</button>
-			{online
-				.filter((item) => item.name.includes("E10"))
-				.map((item) => (
-					<button
-						className="fuel-online-choice"
-						type="button"
-						key={item.name}
-						onClick={() => setPrice(formatMoney(item.region1))}
-					>
-						{item.name}: {formatMoney(item.region1)} đ/lít
-					</button>
-				))}
+			<div className="fuel-online-choices">
+				{online
+					.filter((item) => item.name.includes("E10"))
+					.map((item) => (
+						<div className="fuel-online-group" key={item.name}>
+							<strong>{item.name}</strong>
+							<button
+								className="fuel-online-choice"
+								type="button"
+								onClick={() => {
+									setRegion("region1");
+									setPrice(formatMoney(item.region1));
+								}}
+							>
+								Vùng 1: {formatMoney(item.region1)} đ/lít
+							</button>
+							<button
+								className="fuel-online-choice"
+								type="button"
+								onClick={() => {
+									setRegion("region2");
+									setPrice(formatMoney(item.region2));
+								}}
+							>
+								Vùng 2: {formatMoney(item.region2)} đ/lít
+							</button>
+						</div>
+					))}
+			</div>
 		</Dialog>
 	);
 }

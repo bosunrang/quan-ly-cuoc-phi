@@ -1,8 +1,17 @@
-import { KeyRound, Lock, Pencil, Plus, Unlock, UsersRound } from "lucide-react";
+import {
+	KeyRound,
+	Lock,
+	Pencil,
+	Plus,
+	Trash2,
+	Unlock,
+	UsersRound,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { GrantablePage, ManagedUser } from "../../domain/users/user.model";
 import { userRepository } from "../../domain/users/user.repository";
 import { Alert } from "../../shared/ui/Alert";
+import { Dialog } from "../../shared/ui/Dialog";
 import { LoadingState, Panel, PanelHeader } from "../../shared/ui/Panel";
 import { StatusPill } from "../../shared/ui/StatusPill";
 import type { CurrentUser, PageId } from "../../types";
@@ -22,6 +31,7 @@ export function UsersPage({ currentUser }: UsersPageProps) {
 		undefined,
 	);
 	const [resetting, setResetting] = useState<ManagedUser | null>(null);
+	const [deleting, setDeleting] = useState<ManagedUser | null>(null);
 
 	const load = useCallback(async () => {
 		try {
@@ -174,6 +184,16 @@ export function UsersPage({ currentUser }: UsersPageProps) {
 													)}
 												</button>
 											)}
+											{!user.isAdmin && user.id !== currentUser.id && (
+												<button
+													type="button"
+													className="row-action user-delete-action"
+													title="Xóa tài khoản"
+													onClick={() => setDeleting(user)}
+												>
+													<Trash2 size={14} />
+												</button>
+											)}
 										</div>
 									</td>
 								</tr>
@@ -201,6 +221,26 @@ export function UsersPage({ currentUser }: UsersPageProps) {
 					}}
 					onClose={() => setResetting(null)}
 				/>
+			)}
+
+			{deleting && (
+				<Dialog
+					title="Xóa tài khoản nhân viên"
+					subtitle={`Xóa tài khoản ${deleting.fullName} (${deleting.username})? Thao tác này không thể hoàn tác.`}
+					confirmLabel="Xóa tài khoản"
+					confirmClassName="danger"
+					onConfirm={async () => {
+						await userRepository.remove(deleting.id);
+						setDeleting(null);
+						await load();
+					}}
+					onClose={() => setDeleting(null)}
+				>
+					<p className="user-delete-note">
+						Chỉ xóa được tài khoản chưa phát sinh dữ liệu. Với tài khoản đã có
+						dữ liệu, hãy dùng chức năng khóa để giữ lịch sử.
+					</p>
+				</Dialog>
 			)}
 		</>
 	);

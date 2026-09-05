@@ -11,7 +11,7 @@ export default defineConfig({
 		},
 		// Khi chạy dev, gọi API sang server nội bộ đang chạy ở cổng 3100.
 		proxy: {
-			"/api": "http://127.0.0.1:3100",
+			"/api": process.env.API_SERVER_URL ?? "http://127.0.0.1:3100",
 		},
 	},
 });

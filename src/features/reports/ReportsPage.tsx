@@ -20,7 +20,12 @@ import { MoneyInput } from "../../shared/ui/MoneyInput";
 import { EmptyState, LoadingState, PanelHeader } from "../../shared/ui/Panel";
 import "./reports.css";
 
-type ExtraCost = { id: number; name: string; amount: string };
+type ExtraCost = {
+	id: number;
+	name: string;
+	amount: string;
+	employeeId: string;
+};
 const REPORT_FROM_DRAFT_KEY = "cuocphi.report-from-draft";
 const REPORT_TO_DRAFT_KEY = "cuocphi.report-to-draft";
 const CARRIER_REPORT_FROM_DRAFT_KEY = "cuocphi.carrier-report-from-draft";
@@ -64,11 +69,12 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	const [carrierTo, setCarrierTo] = useState(() =>
 		savedReportDate(CARRIER_REPORT_TO_DRAFT_KEY),
 	);
+	const [carrierEmployeeId, setCarrierEmployeeId] = useState("");
 	const [dailyEmployeeId, setDailyEmployeeId] = useState("");
 	const [annualEmployeeId, setAnnualEmployeeId] = useState("");
 	const [year, setYear] = useState(today.slice(0, 4));
 	const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([
-		{ id: 1, name: "", amount: "" },
+		{ id: 1, name: "", amount: "", employeeId: "" },
 	]);
 	const [data, setData] = useState<ReportData | null>(null);
 	const [variance, setVariance] = useState<CarrierVarianceReport | null>(null);
@@ -92,7 +98,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	useEffect(() => {
 		if (section !== "carrier") return;
 		void reportRepository
-			.carrierVariance(carrierFrom, carrierTo)
+			.carrierVariance(carrierFrom, carrierTo, carrierEmployeeId)
 			.then(setVariance)
 			.catch((cause) =>
 				setError(
@@ -101,14 +107,10 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 						: "Không tải được chênh lệch cước.",
 				),
 			);
-	}, [carrierFrom, carrierTo, section]);
+	}, [carrierEmployeeId, carrierFrom, carrierTo, section]);
 
 	const exportFile = async (type: "daily" | "annual") => {
 		const employeeId = type === "daily" ? dailyEmployeeId : annualEmployeeId;
-		if (type === "daily" && !employeeId) {
-			setError("Vui lòng chọn nhân viên để xuất báo cáo theo khoảng ngày.");
-			return;
-		}
 		setExporting(type);
 		try {
 			const period =
@@ -122,7 +124,11 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 					type,
 					extraCosts:
 						type === "daily"
-							? extraCosts.map(({ name, amount }) => ({ name, amount }))
+							? extraCosts.map(({ name, amount, employeeId }) => ({
+									name,
+									amount,
+									employeeId,
+								}))
 							: [],
 				}),
 			);
@@ -139,7 +145,11 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 		setExportingCarrier(true);
 		try {
 			download(
-				await reportRepository.exportCarrierVariance(carrierFrom, carrierTo),
+				await reportRepository.exportCarrierVariance(
+					carrierFrom,
+					carrierTo,
+					carrierEmployeeId,
+				),
 			);
 			setError(null);
 		} catch (cause) {
@@ -152,7 +162,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	};
 	const updateExtraCost = (
 		id: number,
-		field: "name" | "amount",
+		field: "name" | "amount" | "employeeId",
 		value: string,
 	) => {
 		setExtraCosts((current) =>
@@ -164,7 +174,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	const removeExtraCost = (id: number) => {
 		setExtraCosts((current) =>
 			current.length === 1
-				? [{ id: 1, name: "", amount: "" }]
+				? [{ id: 1, name: "", amount: "", employeeId: "" }]
 				: current.filter((item) => item.id !== id),
 		);
 	};
@@ -269,10 +279,8 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 							<FileSpreadsheet size={18} />
 						</span>
 						<span>Tổng chênh lệch</span>
-						<strong>
-							{formatMoney(variance.summary.absoluteDifference)} đ
-						</strong>
-						<small>Không bù trừ cước tăng và giảm</small>
+						<strong>{formatMoney(variance.summary.difference)} đ</strong>
+						<small>Chênh lệch ròng: cước tăng trừ cước giảm</small>
 					</article>
 				</section>
 			)}
@@ -281,7 +289,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 					<section className="panel report-card">
 						<PanelHeader
 							title="Báo cáo theo khoảng ngày"
-							description="Xuất bảng kê cước gửi hàng cho một nhân viên trong kỳ chọn."
+							description="Chọn một nhân viên để xuất bảng kê, hoặc tất cả để xuất từng sheet kèm tổng hợp."
 						/>
 						<div className="report-form">
 							<label className="field report-employee-field">
@@ -290,7 +298,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 									value={dailyEmployeeId}
 									onChange={(event) => setDailyEmployeeId(event.target.value)}
 								>
-									<option value="">Chọn nhân viên</option>
+									<option value="">Tất cả nhân viên</option>
 									{reportData.employees.map((item) => (
 										<option value={item.id} key={item.id}>
 											{item.fullName}
@@ -317,7 +325,32 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 						</div>
 						<div className="report-extra-cost-list">
 							{extraCosts.map((item, index) => (
-								<div className="report-extra-cost" key={item.id}>
+								<div
+									className={`report-extra-cost${!dailyEmployeeId ? " is-assigned" : ""}`}
+									key={item.id}
+								>
+									{!dailyEmployeeId && (
+										<label className="field report-extra-cost-employee">
+											Chi phí khác (nhân viên)
+											<select
+												value={item.employeeId}
+												onChange={(event) =>
+													updateExtraCost(
+														item.id,
+														"employeeId",
+														event.target.value,
+													)
+												}
+											>
+												<option value="">Chọn nhân viên</option>
+												{reportData.employees.map((employee) => (
+													<option value={employee.id} key={employee.id}>
+														{employee.fullName}
+													</option>
+												))}
+											</select>
+										</label>
+									)}
 									<label className="field">
 										{index === 0 ? "Tên chi phí khác" : "Tên chi phí"}
 										<input
@@ -354,7 +387,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 								onClick={() =>
 									setExtraCosts((current) => [
 										...current,
-										{ id: Date.now(), name: "", amount: "" },
+										{ id: Date.now(), name: "", amount: "", employeeId: "" },
 									])
 								}
 							>
@@ -384,19 +417,6 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 							description="Xuất tổng hợp cước cả năm theo nhân viên phụ trách."
 						/>
 						<div className="report-form report-form-annual">
-							<label className="field">
-								Năm
-								<select
-									value={year}
-									onChange={(event) => setYear(event.target.value)}
-								>
-									{years.map((item) => (
-										<option value={item} key={item}>
-											{item}
-										</option>
-									))}
-								</select>
-							</label>
 							<label className="field report-employee-field">
 								Nhân viên
 								<select
@@ -411,8 +431,21 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 									))}
 								</select>
 							</label>
+							<label className="field">
+								Năm
+								<select
+									value={year}
+									onChange={(event) => setYear(event.target.value)}
+								>
+									{years.map((item) => (
+										<option value={item} key={item}>
+											{item}
+										</option>
+									))}
+								</select>
+							</label>
 						</div>
-						<div className="report-card-footer">
+						<div className="report-card-footer report-card-footer-annual">
 							<span>
 								<FileSpreadsheet size={17} /> Chọn tất cả để xuất mỗi nhân viên
 								một sheet Excel.
@@ -435,9 +468,23 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 					<div className="report-variance-header">
 						<PanelHeader
 							title="Báo cáo chênh lệch cước nhà xe"
-							description="Tổng hợp theo nhà xe và đơn vị, không theo nhân viên. Chỉ tính phiếu có cước vận chuyển khác bảng giá thiết lập."
+							description="Tổng hợp theo nhà xe và đơn vị; có thể lọc chi tiết theo nhân viên. Chỉ tính phiếu có cước vận chuyển khác bảng giá thiết lập."
 						/>
 						<div className="report-variance-filters">
+							<div className="field">
+								<span>Nhân viên</span>
+								<select
+									value={carrierEmployeeId}
+									onChange={(event) => setCarrierEmployeeId(event.target.value)}
+								>
+									<option value="">Tất cả nhân viên</option>
+									{variance?.employees.map((employee) => (
+										<option key={employee.id} value={employee.id}>
+											{employee.fullName}
+										</option>
+									))}
+								</select>
+							</div>
 							<div className="field">
 								<span>Từ ngày</span>
 								<DateInput
@@ -463,6 +510,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 									<col className="variance-col-index" />
 									<col className="variance-col-carrier" />
 									<col className="variance-col-customer" />
+									<col className="variance-col-province" />
 									<col className="variance-col-spec" />
 									<col className="variance-col-money" />
 									<col className="variance-col-money" />
@@ -474,6 +522,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 										<th>STT</th>
 										<th>Nhà xe</th>
 										<th>Khách hàng</th>
+										<th>Tỉnh/TP</th>
 										<th>Quy cách</th>
 										<th>Giá thiết lập</th>
 										<th>Giá nhập</th>
@@ -487,6 +536,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 											<td>{index + 1}</td>
 											<td>{item.carrier}</td>
 											<td>{item.customer}</td>
+											<td>{item.provinceCity || "—"}</td>
 											<td>{item.spec}</td>
 											<td>{formatMoney(item.standardFee)} đ</td>
 											<td>{formatMoney(item.actualFee)} đ</td>

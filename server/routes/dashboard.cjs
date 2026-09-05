@@ -1,16 +1,15 @@
 'use strict';
 
 const { canSeeEveryone } = require('../permissions.cjs');
-const { badRequest } = require('../http.cjs');
+const { badRequest, isIsoDate, localIsoDate } = require('../http.cjs');
 
 const PAGE = 'dashboard';
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-
 function readPeriod(query) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIsoDate();
   const defaultFrom = `${today.slice(0, 7)}-01`;
-  const from = DATE.test(query.from ?? '') ? query.from : defaultFrom;
-  const to = DATE.test(query.to ?? '') ? query.to : today;
+  const from = query.from ? String(query.from) : defaultFrom;
+  const to = query.to ? String(query.to) : today;
+  if (!isIsoDate(from) || !isIsoDate(to)) throw badRequest('Khoảng ngày không hợp lệ.');
   if (from > to) throw badRequest('Khoảng ngày không hợp lệ.');
   return { from, to };
 }

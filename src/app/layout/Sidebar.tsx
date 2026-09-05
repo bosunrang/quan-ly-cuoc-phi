@@ -1,4 +1,5 @@
 import { ChevronLeft, ShieldCheck } from "lucide-react";
+import { version as appVersion } from "../../../package.json";
 import type { AppSettings } from "../../domain/settings/settings.model";
 import type { PageId } from "../../types";
 import { visibleGroups } from "../navigation";
@@ -92,7 +93,7 @@ export function Sidebar({
 				{!collapsed && (
 					<div>
 						<strong>Phiên bản nội bộ</strong>
-						<span>Khung giao diện v0.1</span>
+						<span>Khung giao diện V{appVersion}</span>
 					</div>
 				)}
 			</div>
