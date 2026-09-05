@@ -5,28 +5,43 @@ import type {
 	ReportExport,
 } from "./report.model";
 
+function carrierVarianceQuery(from: string, to: string, employeeId: string) {
+	const query = new URLSearchParams({ employeeId });
+	if (from || to) {
+		query.set("from", from);
+		query.set("to", to);
+	} else {
+		// Server cũ vẫn yêu cầu ngày; server mới dùng all=1 để bỏ giới hạn ngày.
+		query.set("all", "1");
+		query.set("from", "1900-01-01");
+		query.set("to", "9999-12-31");
+	}
+	return query;
+}
+
 export const reportRepository = {
 	list: (): Promise<ReportData> => api("GET", "/api/reports"),
 	carrierVariance: (
 		from: string,
 		to: string,
 		employeeId = "",
-	): Promise<CarrierVarianceReport> =>
-		api(
-			"GET",
-			`/api/reports/carrier-variance?${new URLSearchParams({ from, to, employeeId })}`,
-		),
+	): Promise<CarrierVarianceReport> => {
+		const query = carrierVarianceQuery(from, to, employeeId);
+		return api("GET", `/api/reports/carrier-variance?${query}`);
+	},
 	exportCarrierVariance: (
 		from: string,
 		to: string,
 		employeeId = "",
-	): Promise<ReportExport> =>
-		api(
+	): Promise<ReportExport> => {
+		const query = carrierVarianceQuery(from, to, employeeId);
+		return api(
 			"GET",
-			`/api/reports/carrier-variance/export?${new URLSearchParams({ from, to, employeeId })}`,
+			`/api/reports/carrier-variance/export?${query}`,
 			undefined,
 			{ timeoutMs: 120_000 },
-		),
+		);
+	},
 	export(filters: {
 		from: string;
 		to: string;

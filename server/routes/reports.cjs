@@ -9,16 +9,28 @@ const EMPLOYEE_PAGE = 'reports_employee';
 const CARRIER_PAGE = 'reports_carrier';
 const number = (value) => Number(value || 0);
 
-function filters(query) {
+function filters(query, allowAll = false) {
   const from = String(query.from ?? '').trim();
   const to = String(query.to ?? '').trim();
   const employeeId = String(query.employeeId ?? '').trim();
+  const all = allowAll && String(query.all ?? '') === '1';
+  if (all) {
+    if (employeeId && (!Number.isInteger(Number(employeeId)) || Number(employeeId) < 1)) {
+      throw badRequest('Nhân viên không hợp lệ.');
+    }
+    return { from: '', to: '', employeeId: employeeId ? Number(employeeId) : null, all: true };
+  }
   if (!isIsoDate(from) || !isIsoDate(to)) throw badRequest('Vui lòng chọn khoảng ngày hợp lệ.');
   if (from > to) throw badRequest('Từ ngày không thể sau đến ngày.');
   if (employeeId && (!Number.isInteger(Number(employeeId)) || Number(employeeId) < 1)) {
     throw badRequest('Nhân viên không hợp lệ.');
   }
-  return { from, to, employeeId: employeeId ? Number(employeeId) : null };
+  return {
+    from,
+    to,
+    employeeId: employeeId ? Number(employeeId) : null,
+    ...(allowAll ? { all: false } : {}),
+  };
 }
 
 function extraCosts(query) {
@@ -76,8 +88,12 @@ function reportData(db, input) {
 }
 
 function carrierVariance(db, input) {
-  const where = ['e.entry_date >= ?', 'e.entry_date <= ?'];
-  const params = [input.from, input.to];
+  const where = ['e.transport_fee <> r.transport_fee'];
+  const params = [];
+  if (!input.all) {
+    where.unshift('e.entry_date >= ?', 'e.entry_date <= ?');
+    params.push(input.from, input.to);
+  }
   if (input.employeeId) { where.push('e.employee_id = ?'); params.push(input.employeeId); }
   return db.prepare(
     `SELECT e.id, ca.name AS carrier, cu.customer_name AS customer,
@@ -98,7 +114,7 @@ function carrierVariance(db, input) {
         ORDER BY CASE WHEN spec_key = vn_normalize(e.spec) THEN 0 ELSE 1 END, id
         LIMIT 1
      )
-     WHERE ${where.join(' AND ')} AND e.transport_fee <> r.transport_fee
+     WHERE ${where.join(' AND ')}
      ORDER BY ca.name COLLATE NOCASE, cu.customer_name COLLATE NOCASE, e.entry_date ASC, e.id ASC`,
   ).all(...params).map((row) => ({
     id: Number(row.id), carrier: row.carrier, customer: row.customer,
@@ -259,7 +275,7 @@ function carrierVarianceSheet(items, input) {
     alignment: { horizontal: 'center' },
   });
   merge(ws, 'A1:I1');
-  set(ws, 'A2', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, {
+  set(ws, 'A2', input.all ? 'Toàn bộ thời gian' : `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, {
     font: { name: 'Times New Roman', sz: 11, italic: true },
     alignment: { horizontal: 'center' },
   });
@@ -306,7 +322,7 @@ function register(router) {
   router.get('/api/reports/carrier-variance', async (c) => {
     c.requirePage(CARRIER_PAGE);
     if (!canSeeEveryone(c.user)) throw badRequest('Bạn không có quyền xem báo cáo tổng hợp.');
-    const input = filters(c.query);
+    const input = filters(c.query, true);
     const items = carrierVariance(c.db, input);
     const employees = c.db.prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE').all();
     return {
@@ -321,14 +337,14 @@ function register(router) {
   router.get('/api/reports/carrier-variance/export', async (c) => {
     c.requirePage(CARRIER_PAGE);
     if (!canSeeEveryone(c.user)) throw badRequest('Bạn không có quyền xuất báo cáo.');
-    const input = filters(c.query);
+    const input = filters(c.query, true);
     const items = carrierVariance(c.db, input);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, carrierVarianceSheet(items, input), 'Chênh lệch cước');
     const contentBase64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx', compression: true });
     writeAudit(c.db, c.user, 'report.carrier_variance.export', 'report', null, { ...input, rows: items.length });
     return {
-      fileName: `Bao cao chenh lech cuoc nha xe ${input.from} den ${input.to}.xlsx`,
+      fileName: input.all ? 'Bao cao chenh lech cuoc nha xe.xlsx' : `Bao cao chenh lech cuoc nha xe ${input.from} den ${input.to}.xlsx`,
       contentBase64,
     };
   });

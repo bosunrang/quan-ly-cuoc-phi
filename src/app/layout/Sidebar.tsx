@@ -38,7 +38,7 @@ export function Sidebar({
 				</div>
 				{!collapsed && (
 					<div className="brand-copy">
-						<strong>{settings.displayName || "Cước phí"}</strong>
+						<strong>{settings.displayName || "NAVIVA GROUP"}</strong>
 						<span>{settings.tagline || "Quản lý giao hàng"}</span>
 					</div>
 				)}

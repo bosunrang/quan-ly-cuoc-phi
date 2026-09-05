@@ -159,7 +159,8 @@ describe('cài đặt dùng chung', () => {
   test('nhân viên đọc được nhận diện nhưng không sửa được', async () => {
     const read = await call('GET', '/api/settings', { token: staffAToken });
     assert.equal(read.status, 200);
-    assert.equal(read.data.displayName, 'Cước phí');
+    assert.equal(read.data.displayName, 'NAVIVA GROUP');
+		assert.equal(read.data.logoDataUrl, '/icon.png');
 
     const update = await call('PATCH', '/api/settings', {
       token: staffAToken,
@@ -996,6 +997,15 @@ describe('nhật ký', () => {
 
     const created = result.data.items.find((row) => row.action === 'entry.create');
     assert.ok(created.username, 'Nhật ký phải ghi ai là người thao tác');
+
+    const searched = await call('GET', '/api/audit?q=tạo phiếu', {
+      token: adminToken,
+    });
+    assert.equal(searched.status, 200);
+    assert.ok(
+      searched.data.items.some((row) => row.action === 'entry.create'),
+      'Tìm bằng nhãn tiếng Việt phải trả về thao tác tương ứng',
+    );
   });
 
   test('chỉ quản trị viên được dọn nhật ký và thao tác vẫn được ghi lại', async () => {

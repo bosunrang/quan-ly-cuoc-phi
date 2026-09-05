@@ -11,6 +11,8 @@ export interface AuditEntry {
 
 export interface AuditFilters {
 	q?: string;
+	from?: string;
+	to?: string;
 	limit?: number;
 	offset?: number;
 }
@@ -34,6 +36,7 @@ const LABELS: Record<string, string> = {
 	"user.reset_password": "Đặt lại mật khẩu",
 	"password.change": "Đổi mật khẩu",
 	"password.initial_change": "Đổi mật khẩu mặc định",
+	"password.recover": "Khôi phục mật khẩu",
 	"user.seed_admin": "Khởi tạo quản trị viên",
 	"settings.update": "Cập nhật cài đặt",
 	"settings.recovery_code_generate": "Tạo mã khôi phục",
@@ -97,7 +100,8 @@ const TONES: Record<string, Tone> = {
 	logout: "neutral",
 };
 
-export const actionLabel = (action: string): string => LABELS[action] ?? action;
+export const actionLabel = (action: string): string =>
+	LABELS[action] ?? "Thao tác hệ thống";
 
 export const actionTone = (action: string): Tone => TONES[action] ?? "info";
 
@@ -123,6 +127,6 @@ export const entityLabel = (
 	entity: string,
 	entityId: string | null,
 ): string => {
-	const label = ENTITY_LABELS[entity] ?? entity;
+	const label = ENTITY_LABELS[entity] ?? "Đối tượng hệ thống";
 	return entityId ? `${label} #${entityId}` : label;
 };

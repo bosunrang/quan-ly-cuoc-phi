@@ -28,8 +28,6 @@ type ExtraCost = {
 };
 const REPORT_FROM_DRAFT_KEY = "cuocphi.report-from-draft";
 const REPORT_TO_DRAFT_KEY = "cuocphi.report-to-draft";
-const CARRIER_REPORT_FROM_DRAFT_KEY = "cuocphi.carrier-report-from-draft";
-const CARRIER_REPORT_TO_DRAFT_KEY = "cuocphi.carrier-report-to-draft";
 
 function savedReportDate(key: string): string {
 	const value = sessionStorage.getItem(key) ?? "";
@@ -63,12 +61,9 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 		savedReportDate(REPORT_FROM_DRAFT_KEY),
 	);
 	const [to, setTo] = useState(() => savedReportDate(REPORT_TO_DRAFT_KEY));
-	const [carrierFrom, setCarrierFrom] = useState(() =>
-		savedReportDate(CARRIER_REPORT_FROM_DRAFT_KEY),
-	);
-	const [carrierTo, setCarrierTo] = useState(() =>
-		savedReportDate(CARRIER_REPORT_TO_DRAFT_KEY),
-	);
+	// Chênh lệch cần hiển thị toàn bộ lịch sử khi mới mở; ngày là lọc tùy chọn.
+	const [carrierFrom, setCarrierFrom] = useState("");
+	const [carrierTo, setCarrierTo] = useState("");
 	const [carrierEmployeeId, setCarrierEmployeeId] = useState("");
 	const [dailyEmployeeId, setDailyEmployeeId] = useState("");
 	const [annualEmployeeId, setAnnualEmployeeId] = useState("");
@@ -185,14 +180,6 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	const rememberTo = (value: string) => {
 		setTo(value);
 		sessionStorage.setItem(REPORT_TO_DRAFT_KEY, value);
-	};
-	const rememberCarrierFrom = (value: string) => {
-		setCarrierFrom(value);
-		sessionStorage.setItem(CARRIER_REPORT_FROM_DRAFT_KEY, value);
-	};
-	const rememberCarrierTo = (value: string) => {
-		setCarrierTo(value);
-		sessionStorage.setItem(CARRIER_REPORT_TO_DRAFT_KEY, value);
 	};
 
 	if (section === "employee" && !data && !error) return <LoadingState />;
@@ -490,7 +477,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 								<DateInput
 									value={carrierFrom}
 									ariaLabel="Từ ngày báo cáo nhà xe"
-									onChange={rememberCarrierFrom}
+									onChange={setCarrierFrom}
 								/>
 							</div>
 							<div className="field">
@@ -498,7 +485,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 								<DateInput
 									value={carrierTo}
 									ariaLabel="Đến ngày báo cáo nhà xe"
-									onChange={rememberCarrierTo}
+									onChange={setCarrierTo}
 								/>
 							</div>
 						</div>
@@ -553,9 +540,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 							</table>
 						</div>
 					) : (
-						<EmptyState>
-							Không có phiếu chênh lệch cước trong khoảng ngày này.
-						</EmptyState>
+						<EmptyState>Không có phiếu chênh lệch cước phù hợp.</EmptyState>
 					)}
 				</section>
 			)}

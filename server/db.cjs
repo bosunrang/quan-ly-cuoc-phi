@@ -110,7 +110,7 @@ function migrate(db) {
         id              INTEGER PRIMARY KEY CHECK (id = 1),
         company_name    TEXT NOT NULL DEFAULT '',
         company_address TEXT NOT NULL DEFAULT '',
-        display_name    TEXT NOT NULL DEFAULT 'Cước phí',
+        display_name    TEXT NOT NULL DEFAULT 'NAVIVA GROUP',
         tagline         TEXT NOT NULL DEFAULT 'Quản lý giao hàng',
         logo_data_url   TEXT,
         updated_at      TEXT NOT NULL
@@ -119,7 +119,7 @@ function migrate(db) {
       INSERT INTO app_settings
         (id, company_name, company_address, display_name, tagline, logo_data_url, updated_at)
       VALUES
-        (1, '', '', 'Cước phí', 'Quản lý giao hàng', NULL, datetime('now'));
+        (1, '', '', 'NAVIVA GROUP', 'Quản lý giao hàng', '/icon.png', datetime('now'));
     `);
   }
 

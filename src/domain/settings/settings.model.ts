@@ -9,9 +9,9 @@ export interface AppSettings {
 export const defaultSettings: AppSettings = {
 	companyName: "",
 	companyAddress: "",
-	displayName: "Cước phí",
+	displayName: "NAVIVA GROUP",
 	tagline: "Quản lý giao hàng",
-	logoDataUrl: null,
+	logoDataUrl: "/icon.png",
 };
 
 export type DataGroup =

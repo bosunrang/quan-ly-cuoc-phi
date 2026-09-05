@@ -65,7 +65,7 @@ export function LoginPage({ notice, onSuccess }: LoginPageProps) {
 						)}
 					</div>
 					<div className="brand-copy">
-						<strong>{settings.displayName || "Quản lý cước phí"}</strong>
+						<strong>{settings.displayName || "NAVIVA GROUP"}</strong>
 						<span>{settings.tagline || "Hệ thống nội bộ"}</span>
 					</div>
 				</div>

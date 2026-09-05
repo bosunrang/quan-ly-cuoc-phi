@@ -5,6 +5,8 @@ export const auditRepository = {
 	list(filters: AuditFilters = {}): Promise<AuditResult> {
 		const query = new URLSearchParams();
 		if (filters.q) query.set("q", filters.q);
+		if (filters.from) query.set("from", filters.from);
+		if (filters.to) query.set("to", filters.to);
 		if (filters.limit) query.set("limit", String(filters.limit));
 		if (filters.offset) query.set("offset", String(filters.offset));
 		const suffix = query.size ? `?${query}` : "";

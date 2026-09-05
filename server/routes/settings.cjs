@@ -94,6 +94,7 @@ function text(value, field, max) {
 
 function logo(value) {
   if (value === null || value === undefined || value === '') return null;
+  if (value === '/icon.png') return value;
   if (typeof value !== 'string' || value.length > MAX_LOGO_LENGTH) {
     throw badRequest('Logo quá lớn. Vui lòng chọn ảnh nhỏ hơn 1 MB.');
   }
