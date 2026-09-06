@@ -1,0 +1,44 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const { describe, test } = require('node:test');
+const {
+  calculateFuelTotal,
+  fuelRecordInput,
+} = require('../../server/fuel/calculation.cjs');
+
+describe('tính tiền xăng', () => {
+  test('tổng km của các chặng được ưu tiên và tổng tiền làm tròn theo đồng', () => {
+    const input = fuelRecordInput({
+      periodFrom: '2026-09-01',
+      periodTo: '2026-09-05',
+      distanceKm: 999,
+      consumptionLiters: 12,
+      consumptionBaseKm: 100,
+      fuelPrice: 20_000,
+      fuelType: 'Xăng E10',
+      region: 'region1',
+      legs: [
+        { from: 'A', to: 'B', km: 12.5 },
+        { from: 'B', to: 'C', km: 17.5 },
+      ],
+    });
+
+    assert.equal(input.distanceKm, 30);
+    assert.equal(calculateFuelTotal(input), 72_000);
+  });
+
+  test('từ chối định mức bằng 0 và khoảng ngày đảo ngược', () => {
+    assert.throws(
+      () => fuelRecordInput({ periodFrom: '2026-09-02', periodTo: '2026-09-01' }),
+      /Khoảng ngày tính không hợp lệ/,
+    );
+    assert.throws(
+      () => fuelRecordInput({
+        periodFrom: '2026-09-01', periodTo: '2026-09-01', distanceKm: 1,
+        consumptionLiters: 1, consumptionBaseKm: 0, fuelPrice: 1,
+      }),
+      /Định mức km phải lớn hơn 0/,
+    );
+  });
+});
