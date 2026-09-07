@@ -71,6 +71,32 @@ npm run dist
 
 Kết quả nằm trong `release/`. Bộ cài tạo sẵn shortcut Desktop và Start Menu.
 
+## Phát hành và tự động cập nhật
+
+Ứng dụng Windows đã cài đặt sẽ tự kiểm tra GitHub Releases sau khi mở. Khi có
+bản mới, ứng dụng tải nền và hỏi người dùng có muốn cài đặt ngay hay không.
+Mã nguồn và các bộ cài được phát hành tại
+[`bosunrang/quan-ly-cuoc-phi`](https://github.com/bosunrang/quan-ly-cuoc-phi).
+
+Để phát hành phiên bản mới, sau khi mọi thay đổi đã được commit và đẩy lên
+GitHub, tạo một tag trùng với phiên bản trong `package.json`, ví dụ:
+
+```bash
+git tag v1.0.5
+git push origin main --tags
+```
+
+GitHub Actions sẽ tự đóng gói Windows, tạo GitHub Release và đính kèm bộ cài
+cùng tệp `latest.yml`. Không sửa tay hoặc trộn `latest.yml` của phiên bản khác
+với bộ cài; tệp này chứa mã kiểm tra toàn vẹn của chính bộ cài đó.
+
+Từ các bản sau có thể tăng bản vá, tạo tag và đẩy lên bằng một lệnh:
+
+```bash
+npm version patch
+git push origin main --follow-tags
+```
+
 ## Cách dùng trong văn phòng
 
 1. Cài bộ cài trên **máy chính**, mở ứng dụng lên và đăng nhập.

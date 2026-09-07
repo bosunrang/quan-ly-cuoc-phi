@@ -1,6 +1,6 @@
 {
   "name": "app-cuoc-phi",
-	"version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "type": "module",
   "description": "Quản lý cước phí giao hàng — dùng chung cho nhiều máy trong mạng nội bộ",
@@ -22,7 +22,8 @@
     "icon": "node tools/make-icon.cjs",
     "start": "electron .",
     "desktop": "npm run build && electron .",
-    "dist": "npm run build && electron-builder --win nsis"
+    "dist": "npm run build && electron-builder --win nsis --publish never",
+    "release": "npm run build && electron-builder --win nsis --publish always"
   },
   "build": {
     "appId": "vn.naviva.cuocphi",
@@ -60,9 +61,18 @@
         "vi_VN",
         "en_US"
       ]
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "bosunrang",
+        "repo": "quan-ly-cuoc-phi",
+        "releaseType": "release"
+      }
+    ]
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "fflate": "^0.8.3",
     "lucide-react": "^1.33.0",
     "react": "^19.2.8",

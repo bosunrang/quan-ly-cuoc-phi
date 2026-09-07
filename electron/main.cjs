@@ -1,6 +1,7 @@
 'use strict';
 
 const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, session, shell, nativeImage } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -16,6 +17,7 @@ let tray;
 let origin = '';
 let machine;
 let quitting = false;
+let updateCheckStarted = false;
 
 // Cố định tên thư mục dữ liệu theo tên sản phẩm, không phụ thuộc tên package npm.
 app.setPath('userData', path.join(app.getPath('appData'), USER_DATA_DIRECTORY));
@@ -133,6 +135,48 @@ async function configureClient() {
   return true;
 }
 
+async function stopBackend() {
+  if (!backend) return;
+  const closing = backend;
+  backend = undefined;
+  await closing.close();
+}
+
+async function installDownloadedUpdate() {
+  quitting = true;
+  await stopBackend();
+  autoUpdater.quitAndInstall(false, true);
+}
+
+function setupAutoUpdate() {
+  // Chỉ kiểm tra khi ứng dụng đã được đóng gói. Môi trường phát triển không có
+  // app-update.yml nên không được phép gọi máy chủ phát hành.
+  if (!app.isPackaged || process.platform !== 'win32' || updateCheckStarted) return;
+  updateCheckStarted = true;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.on('error', (error) => console.warn('Không thể kiểm tra cập nhật:', error.message));
+  autoUpdater.on('update-downloaded', () => {
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Đã tải bản cập nhật',
+      message: 'Bản cập nhật mới đã sẵn sàng.',
+      detail: 'Chọn “Cài đặt ngay” để đóng ứng dụng và cập nhật. Hoặc chọn “Để sau” để tiếp tục làm việc.',
+      buttons: ['Cài đặt ngay', 'Để sau'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    }).then((result) => {
+      if (result.response === 0) void installDownloadedUpdate();
+    });
+  });
+  // Chờ giao diện xuất hiện trước để không làm chậm lần mở ứng dụng đầu tiên.
+  const timer = setTimeout(() => {
+    void autoUpdater.checkForUpdates().catch((error) => console.warn('Không thể kiểm tra cập nhật:', error.message));
+  }, 10_000);
+  timer.unref();
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440, height: 900, minWidth: 1100, minHeight: 700, backgroundColor: '#f4f6f8',
@@ -214,6 +258,7 @@ app.whenReady().then(async () => {
     if (machine.role === 'host') announceFirstRun(port);
     createTray(port);
     createWindow();
+    setupAutoUpdate();
     ipcMain.handle('app:addresses', () => machine.role === 'host' ? lanAddresses(port) : []);
   } catch (error) {
     const busy = error?.code === 'EADDRINUSE';
@@ -229,9 +274,7 @@ app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', async (event) => {
   if (!backend) return;
   event.preventDefault();
-  const closing = backend;
-  backend = undefined;
-  await closing.close();
+  await stopBackend();
   app.exit(0);
 });
 app.on('web-contents-created', (_event, contents) => contents.on('will-attach-webview', (event) => event.preventDefault()));
