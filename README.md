@@ -82,7 +82,7 @@ Mã nguồn và các bộ cài được phát hành tại
 GitHub, tạo một tag trùng với phiên bản trong `package.json`, ví dụ:
 
 ```bash
-git tag v1.0.5
+git tag v1.0.6
 git push origin main --tags
 ```
 

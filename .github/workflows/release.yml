@@ -25,7 +25,11 @@ jobs:
       - name: Cài thư viện
         run: npm ci
 
-      - name: Đóng gói và đăng GitHub Release
+      - name: Đóng gói bộ cài
+        run: npm run dist
+
+      - name: Đăng GitHub Release và tệp cập nhật
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run release
+        shell: pwsh
+        run: gh release create $env:GITHUB_REF_NAME 'release/*.exe' 'release/*.blockmap' 'release/latest.yml' --title $env:GITHUB_REF_NAME --generate-notes
