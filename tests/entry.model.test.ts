@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Entry } from "../src/domain/entries/entry.model";
 import {
+	defaultEntryRecipient,
 	emptyEntryInput,
+	entryCarrierOptions,
 	toEntryInput,
 	validateEntry,
 } from "../src/domain/entries/entry.model";
@@ -70,5 +72,63 @@ describe("chuyển phiếu sang dữ liệu biểu mẫu", () => {
 		expect(input).not.toHaveProperty("createdBy");
 		expect(input).not.toHaveProperty("totalFee");
 		expect(input.customer).toBe("Công ty ABC");
+	});
+});
+
+describe("lọc nhà xe theo khách hàng", () => {
+	const allCarriers = [
+		{ id: 1, name: "Nhà xe A" },
+		{ id: 2, name: "Nhà xe B" },
+		{ id: 3, name: "Nhà xe C" },
+	];
+	const customer = {
+		id: 10,
+		name: "Khách hàng A",
+		recipient: "",
+		address: "",
+	};
+
+	it("đưa nhà xe đã liên kết lên đầu và vẫn giữ các lựa chọn khác", () => {
+		expect(
+			entryCarrierOptions(allCarriers, {
+				customer,
+				carriers: [allCarriers[0], allCarriers[2]],
+				recipients: [],
+				defaultCarrierId: null,
+			}),
+		).toEqual([
+			{ ...allCarriers[0], isLinked: true },
+			{ ...allCarriers[2], isLinked: true },
+			{ ...allCarriers[1], isLinked: false },
+		]);
+	});
+
+	it("cho phép chọn từ danh mục chung khi khách chưa có liên kết", () => {
+		expect(
+			entryCarrierOptions(allCarriers, {
+				customer,
+				carriers: [],
+				recipients: [],
+				defaultCarrierId: null,
+			}),
+		).toEqual(allCarriers.map((carrier) => ({ ...carrier, isLinked: false })));
+	});
+
+	it("không hiện danh mục chung trong lúc đang tải liên kết", () => {
+		expect(entryCarrierOptions(allCarriers, null)).toEqual([]);
+	});
+});
+
+describe("chọn người nhận theo khách hàng", () => {
+	it("tự điền khi chỉ có một người nhận", () => {
+		expect(defaultEntryRecipient(["Bác sĩ Triều"])).toBe("Bác sĩ Triều");
+	});
+
+	it("để trống khi có nhiều người nhận để người dùng lựa chọn", () => {
+		expect(defaultEntryRecipient(["Bác sĩ Triều", "Chị Lan"])).toBe("");
+	});
+
+	it("để trống khi khách hàng chưa có người nhận", () => {
+		expect(defaultEntryRecipient([])).toBe("");
 	});
 });

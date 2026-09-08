@@ -1,3 +1,4 @@
+/* Nhập, xem trước và xuất Excel của thẻ Nhà xe. */
 .carrier-import-card .carrier-excel-actions {
 	display: flex;
 	gap: 8px;
@@ -12,32 +13,233 @@
 	width: min(1120px, 100%);
 }
 
-.carrier-excel-summary {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 10px;
-}
-
-.carrier-excel-summary article {
-	display: grid;
-	grid-template-columns: 1.5fr repeat(3, auto);
-	gap: 10px;
+.carrier-import-file {
+	display: flex;
 	align-items: center;
+	gap: 10px;
+	min-height: 62px;
 	padding: 10px 12px;
 	border: 1px solid var(--line);
 	border-radius: 8px;
 	background: var(--surface-subtle);
+	color: var(--teal);
+}
+
+.carrier-import-file > div {
+	min-width: 0;
+	color: var(--text-body);
+}
+
+.carrier-import-file strong,
+.carrier-import-file span {
+	display: block;
+}
+
+.carrier-import-file strong {
+	overflow: hidden;
+	font-size: var(--type-body-sm);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.carrier-import-file span {
+	margin-top: 3px;
 	color: var(--muted);
 	font-size: var(--type-caption);
 }
 
-.carrier-excel-summary strong {
-	color: var(--ink);
+.carrier-preview-stats {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.carrier-preview-stats button {
+	--preview-accent: var(--status-info-text);
+	--preview-icon-bg: var(--status-info-bg);
+	position: relative;
+	display: grid;
+	grid-template-columns: 32px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 10px;
+	min-height: 64px;
+	padding: 10px 14px;
+	overflow: hidden;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: linear-gradient(135deg, var(--panel), var(--surface-subtle));
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.carrier-preview-stats button::before {
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 4px;
+	background: var(--preview-accent);
+	content: "";
+}
+
+.carrier-preview-stats button:hover,
+.carrier-preview-stats button.is-active {
+	border-color: var(--preview-accent);
+}
+
+.carrier-preview-stats button.is-active {
+	box-shadow: 0 0 0 1px var(--preview-accent);
+}
+
+.carrier-preview-stats button:focus-visible {
+	outline: 2px solid var(--focus-border);
+	outline-offset: 2px;
+}
+
+.carrier-preview-stat-icon {
+	display: grid;
+	width: 32px;
+	height: 32px;
+	border-radius: 9px;
+	place-items: center;
+	background: var(--preview-icon-bg);
+	color: var(--preview-accent);
+}
+
+.carrier-preview-stats button > span:not(.carrier-preview-stat-icon) {
+	color: var(--muted);
+	font-size: var(--type-meta);
+	font-weight: 700;
+}
+
+.carrier-preview-stats strong {
+	color: var(--preview-accent);
+	font-size: calc(var(--type-heading-sm) + 3px);
+	font-variant-numeric: tabular-nums;
+}
+
+.carrier-preview-stats .is-all {
+	--preview-accent: var(--status-info-text);
+	--preview-icon-bg: var(--status-info-bg);
+	border-color: var(--status-info-border);
+}
+
+.carrier-preview-stats .is-ready {
+	--preview-accent: var(--status-success-text);
+	--preview-icon-bg: var(--status-success-bg);
+	border-color: var(--status-success-border);
+}
+
+.carrier-preview-stats .is-duplicate {
+	--preview-accent: var(--status-warning-text);
+	--preview-icon-bg: var(--status-warning-bg);
+	border-color: var(--status-warning-border);
+}
+
+.carrier-preview-stats .is-skipped {
+	--preview-accent: var(--status-neutral-text);
+	--preview-icon-bg: var(--status-neutral-bg);
+	border-color: var(--status-neutral-border);
+}
+
+.carrier-import-table-wrap {
+	max-height: 410px;
+	overflow: auto;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.carrier-import-table {
+	width: 100%;
+	min-width: 900px;
+	border-collapse: collapse;
 	font-size: var(--type-body-sm);
 }
 
-.carrier-excel-table {
-	min-width: 900px;
+.carrier-import-table th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	padding: 10px 11px;
+	background: var(--table-head-bg);
+	color: var(--text-subtle);
+	font-size: var(--type-caption);
+	text-align: left;
+}
+
+.carrier-import-table td {
+	padding: 10px 11px;
+	border-top: 1px solid var(--line-soft);
+	color: var(--text-body);
+	vertical-align: top;
+}
+
+.carrier-import-table td:nth-child(2) {
+	max-width: 290px;
+}
+
+.carrier-import-table td:nth-child(2) strong,
+.carrier-import-table td:nth-child(2) small {
+	display: block;
+}
+
+.carrier-import-table td:nth-child(2) small {
+	margin-top: 3px;
+	color: var(--status-warning-text);
+	font-size: var(--type-overline);
+}
+
+.carrier-import-status {
+	display: inline-flex;
+	min-height: 22px;
+	padding: 2px 7px;
+	border: 1px solid;
+	border-radius: 999px;
+	font-size: var(--type-caption);
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.carrier-import-status.is-ready {
+	border-color: var(--status-success-border);
+	background: var(--status-success-bg);
+	color: var(--status-success-text);
+}
+
+.carrier-import-status.is-duplicate {
+	border-color: var(--status-warning-border);
+	background: var(--status-warning-bg);
+	color: var(--status-warning-text);
+}
+
+.carrier-import-status.is-skipped {
+	border-color: var(--status-neutral-border);
+	background: var(--status-neutral-bg);
+	color: var(--status-neutral-text);
+}
+
+.carrier-excel-table.is-rates {
+	table-layout: fixed;
+}
+
+.carrier-excel-table.is-rates th:nth-child(1) { width: 5%; }
+.carrier-excel-table.is-rates th:nth-child(2) { width: 13%; }
+.carrier-excel-table.is-rates th:nth-child(3) { width: 34%; }
+.carrier-excel-table.is-rates th:nth-child(4) { width: 12%; }
+.carrier-excel-table.is-rates th:nth-child(5) { width: 14%; }
+.carrier-excel-table.is-rates th:nth-child(6) { width: 12%; }
+.carrier-excel-table.is-rates th:nth-child(7) { width: 10%; }
+
+.carrier-excel-table.is-rates th:nth-child(n + 4),
+.carrier-excel-table.is-rates td:nth-child(n + 4) {
+	text-align: center;
+}
+
+.carrier-import-limit {
+	margin: 0;
+	color: var(--muted);
+	font-size: var(--type-caption);
+	text-align: right;
 }
 
 @media (max-width: 700px) {
@@ -50,7 +252,13 @@
 		flex: 1;
 	}
 
-	.carrier-excel-summary {
+	.carrier-preview-stats {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 460px) {
+	.carrier-preview-stats {
 		grid-template-columns: 1fr;
 	}
 }

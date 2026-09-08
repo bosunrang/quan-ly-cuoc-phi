@@ -4,11 +4,11 @@ import type {
 	CarrierExcelRateInput,
 } from "../../domain/carriers/carrier.model";
 import { normalizeText } from "../../shared/lib/text";
+import { canonicalCarrierRateSpec } from "./carrier-rate-specs";
 
-export interface CarrierExcelPayload {
-	carriers: CarrierExcelCarrierInput[];
-	rates: CarrierExcelRateInput[];
-}
+const CARRIER_HEADERS = ["nha xe", "chanh xe", "ten chanh xe"];
+const CUSTOMER_HEADERS = ["don vi", "ten kh", "ten khach hang", "khach hang"];
+const GATE_FEE_HEADERS = ["phi vao cong", "phi cong"];
 
 const clean = (value: unknown) => String(value ?? "").trim();
 const aliases = (value: unknown, names: string[]) =>
@@ -31,24 +31,36 @@ function money(value: unknown): number {
 	return digits ? Number(digits) : 0;
 }
 
+function hasValue(value: unknown): boolean {
+	return clean(value) !== "";
+}
+
 function active(value: unknown): boolean {
 	return !["0", "khong", "không", "ngung", "ngừng"].includes(
 		normalizeText(value),
 	);
 }
 
-function carrierRows(rows: Row[]): CarrierExcelCarrierInput[] {
-	const headerAt = headerIndex(rows, [["nha xe", "chanh xe", "ten chanh xe"]]);
-	if (headerAt < 0) return [];
+function nonEmptyRows(rows: Row[], headerAt: number) {
+	return rows
+		.slice(headerAt + 1)
+		.map((row, index) => ({ row, rowNumber: headerAt + index + 2 }))
+		.filter(({ row }) => row.some(hasValue));
+}
+
+function parseCarrierRows(rows: Row[]): CarrierExcelCarrierInput[] {
+	const headerAt = headerIndex(rows, [CARRIER_HEADERS]);
+	if (headerAt < 0)
+		throw new Error("Không tìm thấy cột “Nhà xe” trong file nhà xe.");
 	const header = rows[headerAt];
-	const name = indexOf(header, ["nha xe", "chanh xe", "ten chanh xe"]);
+	const name = indexOf(header, CARRIER_HEADERS);
 	const address = indexOf(header, ["dia chi"]);
 	const phone = indexOf(header, ["dien thoai", "so dien thoai"]);
 	const schedule = indexOf(header, ["gio xe chay", "gio nhan hang"]);
 	const note = indexOf(header, ["ghi chu"]);
 	const isActive = indexOf(header, ["trang thai", "hoat dong"]);
-	return rows.slice(headerAt + 1).map((row, index) => ({
-		rowNumber: headerAt + index + 2,
+	return nonEmptyRows(rows, headerAt).map(({ row, rowNumber }) => ({
+		rowNumber,
 		name: clean(row[name]),
 		contact: "",
 		address: address < 0 ? "" : clean(row[address]),
@@ -59,31 +71,23 @@ function carrierRows(rows: Row[]): CarrierExcelCarrierInput[] {
 	}));
 }
 
-function rateRows(rows: Row[]): CarrierExcelRateInput[] {
-	const headerAt = headerIndex(rows, [
-		["nha xe", "chanh xe", "ten chanh xe"],
-		["don vi", "ten kh", "ten khach hang", "khach hang"],
-		["quy cach"],
-	]);
-	if (headerAt < 0) return [];
+function parseNarrowRateRows(
+	rows: Row[],
+	headerAt: number,
+): CarrierExcelRateInput[] {
 	const header = rows[headerAt];
-	const carrierName = indexOf(header, ["nha xe", "chanh xe", "ten chanh xe"]);
-	const customerName = indexOf(header, [
-		"don vi",
-		"ten kh",
-		"ten khach hang",
-		"khach hang",
-	]);
+	const carrierName = indexOf(header, CARRIER_HEADERS);
+	const customerName = indexOf(header, CUSTOMER_HEADERS);
 	const spec = indexOf(header, ["quy cach"]);
 	const transportFee = indexOf(header, [
 		"cuoc van chuyen",
 		"gia cuoc",
 		"cuoc phi",
 	]);
-	const gateFee = indexOf(header, ["phi vao cong", "phi cong"]);
+	const gateFee = indexOf(header, GATE_FEE_HEADERS);
 	const note = indexOf(header, ["ghi chu"]);
-	return rows.slice(headerAt + 1).map((row, index) => ({
-		rowNumber: headerAt + index + 2,
+	return nonEmptyRows(rows, headerAt).map(({ row, rowNumber }) => ({
+		rowNumber,
 		carrierName: clean(row[carrierName]),
 		customerName: clean(row[customerName]),
 		spec: clean(row[spec]),
@@ -93,21 +97,88 @@ function rateRows(rows: Row[]): CarrierExcelRateInput[] {
 	}));
 }
 
-export async function parseCarrierExcelWorkbook(
-	file: File,
-): Promise<CarrierExcelPayload> {
-	const sheets = await readExcelFile(file);
-	const carriers: CarrierExcelCarrierInput[] = [];
-	const rates: CarrierExcelRateInput[] = [];
-	for (const sheet of sheets) {
-		const nextRates = rateRows(sheet.data);
-		if (nextRates.length) rates.push(...nextRates);
-		else carriers.push(...carrierRows(sheet.data));
-	}
-	if (!carriers.length && !rates.length) {
-		throw new Error(
-			"Không tìm thấy sheet Nhà xe hoặc Bảng cước với các cột đúng mẫu.",
+function parseWideRateRows(
+	rows: Row[],
+	headerAt: number,
+): CarrierExcelRateInput[] {
+	const header = rows[headerAt];
+	const carrierName = indexOf(header, CARRIER_HEADERS);
+	const customerName = indexOf(header, CUSTOMER_HEADERS);
+	const gateFee = indexOf(header, GATE_FEE_HEADERS);
+	const note = indexOf(header, ["ghi chu"]);
+	// Hai cột nhận diện đứng trước; các cột có tên tiếp theo là quy cách động.
+	// Nếu có cột Phí cổng, phần quy cách kết thúc ngay trước cột đó.
+	const firstRateColumn = Math.max(carrierName, customerName) + 1;
+	const rateColumnEnd = gateFee >= 0 ? gateFee : header.length;
+	const rateColumns = header
+		.map((value, index) => ({
+			index,
+			spec: canonicalCarrierRateSpec(value),
+		}))
+		.filter(
+			(column) =>
+				column.index >= firstRateColumn &&
+				column.index < rateColumnEnd &&
+				column.index !== note &&
+				column.spec !== "",
 		);
-	}
-	return { carriers, rates };
+
+	return nonEmptyRows(rows, headerAt).flatMap(({ row, rowNumber }) => {
+		const common = {
+			rowNumber,
+			carrierName: clean(row[carrierName]),
+			customerName: clean(row[customerName]),
+			gateFee: gateFee < 0 ? 0 : money(row[gateFee]),
+			note: note < 0 ? "" : clean(row[note]),
+		};
+		const transportRows = rateColumns
+			.filter((column) => hasValue(row[column.index]))
+			.map((column) => ({
+				...common,
+				spec: column.spec,
+				transportFee: money(row[column.index]),
+			}));
+		if (transportRows.length || gateFee < 0 || !hasValue(row[gateFee]))
+			return transportRows;
+		return [
+			{
+				...common,
+				spec: "Tất cả",
+				transportFee: 0,
+			},
+		];
+	});
+}
+
+function parseRateRows(rows: Row[]): CarrierExcelRateInput[] {
+	const headerAt = headerIndex(rows, [CARRIER_HEADERS, CUSTOMER_HEADERS]);
+	if (headerAt < 0)
+		throw new Error(
+			"Không tìm thấy cột “Nhà xe” và “Khách hàng” trong file bảng cước.",
+		);
+	return indexOf(rows[headerAt], ["quy cach"]) >= 0
+		? parseNarrowRateRows(rows, headerAt)
+		: parseWideRateRows(rows, headerAt);
+}
+
+async function sheetRows(file: File, preferredNames: string[]): Promise<Row[]> {
+	const sheets = await readExcelFile(file);
+	if (!sheets.length) throw new Error("File Excel không có sheet dữ liệu.");
+	return (
+		sheets.find((sheet) =>
+			preferredNames.includes(normalizeText(sheet.sheet)),
+		) ?? sheets[0]
+	).data;
+}
+
+export async function parseCarrierWorkbook(
+	file: File,
+): Promise<CarrierExcelCarrierInput[]> {
+	return parseCarrierRows(await sheetRows(file, ["nha xe", "chanh xe"]));
+}
+
+export async function parseCarrierRateWorkbook(
+	file: File,
+): Promise<CarrierExcelRateInput[]> {
+	return parseRateRows(await sheetRows(file, ["bang cuoc", "cuoc nha xe"]));
 }

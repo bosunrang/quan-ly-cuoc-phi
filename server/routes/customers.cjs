@@ -7,6 +7,9 @@ const { badRequest, notFound } = require('../http.cjs');
 
 const PAGE = 'customers';
 const PAGE_SIZE = 50;
+// Cùng mức với luồng MISA: đủ cho các file danh mục lớn nhưng vẫn chặn yêu
+// cầu bất thường làm đầy bộ nhớ máy chủ.
+const MAX_IMPORT_ROWS = 25_000;
 const linkedCarrierNamesSql = `(
   SELECT GROUP_CONCAT(name, ', ')
   FROM (
@@ -51,6 +54,15 @@ function readCustomerInput(body) {
   };
 }
 
+function readImportRows(value) {
+  if (!Array.isArray(value)) throw badRequest('Dữ liệu nhập khách hàng không hợp lệ.');
+  if (!value.length) throw badRequest('File không có dòng khách hàng hợp lệ.');
+  if (value.length > MAX_IMPORT_ROWS) {
+    throw badRequest(`Mỗi lần chỉ nhập tối đa ${MAX_IMPORT_ROWS.toLocaleString('vi-VN')} khách hàng.`);
+  }
+  return value;
+}
+
 function toApi(row) {
   return {
     id: row.id,
@@ -79,6 +91,16 @@ function ensureNameAvailable(db, customerKey, ignoreId = null) {
 }
 
 function register(router) {
+  // Dùng riêng cho phần xem trước Excel. Không dùng phân trang vì nếu chỉ lấy
+  // trang đầu, các khách hàng ở sau sẽ bị báo nhầm là sẵn sàng nhập.
+  router.get('/api/customers/import-keys', async (c) => {
+    c.requirePage(PAGE);
+    return c.db
+      .prepare('SELECT customer_key FROM customers ORDER BY id')
+      .all()
+      .map((row) => row.customer_key);
+  });
+
   router.get('/api/customers', async (c) => {
     c.requirePage(PAGE);
     const search = normalizeSearchText(String(c.query.search ?? '').slice(0, 150));
@@ -174,9 +196,7 @@ function register(router) {
 
   router.post('/api/customers/import', async (c) => {
     c.requirePage(PAGE);
-    const sourceRows = Array.isArray(c.body.rows) ? c.body.rows.slice(0, 1000) : [];
-    if (!sourceRows.length) throw badRequest('File không có dòng khách hàng hợp lệ.');
-    const rows = sourceRows.map(readCustomerInput);
+    const rows = readImportRows(c.body.rows).map(readCustomerInput);
     const at = new Date().toISOString();
     return transaction(c.db, () => {
       const existing = new Set(

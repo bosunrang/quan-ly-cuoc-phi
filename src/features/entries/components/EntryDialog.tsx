@@ -1,13 +1,18 @@
 import { AlertCircle, PackageSearch } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type {
+	EntryCarrierChoice,
 	EntryCustomerContext,
 	EntryFormOptions,
 	EntryInput,
 	EntryRate,
 	MisaOrder,
 } from "../../../domain/entries/entry.model";
-import { validateEntry } from "../../../domain/entries/entry.model";
+import {
+	defaultEntryRecipient,
+	entryCarrierOptions,
+	validateEntry,
+} from "../../../domain/entries/entry.model";
 import { entryRepository } from "../../../domain/entries/entry.repository";
 import { formatDate, formatMoney } from "../../../shared/lib/format";
 import { Alert } from "../../../shared/ui/Alert";
@@ -50,6 +55,35 @@ function rateForSpec(rates: EntryRate[], spec: string): EntryRate | null {
 		rates.find((item) => item.spec === spec) ??
 		rates.find((item) => item.isDefault) ??
 		null
+	);
+}
+
+function CarrierOptionGroup({
+	label,
+	options,
+	onChoose,
+}: {
+	label: string;
+	options: EntryCarrierChoice[];
+	onChoose: (id: number) => void;
+}) {
+	if (!options.length) return null;
+	return (
+		<div className="entry-delivery-option-group">
+			<span className="entry-delivery-option-label">{label}</span>
+			{options.map((carrier) => (
+				<button
+					key={carrier.id}
+					type="button"
+					role="option"
+					onMouseDown={(event) => event.preventDefault()}
+					onClick={() => onChoose(carrier.id)}
+				>
+					<span>{carrier.name}</span>
+					{carrier.isLinked && <small>Đã liên kết</small>}
+				</button>
+			))}
+		</div>
 	);
 }
 
@@ -126,14 +160,10 @@ export function EntryDialog({
 			.slice(0, 20)
 			.map((item) => item.customer);
 	}, [customerSearchIndex, deferredCustomerSearch]);
-	const carrierOptions = useMemo(() => {
-		const available = new Map(
-			(options?.carriers ?? []).map((carrier) => [carrier.id, carrier]),
-		);
-		for (const carrier of context?.carriers ?? [])
-			available.set(carrier.id, carrier);
-		return [...available.values()];
-	}, [context?.carriers, options?.carriers]);
+	const carrierOptions = useMemo(
+		() => entryCarrierOptions(options?.carriers ?? [], context),
+		[context, options?.carriers],
+	);
 	const matchingCarriers = useMemo(() => {
 		const query = normalizeCustomerSearch(deferredCarrierSearch.trim());
 		return carrierOptions
@@ -143,6 +173,10 @@ export function EntryDialog({
 			)
 			.slice(0, 20);
 	}, [carrierOptions, deferredCarrierSearch]);
+	const linkedCarriers = matchingCarriers.filter((carrier) => carrier.isLinked);
+	const otherCarriers = matchingCarriers.filter((carrier) => !carrier.isLinked);
+	const recipientOptions =
+		(context?.recipients.length ?? 0) >= 2 ? (context?.recipients ?? []) : [];
 
 	const loadOrders = async (id: number, date: string) => {
 		const requestId = ordersRequest.current + 1;
@@ -230,7 +264,7 @@ export function EntryDialog({
 			setForm((current) => ({
 				...current,
 				customer: next.customer.name,
-				recipient: next.recipients.length === 1 ? next.recipients[0] : "",
+				recipient: defaultEntryRecipient(next.recipients),
 				address: next.customer.address,
 			}));
 			if (next.defaultCarrierId)
@@ -494,10 +528,7 @@ export function EntryDialog({
 				</section>
 			)}
 			<FieldGrid>
-				<Field
-					label="Nhà xe"
-					hint="Chọn nhà xe rồi lưu để gán cho thẻ khách hàng."
-				>
+				<Field label="Nhà xe">
 					{(id) => (
 						<div className="entry-delivery-picker">
 							<input
@@ -528,26 +559,24 @@ export function EntryDialog({
 							/>
 							{carrierPickerOpen && matchingCarriers.length ? (
 								<div className="entry-delivery-options" role="listbox">
-									{matchingCarriers.map((carrier) => (
-										<button
-											key={carrier.id}
-											type="button"
-											role="option"
-											onMouseDown={(event) => event.preventDefault()}
-											onClick={() => void chooseCarrier(carrier.id)}
-										>
-											{carrier.name}
-										</button>
-									))}
+									<CarrierOptionGroup
+										label="Nhà xe đã liên kết"
+										options={linkedCarriers}
+										onChoose={(carrierId) => void chooseCarrier(carrierId)}
+									/>
+									<CarrierOptionGroup
+										label={
+											linkedCarriers.length ? "Nhà xe khác" : "Danh sách nhà xe"
+										}
+										options={otherCarriers}
+										onChoose={(carrierId) => void chooseCarrier(carrierId)}
+									/>
 								</div>
 							) : null}
 						</div>
 					)}
 				</Field>
-				<Field
-					label="Người nhận"
-					hint="Sẽ cập nhật thẻ khách hàng khi lưu phiếu."
-				>
+				<Field label="Người nhận">
 					{(id) => (
 						<div className="entry-delivery-picker">
 							<input
@@ -565,9 +594,9 @@ export function EntryDialog({
 									}))
 								}
 							/>
-							{recipientOptionsOpen && context?.recipients.length ? (
+							{recipientOptionsOpen && recipientOptions.length ? (
 								<div className="entry-delivery-options" role="listbox">
-									{context.recipients.map((recipient) => (
+									{recipientOptions.map((recipient) => (
 										<button
 											key={recipient}
 											type="button"

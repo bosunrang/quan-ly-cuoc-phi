@@ -1,16 +1,4 @@
 /* Trang Nhà xe: danh sách, gán khách hàng, nhập Excel và hộp thoại chi tiết. */
-.carrier-live-intro {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  min-height: 84px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--panel);
-}
-.carrier-live-intro > div:last-child { min-width: 0; flex: 1; }
-.carrier-live-intro span,
 .carrier-panel-head span {
   display: block;
   color: var(--teal);
@@ -18,8 +6,6 @@
   font-weight: 800;
   letter-spacing: .08em;
 }
-.carrier-live-intro h2 { margin: 2px 0 0; color: var(--ink); font-size: var(--type-subhead); }
-.carrier-live-intro p,
 .carrier-panel-head p { margin: 4px 0 0; color: var(--muted); font-size: var(--type-caption); line-height: 1.4; }
 
 .carrier-board {
@@ -270,37 +256,6 @@
 .carrier-pagination button:disabled,
 .carrier-customer-pagination button:disabled { opacity: .4; cursor: not-allowed; }
 
-.carrier-import-file {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 62px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-subtle);
-  color: var(--teal);
-}
-.carrier-import-file > div { min-width: 0; color: var(--text-body); }
-.carrier-import-file strong,
-.carrier-import-file span { display: block; }
-.carrier-import-file strong { overflow: hidden; font-size: var(--type-body-sm); text-overflow: ellipsis; white-space: nowrap; }
-.carrier-import-file span { margin-top: 3px; color: var(--muted); font-size: var(--type-caption); }
-.carrier-import-table-wrap { max-height: 410px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
-.carrier-import-table { width: 100%; min-width: 920px; border-collapse: collapse; font-size: var(--type-body-sm); }
-.carrier-import-table th { position: sticky; top: 0; z-index: 1; padding: 10px 11px; background: var(--table-head-bg); color: var(--text-subtle); text-align: left; font-size: var(--type-caption); }
-.carrier-import-table td { padding: 10px 11px; border-top: 1px solid var(--line-soft); vertical-align: top; color: var(--text-body); }
-.carrier-import-table td:nth-child(2),
-.carrier-import-table td:nth-child(5) { max-width: 290px; }
-.carrier-import-table td:nth-child(2) strong,
-.carrier-import-table td:nth-child(2) small { display: block; }
-.carrier-import-table td:nth-child(2) small { margin-top: 3px; color: var(--status-warning-text); font-size: var(--type-overline); }
-.carrier-import-status { display: inline-flex; min-height: 22px; padding: 2px 7px; border: 1px solid; border-radius: 999px; font-size: var(--type-caption); font-weight: 700; white-space: nowrap; }
-.carrier-import-status.is-ready { border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-text); }
-.carrier-import-status.is-update { border-color: var(--status-info-border); background: var(--status-info-bg); color: var(--status-info-text); }
-.carrier-import-status.is-skipped { border-color: var(--status-neutral-border); background: var(--status-neutral-bg); color: var(--status-neutral-text); }
-.carrier-import-limit { margin: 0; color: var(--muted); font-size: var(--type-caption); text-align: right; }
-
 .carrier-detail-dialog { width: min(720px, 100%); }
 .carrier-detail-dialog .dialog-footer { justify-content: space-between; }
 .carrier-detail-dialog .dialog-footer .button { display: flex; align-items: center; gap: 6px; }
@@ -374,7 +329,6 @@
   .carrier-assigned-panel { grid-column: 1 / -1; min-height: 220px; }
 }
 @media (max-width: 760px) {
-  .carrier-live-intro { align-items: flex-start; flex-wrap: wrap; }
   .carrier-board { grid-template-columns: 1fr; }
   .carrier-assigned-panel { grid-column: auto; }
   .carrier-selection-bar { align-items: flex-start; flex-direction: column; }

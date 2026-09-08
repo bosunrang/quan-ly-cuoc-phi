@@ -27,8 +27,8 @@ body{font-size:var(--type-body);line-height:var(--line-body)}
 .section-actions p,.import-strip p{font-size:var(--type-meta);line-height:var(--line-body)}
 
 /* Thẻ giới thiệu đầu trang: nhấn rõ tiêu đề, mô tả vẫn gọn và dễ đọc. */
-.dashboard-intro h2,.entry-intro h2,.employee-intro h2,.fuel-intro h2,.reports-intro h2,.carrier-live-intro h2,.customer-import-copy h2,.audit-intro .panel-header h3,.user-intro .panel-header h3{font-size:var(--type-heading-sm);line-height:var(--line-heading)}
-.dashboard-intro p,.entry-intro p,.employee-intro p,.fuel-intro p,.reports-intro p,.carrier-live-intro p,.customer-import-copy p,.audit-intro .panel-header p,.user-intro .panel-header p{font-size:var(--type-meta);line-height:var(--line-compact)}
+.dashboard-intro h2,.entry-intro h2,.employee-intro h2,.fuel-intro h2,.reports-intro h2,.customer-import-copy h2,.audit-intro .panel-header h3,.user-intro .panel-header h3{font-size:var(--type-heading-sm);line-height:var(--line-heading)}
+.dashboard-intro p,.entry-intro p,.employee-intro p,.fuel-intro p,.reports-intro p,.customer-import-copy p,.audit-intro .panel-header p,.user-intro .panel-header p{font-size:var(--type-meta);line-height:var(--line-compact)}
 
 /* KPI và thẻ tóm tắt */
 .kpi-label{font-size:var(--type-meta);line-height:var(--line-compact)}

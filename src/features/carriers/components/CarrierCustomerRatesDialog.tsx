@@ -175,6 +175,7 @@ export function CarrierCustomerRatesDialog({
 														className="row-action"
 														type="button"
 														title="Sửa mức cước"
+														aria-label={`Sửa mức cước ${rate.spec}`}
 														onClick={() => startEdit(rate)}
 													>
 														<Pencil size={14} />
@@ -183,6 +184,7 @@ export function CarrierCustomerRatesDialog({
 														className="row-action is-danger"
 														type="button"
 														title="Xóa mức cước"
+														aria-label={`Xóa mức cước ${rate.spec}`}
 														onClick={() => setRemoving(rate)}
 													>
 														<Trash2 size={14} />

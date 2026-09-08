@@ -410,6 +410,37 @@ describe('nhập dữ liệu MISA', () => {
 });
 
 describe('danh mục khách hàng', () => {
+  test('xem trước nhập Excel lấy toàn bộ khóa khách hàng, không phân trang', async () => {
+    const first = await call('POST', '/api/customers', {
+      token: adminToken,
+      body: { customerName: 'Khách hàng đã có A' },
+    });
+    const second = await call('POST', '/api/customers', {
+      token: adminToken,
+      body: { customerName: 'Khách hàng đã có B' },
+    });
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+
+    const keys = await call('GET', '/api/customers/import-keys', { token: adminToken });
+    assert.equal(keys.status, 200);
+    assert(keys.data.includes('khach hang da co a'));
+    assert(keys.data.includes('khach hang da co b'));
+  });
+
+  test('nhập khách hàng không âm thầm cắt sau 1.000 dòng', async () => {
+    const rows = Array.from({ length: 1_001 }, (_, index) => ({
+      customerName: `Khách nhập số ${index + 1}`,
+    }));
+    const result = await call('POST', '/api/customers/import', {
+      token: adminToken,
+      body: { rows },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.data.inserted, 1_001);
+    assert.equal(result.data.duplicates, 0);
+  });
+
   test('Admin thêm, tìm, sửa và xóa được khách hàng', async () => {
     const created = await call('POST', '/api/customers', {
       token: adminToken,
@@ -554,6 +585,20 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     });
     assert.equal(imported.status, 200);
     assert.equal(imported.data.ratesCreated, 1);
+
+    const duplicatePreview = await call('POST', '/api/carriers/excel/preview', {
+      token: adminToken, body,
+    });
+    assert.equal(duplicatePreview.status, 200);
+    assert.equal(duplicatePreview.data.carrierSummary.duplicate, 1);
+    assert.equal(duplicatePreview.data.rateSummary.duplicate, 1);
+
+    const reimported = await call('POST', '/api/carriers/excel/import', {
+      token: adminToken, body,
+    });
+    assert.equal(reimported.status, 200);
+    assert.equal(reimported.data.carriersCreated, 0);
+    assert.equal(reimported.data.ratesCreated, 0);
 
     const exported = await call('GET', '/api/carriers/excel-export', {
       token: adminToken,

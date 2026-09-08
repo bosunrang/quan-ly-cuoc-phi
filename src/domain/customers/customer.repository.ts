@@ -6,6 +6,9 @@ import type {
 } from "./customer.model";
 
 export const customerRepository = {
+	importKeys(): Promise<string[]> {
+		return api<string[]>("GET", "/api/customers/import-keys");
+	},
 	list(search = "", page = 1, limit = 50): Promise<CustomerListResult> {
 		const query = new URLSearchParams();
 		if (search.trim()) query.set("search", search);

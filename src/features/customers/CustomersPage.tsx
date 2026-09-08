@@ -96,13 +96,10 @@ export function CustomersPage() {
 		setError(null);
 		setNotice(null);
 		try {
-			const existing = await customerRepository.list("", 1, 500);
+			const existingKeys = await customerRepository.importKeys();
 			setImporting({
 				fileName: file.name,
-				preview: await parseCustomerWorkbook(
-					file,
-					existing.items.map((customer) => customer.customerName),
-				),
+				preview: await parseCustomerWorkbook(file, existingKeys),
 			});
 		} catch (cause) {
 			setError(

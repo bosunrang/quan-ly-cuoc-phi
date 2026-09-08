@@ -37,7 +37,10 @@ export function CustomerImportDialog({
 				<FileSpreadsheet size={22} />
 				<div>
 					<strong>{fileName}</strong>
-					<span>Chỉ các dòng sẵn sàng mới được ghi vào dữ liệu.</span>
+					<span>
+						Toàn bộ {preview.totalRows.toLocaleString("vi-VN")} dòng được rà
+						soát; chỉ các dòng sẵn sàng mới được ghi vào dữ liệu.
+					</span>
 				</div>
 			</div>
 			<div className="customer-import-stats">
@@ -92,7 +95,9 @@ export function CustomerImportDialog({
 				</table>
 			</div>
 			<p className="customer-import-limit">
-				Hiển thị 100 dòng đầu. Dòng trùng hoặc thiếu tên sẽ không được nhập.
+				Hiển thị 100 dòng đầu để xem nhanh. Khi xác nhận, toàn bộ{" "}
+				{preview.readyCount.toLocaleString("vi-VN")} dòng sẵn sàng sẽ được nhập;
+				dòng trùng hoặc thiếu tên sẽ bỏ qua.
 			</p>
 		</Dialog>
 	);

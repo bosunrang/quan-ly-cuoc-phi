@@ -4,11 +4,11 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Download,
-	FileSearch,
 	Link2,
 	MapPin,
 	Plus,
 	Search,
+	SlidersHorizontal,
 	Truck,
 	Upload,
 	UserMinus,
@@ -37,12 +37,17 @@ import type {
 	CustomerListResult,
 } from "../../domain/customers/customer.model";
 import { customerRepository } from "../../domain/customers/customer.repository";
+import { normalizeText } from "../../shared/lib/text";
 import { downloadXlsx } from "../../shared/lib/xlsx";
 import { Alert } from "../../shared/ui/Alert";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { LoadingState } from "../../shared/ui/Panel";
 import { StatusPill } from "../../shared/ui/StatusPill";
-import { parseCarrierExcelWorkbook } from "./carrier-excel.import";
+import { wideCarrierRateExport } from "./carrier-excel.export";
+import {
+	parseCarrierRateWorkbook,
+	parseCarrierWorkbook,
+} from "./carrier-excel.import";
 import { CarrierCustomerRatesDialog } from "./components/CarrierCustomerRatesDialog";
 import { CarrierDetailDialog } from "./components/CarrierDetailDialog";
 import { CarrierDialog } from "./components/CarrierDialog";
@@ -53,9 +58,14 @@ interface EditorState {
 	editingId: number | null;
 }
 
+const CARRIERS_PER_PAGE = 8;
+const CUSTOMERS_PER_PAGE = 50;
+
+function errorMessage(cause: unknown, fallback: string): string {
+	return cause instanceof Error ? cause.message : fallback;
+}
+
 export function CarriersPage() {
-	const carriersPerPage = 8;
-	const customersPerPage = 50;
 	const [carrierData, setCarrierData] = useState<CarrierListResult | null>(
 		null,
 	);
@@ -80,62 +90,68 @@ export function CarriersPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [excelImporting, setExcelImporting] = useState<{
 		fileName: string;
-		carriers: Awaited<ReturnType<typeof parseCarrierExcelWorkbook>>["carriers"];
-		rates: Awaited<ReturnType<typeof parseCarrierExcelWorkbook>>["rates"];
+		kind: "carriers" | "rates";
+		carriers: Awaited<ReturnType<typeof parseCarrierWorkbook>>;
+		rates: Awaited<ReturnType<typeof parseCarrierRateWorkbook>>;
 		preview: CarrierExcelPreview;
 	} | null>(null);
 	const [isExcelReading, setIsExcelReading] = useState(false);
-	const excelInputRef = useRef<HTMLInputElement>(null);
+	const carrierExcelInputRef = useRef<HTMLInputElement>(null);
+	const rateExcelInputRef = useRef<HTMLInputElement>(null);
+	const carrierRequest = useRef(0);
+	const customerRequest = useRef(0);
+	const assignedRequest = useRef(0);
 
 	const load = useCallback(async () => {
+		const requestId = carrierRequest.current + 1;
+		carrierRequest.current = requestId;
 		try {
-			setError(null);
 			const nextCarriers = await carrierRepository.list();
+			if (carrierRequest.current !== requestId) return;
+			setError(null);
 			setCarrierData(nextCarriers);
-			setSelectedCarrierId(
-				(current) => current ?? nextCarriers.items[0]?.id ?? null,
+			setSelectedCarrierId((current) =>
+				nextCarriers.items.some((carrier) => carrier.id === current)
+					? current
+					: (nextCarriers.items[0]?.id ?? null),
 			);
 		} catch (cause) {
-			setError(
-				cause instanceof Error
-					? cause.message
-					: "Không tải được dữ liệu nhà xe.",
-			);
+			if (carrierRequest.current === requestId)
+				setError(errorMessage(cause, "Không tải được dữ liệu nhà xe."));
 		}
 	}, []);
 
 	const loadCustomerPage = useCallback(async () => {
+		const requestId = customerRequest.current + 1;
+		customerRequest.current = requestId;
 		try {
 			const result = await customerRepository.list(
 				query,
 				customerPage,
-				customersPerPage,
+				CUSTOMERS_PER_PAGE,
 			);
-			setCustomerData(result);
+			if (customerRequest.current === requestId) setCustomerData(result);
 		} catch (cause) {
-			setError(
-				cause instanceof Error
-					? cause.message
-					: "Không tải được danh sách khách hàng.",
-			);
+			if (customerRequest.current === requestId)
+				setError(errorMessage(cause, "Không tải được danh sách khách hàng."));
 		}
 	}, [customerPage, query]);
 
 	const loadAssignedCustomers = useCallback(
 		async (carrierId: number | null) => {
+			const requestId = assignedRequest.current + 1;
+			assignedRequest.current = requestId;
 			if (!carrierId) {
 				setAssignedCustomers([]);
 				return;
 			}
 			try {
 				const result = await carrierRepository.listAssignedCustomers(carrierId);
-				setAssignedCustomers(result.items);
+				if (assignedRequest.current === requestId)
+					setAssignedCustomers(result.items);
 			} catch (cause) {
-				setError(
-					cause instanceof Error
-						? cause.message
-						: "Không tải được khách hàng đã gán.",
-				);
+				if (assignedRequest.current === requestId)
+					setError(errorMessage(cause, "Không tải được khách hàng đã gán."));
 			}
 		},
 		[],
@@ -153,48 +169,53 @@ export function CarriersPage() {
 
 	const selectedCarrier =
 		carrierData?.items.find((item) => item.id === selectedCarrierId) ?? null;
-	const assignedIds = selectedCarrier?.assignedCustomerIds ?? [];
+	const assignedIds = useMemo(
+		() => new Set(selectedCarrier?.assignedCustomerIds ?? []),
+		[selectedCarrier],
+	);
 	const customerPageCount = customerData?.pageCount ?? 1;
 	const currentCustomerPage = customerData?.page ?? customerPage;
 	const pagedCustomers = customerData?.items ?? [];
 	const visibleAssignedCustomers = useMemo(() => {
-		const keyword = assignedQuery.trim().toLocaleLowerCase("vi-VN");
+		const keyword = normalizeText(assignedQuery);
 		if (!keyword) return assignedCustomers;
 		return assignedCustomers.filter((customer) =>
-			`${customer.customerName} ${customer.recipient} ${customer.address}`
-				.toLocaleLowerCase("vi-VN")
-				.includes(keyword),
+			normalizeText(
+				`${customer.customerName} ${customer.recipient} ${customer.address}`,
+			).includes(keyword),
 		);
 	}, [assignedCustomers, assignedQuery]);
 	const visibleCarriers = useMemo(() => {
-		const keyword = carrierQuery.trim().toLocaleLowerCase("vi-VN");
+		const keyword = normalizeText(carrierQuery);
 		const items = carrierData?.items ?? [];
 		if (!keyword) return items;
 		return items.filter((carrier) =>
-			`${carrier.name} ${carrier.contact} ${carrier.phone}`
-				.toLocaleLowerCase("vi-VN")
-				.includes(keyword),
+			normalizeText(
+				`${carrier.name} ${carrier.contact} ${carrier.phone}`,
+			).includes(keyword),
 		);
 	}, [carrierData, carrierQuery]);
 	const carrierPageCount = Math.max(
 		1,
-		Math.ceil(visibleCarriers.length / carriersPerPage),
+		Math.ceil(visibleCarriers.length / CARRIERS_PER_PAGE),
 	);
 	const currentCarrierPage = Math.min(carrierPage, carrierPageCount);
 	const pagedCarriers = visibleCarriers.slice(
-		(currentCarrierPage - 1) * carriersPerPage,
-		currentCarrierPage * carriersPerPage,
+		(currentCarrierPage - 1) * CARRIERS_PER_PAGE,
+		currentCarrierPage * CARRIERS_PER_PAGE,
 	);
 
 	const chooseCarrier = (carrierId: number) => {
 		setSelectedCarrierId(carrierId);
+		setAssignedCustomers([]);
 		setCheckedIds([]);
 		setQuery("");
+		setCustomerPage(1);
 		setAssignedQuery("");
 		setRateCustomer(null);
 	};
 	const toggleCustomer = (customerId: number) => {
-		if (assignedIds.includes(customerId)) return;
+		if (assignedIds.has(customerId)) return;
 		setCheckedIds((current) =>
 			current.includes(customerId)
 				? current.filter((id) => id !== customerId)
@@ -215,9 +236,7 @@ export function CarriersPage() {
 			setCheckedIds([]);
 			await Promise.all([load(), loadAssignedCustomers(selectedCarrier.id)]);
 		} catch (cause) {
-			setError(
-				cause instanceof Error ? cause.message : "Không gán được khách hàng.",
-			);
+			setError(errorMessage(cause, "Không gán được khách hàng."));
 		}
 	};
 	const unassign = async (customer: Customer) => {
@@ -228,31 +247,29 @@ export function CarriersPage() {
 			if (rateCustomer?.id === customer.id) setRateCustomer(null);
 			await Promise.all([load(), loadAssignedCustomers(selectedCarrier.id)]);
 		} catch (cause) {
-			setError(
-				cause instanceof Error
-					? cause.message
-					: "Không bỏ gán được khách hàng.",
-			);
+			setError(errorMessage(cause, "Không bỏ gán được khách hàng."));
 		}
 	};
-	const handleExcelFile = async (event: ChangeEvent<HTMLInputElement>) => {
+	const handleExcelFile = async (
+		event: ChangeEvent<HTMLInputElement>,
+		kind: "carriers" | "rates",
+	) => {
 		const file = event.target.files?.[0];
 		if (!file) return;
 		setIsExcelReading(true);
 		setError(null);
 		try {
-			const payload = await parseCarrierExcelWorkbook(file);
+			const payload =
+				kind === "carriers"
+					? { carriers: await parseCarrierWorkbook(file), rates: [] }
+					: { carriers: [], rates: await parseCarrierRateWorkbook(file) };
 			const preview = await carrierRepository.excelPreview(
 				payload.carriers,
 				payload.rates,
 			);
-			setExcelImporting({ fileName: file.name, preview, ...payload });
+			setExcelImporting({ fileName: file.name, kind, preview, ...payload });
 		} catch (cause) {
-			setError(
-				cause instanceof Error
-					? cause.message
-					: "Không đọc được bảng cước Excel.",
-			);
+			setError(errorMessage(cause, "Không đọc được file Excel."));
 		} finally {
 			setIsExcelReading(false);
 			event.target.value = "";
@@ -262,55 +279,38 @@ export function CarriersPage() {
 		try {
 			setError(null);
 			const data = await carrierRepository.excelExport();
+			const rateExport = wideCarrierRateExport(data.rates);
 			downloadXlsx("Bang-cuoc-nha-xe.xlsx", [
 				{
 					name: "Nhà xe",
-					headers: [
-						"Nhà xe",
-						"Địa chỉ",
-						"Điện thoại",
-						"Giờ xe chạy",
-						"Ghi chú",
-						"Trạng thái",
-					],
+					headers: ["Nhà xe", "Địa chỉ", "Điện thoại"],
 					rows: data.carriers.map((carrier) => [
 						carrier.name,
 						carrier.address,
 						carrier.phone,
-						carrier.schedule,
-						carrier.note,
-						carrier.isActive ? "Hoạt động" : "Ngừng",
 					]),
-					widths: [28, 46, 24, 22, 34, 16],
+					widths: [28, 46, 24],
+					yellowHeader: true,
 				},
 				{
 					name: "Bảng cước",
 					headers: [
 						"Nhà xe",
-						"Đơn vị",
-						"Quy cách",
-						"Cước vận chuyển",
+						"Khách hàng",
+						...rateExport.specs,
 						"Phí vào cổng",
-						"Ghi chú",
 					],
-					rows: data.rates.map((rate) => [
-						rate.carrierName,
-						rate.customerName,
-						rate.spec,
-						rate.transportFee,
-						rate.gateFee,
-						rate.note,
-					]),
-					widths: [28, 46, 28, 20, 18, 38],
-					moneyColumns: [3, 4],
+					rows: rateExport.rows,
+					widths: [28, 46, ...rateExport.specs.map(() => 18), 18],
+					moneyColumns: [
+						...rateExport.specs.map((_, index) => index + 2),
+						rateExport.specs.length + 2,
+					],
+					yellowHeader: true,
 				},
 			]);
 		} catch (cause) {
-			setError(
-				cause instanceof Error
-					? cause.message
-					: "Không xuất được bảng cước Excel.",
-			);
+			setError(errorMessage(cause, "Không xuất được bảng cước Excel."));
 		}
 	};
 
@@ -331,11 +331,18 @@ export function CarriersPage() {
 					</p>
 				</div>
 				<input
-					ref={excelInputRef}
+					ref={carrierExcelInputRef}
 					className="visually-hidden"
 					type="file"
 					accept=".xlsx,.xls"
-					onChange={handleExcelFile}
+					onChange={(event) => void handleExcelFile(event, "carriers")}
+				/>
+				<input
+					ref={rateExcelInputRef}
+					className="visually-hidden"
+					type="file"
+					accept=".xlsx,.xls"
+					onChange={(event) => void handleExcelFile(event, "rates")}
 				/>
 				<div className="carrier-excel-actions">
 					<button
@@ -349,10 +356,18 @@ export function CarriersPage() {
 						type="button"
 						className="button primary"
 						disabled={isExcelReading}
-						onClick={() => excelInputRef.current?.click()}
+						onClick={() => carrierExcelInputRef.current?.click()}
 					>
 						<Upload size={16} />{" "}
-						{isExcelReading ? "Đang đọc file..." : "Nhập bảng cước"}
+						{isExcelReading ? "Đang đọc file..." : "Nhập nhà xe"}
+					</button>
+					<button
+						type="button"
+						className="button primary"
+						disabled={isExcelReading}
+						onClick={() => rateExcelInputRef.current?.click()}
+					>
+						<Upload size={16} /> Nhập bảng cước
 					</button>
 				</div>
 			</section>
@@ -453,7 +468,7 @@ export function CarriersPage() {
 										aria-label="Xem chi tiết"
 										onClick={() => setDetailCarrier(carrier)}
 									>
-										<FileSearch size={15} />
+										<SlidersHorizontal size={15} />
 									</button>
 								</div>
 								<span className="carrier-assigned-count">
@@ -465,30 +480,14 @@ export function CarriersPage() {
 							<p className="carrier-empty">Chưa có nhà xe nào.</p>
 						)}
 					</div>
-					{visibleCarriers.length > carriersPerPage && (
-						<nav className="carrier-pagination" aria-label="Phân trang nhà xe">
-							<button
-								type="button"
-								title="Trang trước"
-								disabled={currentCarrierPage === 1}
-								onClick={() => setCarrierPage((page) => Math.max(1, page - 1))}
-							>
-								<ChevronLeft size={16} />
-							</button>
-							<span>
-								Trang {currentCarrierPage}/{carrierPageCount}
-							</span>
-							<button
-								type="button"
-								title="Trang sau"
-								disabled={currentCarrierPage === carrierPageCount}
-								onClick={() =>
-									setCarrierPage((page) => Math.min(carrierPageCount, page + 1))
-								}
-							>
-								<ChevronRight size={16} />
-							</button>
-						</nav>
+					{visibleCarriers.length > CARRIERS_PER_PAGE && (
+						<CarrierPagination
+							className="carrier-pagination"
+							label="Phân trang nhà xe"
+							page={currentCarrierPage}
+							pageCount={carrierPageCount}
+							onPageChange={setCarrierPage}
+						/>
 					)}
 				</aside>
 				<section className="panel carrier-pool-panel">
@@ -518,7 +517,7 @@ export function CarriersPage() {
 					</label>
 					<div className="carrier-customer-pool">
 						{pagedCustomers.map((customer) => {
-							const assigned = assignedIds.includes(customer.id);
+							const assigned = assignedIds.has(customer.id);
 							const checked = checkedIds.includes(customer.id);
 							return (
 								<label
@@ -560,34 +559,13 @@ export function CarriersPage() {
 						)}
 					</div>
 					{customerData.pageCount > 1 && (
-						<nav
+						<CarrierPagination
 							className="carrier-customer-pagination"
-							aria-label="Phân trang khách hàng để gán"
-						>
-							<button
-								type="button"
-								title="Trang trước"
-								disabled={currentCustomerPage === 1}
-								onClick={() => setCustomerPage((page) => Math.max(1, page - 1))}
-							>
-								<ChevronLeft size={16} />
-							</button>
-							<span>
-								Trang {currentCustomerPage}/{customerPageCount}
-							</span>
-							<button
-								type="button"
-								title="Trang sau"
-								disabled={currentCustomerPage === customerPageCount}
-								onClick={() =>
-									setCustomerPage((page) =>
-										Math.min(customerPageCount, page + 1),
-									)
-								}
-							>
-								<ChevronRight size={16} />
-							</button>
-						</nav>
+							label="Phân trang khách hàng để gán"
+							page={currentCustomerPage}
+							pageCount={customerPageCount}
+							onPageChange={setCustomerPage}
+						/>
 					)}
 					<footer className="carrier-selection-bar">
 						<span>
@@ -638,7 +616,7 @@ export function CarriersPage() {
 										aria-label={`Thiết lập bảng cước cho ${customer.customerName}`}
 										onClick={() => setRateCustomer(customer)}
 									>
-										<FileSearch size={16} />
+										<SlidersHorizontal size={16} />
 									</button>
 									<button
 										type="button"
@@ -701,18 +679,20 @@ export function CarriersPage() {
 			{excelImporting && (
 				<CarrierExcelImportDialog
 					fileName={excelImporting.fileName}
+					kind={excelImporting.kind}
 					preview={excelImporting.preview}
 					onClose={() => setExcelImporting(null)}
 					onConfirm={async () => {
-						const result = await carrierRepository.excelImport(
+						await carrierRepository.excelImport(
 							excelImporting.carriers,
 							excelImporting.rates,
 						);
 						setExcelImporting(null);
-						await load();
-						setError(
-							`Đã thêm ${result.carriersCreated} và cập nhật ${result.carriersUpdated} nhà xe; thêm ${result.ratesCreated} và cập nhật ${result.ratesUpdated} mức cước.`,
-						);
+						setCheckedIds([]);
+						await Promise.all([
+							load(),
+							loadAssignedCustomers(selectedCarrierId),
+						]);
 					}}
 				/>
 			)}
@@ -740,5 +720,43 @@ export function CarriersPage() {
 				/>
 			)}
 		</>
+	);
+}
+
+function CarrierPagination({
+	className,
+	label,
+	page,
+	pageCount,
+	onPageChange,
+}: {
+	className: string;
+	label: string;
+	page: number;
+	pageCount: number;
+	onPageChange: (page: number) => void;
+}) {
+	return (
+		<nav className={className} aria-label={label}>
+			<button
+				type="button"
+				title="Trang trước"
+				disabled={page === 1}
+				onClick={() => onPageChange(Math.max(1, page - 1))}
+			>
+				<ChevronLeft size={16} />
+			</button>
+			<span>
+				Trang {page}/{pageCount}
+			</span>
+			<button
+				type="button"
+				title="Trang sau"
+				disabled={page === pageCount}
+				onClick={() => onPageChange(Math.min(pageCount, page + 1))}
+			>
+				<ChevronRight size={16} />
+			</button>
+		</nav>
 	);
 }

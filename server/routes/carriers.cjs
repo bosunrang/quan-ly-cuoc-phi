@@ -111,7 +111,8 @@ function prepareExcelImport(db, body) {
       carrierKeys.add(input.key);
       return {
         rowNumber: Number(row?.rowNumber) || index + 2,
-        status: existingCarriers.has(input.key) ? 'update' : 'ready',
+        status: existingCarriers.has(input.key) ? 'duplicate' : 'ready',
+        reason: existingCarriers.has(input.key) ? 'Nhà xe đã tồn tại' : undefined,
         ...input,
       };
     } catch (error) {
@@ -138,7 +139,8 @@ function prepareExcelImport(db, body) {
       rateKeys.add(key);
       return {
         rowNumber: Number(row?.rowNumber) || index + 2,
-        status: existingRates.has(key) ? 'update' : 'ready',
+        status: existingRates.has(key) ? 'duplicate' : 'ready',
+        reason: existingRates.has(key) ? 'Mức cước đã tồn tại' : undefined,
         customerId: customer.id,
         carrierKey,
         ...input,
@@ -156,12 +158,12 @@ function prepareExcelImport(db, body) {
     rates,
     carrierSummary: {
       ready: carriers.filter((row) => row.status === 'ready').length,
-      update: carriers.filter((row) => row.status === 'update').length,
+      duplicate: carriers.filter((row) => row.status === 'duplicate').length,
       skipped: carriers.filter((row) => row.status === 'skipped').length,
     },
     rateSummary: {
       ready: rates.filter((row) => row.status === 'ready').length,
-      update: rates.filter((row) => row.status === 'update').length,
+      duplicate: rates.filter((row) => row.status === 'duplicate').length,
       skipped: rates.filter((row) => row.status === 'skipped').length,
     },
   };
@@ -298,16 +300,10 @@ function register(router) {
            (name, contact, phone, address, schedule, note, is_active, carrier_key, created_at, updated_at)
          VALUES (?, '', ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
-      const updateCarrier = c.db.prepare(
-        `UPDATE carriers SET name = ?, phone = ?, address = ?, schedule = ?, note = ?, is_active = ?, updated_at = ?
-          WHERE id = ?`,
-      );
       for (const carrier of preview.carriers) {
-        if (carrier.status === 'skipped') continue;
+        if (carrier.status !== 'ready') continue;
         const existingId = carrierIds.get(carrier.key);
-        if (existingId) {
-          updateCarrier.run(carrier.name, carrier.phone, carrier.address, carrier.schedule, carrier.note, Number(carrier.isActive), at, existingId);
-        } else {
+        if (!existingId) {
           const result = createCarrier.run(carrier.name, carrier.phone, carrier.address, carrier.schedule, carrier.note, Number(carrier.isActive), carrier.key, at, at);
           carrierIds.set(carrier.key, Number(result.lastInsertRowid));
         }
@@ -320,14 +316,11 @@ function register(router) {
         `INSERT INTO carrier_customer_rates
            (carrier_id, customer_id, spec, spec_key, is_default, transport_fee, gate_fee, note, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(carrier_id, customer_id, spec_key) DO UPDATE SET
-           spec = excluded.spec, is_default = excluded.is_default,
-           transport_fee = excluded.transport_fee, gate_fee = excluded.gate_fee,
-           note = excluded.note, updated_at = excluded.updated_at`,
+         ON CONFLICT(carrier_id, customer_id, spec_key) DO NOTHING`,
       );
       const refreshedCustomers = new Set();
       for (const rate of preview.rates) {
-        if (rate.status === 'skipped') continue;
+        if (rate.status !== 'ready') continue;
         let carrierId = carrierIds.get(rate.carrierKey);
         if (!carrierId) {
           const carrier = ensureCustomerCarrier(c.db, rate.customerId, rate.carrierName, at);
@@ -345,9 +338,9 @@ function register(router) {
       for (const customerId of refreshedCustomers) refreshCustomerCarrier(c.db, customerId, at);
       const summary = {
         carriersCreated: preview.carrierSummary.ready,
-        carriersUpdated: preview.carrierSummary.update,
+        carriersUpdated: 0,
         ratesCreated: preview.rateSummary.ready,
-        ratesUpdated: preview.rateSummary.update,
+        ratesUpdated: 0,
         skipped: preview.carrierSummary.skipped + preview.rateSummary.skipped,
       };
       writeAudit(c.db, c.user, 'carrier.excel.import', 'carrier', null, summary);

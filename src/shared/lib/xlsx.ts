@@ -8,6 +8,7 @@ interface Sheet {
 	rows: Cell[][];
 	widths?: number[];
 	moneyColumns?: number[];
+	yellowHeader?: boolean;
 }
 
 const xmlEscape = (value: string) =>
@@ -45,7 +46,9 @@ function sheetXml(sheet: Sheet): string {
 				.map((value, columnIndex) => {
 					const style =
 						rowIndex === 0
-							? 1
+							? sheet.yellowHeader
+								? 3
+								: 1
 							: sheet.moneyColumns?.includes(columnIndex)
 								? 2
 								: 0;
@@ -102,10 +105,10 @@ ${sheets.map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0"/></numFmts>
 <fonts count="2"><font><sz val="11"/><name val="Aptos"/></font><font><b/><sz val="11"/><name val="Aptos"/></font></fonts>
-<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0B747D"/><bgColor indexed="64"/></patternFill></fill></fills>
+<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0B747D"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFD966"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="1" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>
+<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="1" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>
 </styleSheet>`),
 	};
 	for (const [index, sheet] of sheets.entries()) {

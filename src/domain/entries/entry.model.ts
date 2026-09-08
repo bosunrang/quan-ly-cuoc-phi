@@ -52,15 +52,51 @@ export interface EntryFormOptions {
 	currentUserName: string;
 	isAdmin: boolean;
 	customers: Array<{ id: number; name: string; provinceCity: string }>;
-	carriers: Array<{ id: number; name: string }>;
+	carriers: EntryCarrierOption[];
 	employees: Array<{ id: number; name: string; userId: number | null }>;
+}
+
+export interface EntryCarrierOption {
+	id: number;
+	name: string;
+}
+
+export interface EntryCarrierChoice extends EntryCarrierOption {
+	isLinked: boolean;
 }
 
 export interface EntryCustomerContext {
 	customer: { id: number; name: string; recipient: string; address: string };
-	carriers: Array<{ id: number; name: string }>;
+	carriers: EntryCarrierOption[];
 	recipients: string[];
 	defaultCarrierId: number | null;
+}
+
+/**
+ * Sau khi chọn khách hàng, đưa nhà xe đã liên kết lên đầu rồi bổ sung phần còn lại
+ * của danh mục. Mỗi nhà xe chỉ xuất hiện một lần.
+ * Context null nghĩa là thông tin khách hàng chưa tải xong, nên chưa hiển thị lựa chọn.
+ */
+export function entryCarrierOptions(
+	allCarriers: EntryCarrierOption[],
+	context: EntryCustomerContext | null,
+): EntryCarrierChoice[] {
+	if (!context) return [];
+	const choices = new Map<number, EntryCarrierChoice>();
+	for (const carrier of context.carriers) {
+		choices.set(carrier.id, { ...carrier, isLinked: true });
+	}
+	for (const carrier of allCarriers) {
+		if (!choices.has(carrier.id)) {
+			choices.set(carrier.id, { ...carrier, isLinked: false });
+		}
+	}
+	return [...choices.values()];
+}
+
+/** Chỉ tự điền khi khách hàng có duy nhất một người nhận đã lưu. */
+export function defaultEntryRecipient(recipients: string[]): string {
+	return recipients.length === 1 ? recipients[0] : "";
 }
 
 export interface MisaOrder {
