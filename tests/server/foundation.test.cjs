@@ -650,6 +650,65 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     });
     assert.equal(duplicate.status, 400);
 
+    const staffCannotSaveRate = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: newEntry({
+        customerId: customer.data.id,
+        customer: customer.data.customerName,
+        carrier: carrier.data.name,
+        spec: 'Thùng trung',
+        transportFee: 60000,
+        gateFee: 17000,
+        saveCarrierRate: true,
+      }),
+    });
+    assert.equal(staffCannotSaveRate.status, 400);
+    assert.match(staffCannotSaveRate.data.error, /Chỉ quản trị viên/);
+
+    const savedFromEntry = await call('POST', '/api/entries', {
+      token: adminToken,
+      body: newEntry({
+        customerId: customer.data.id,
+        customer: customer.data.customerName,
+        carrier: carrier.data.name,
+        spec: 'Thùng trung',
+        transportFee: 60000,
+        gateFee: 17000,
+        saveCarrierRate: true,
+      }),
+    });
+    assert.equal(savedFromEntry.status, 200);
+
+    const ratesAfterSave = await call('GET', path, { token: adminToken });
+    assert.equal(
+      ratesAfterSave.data.items.some((item) => item.spec === 'Thùng trung'
+        && item.transportFee === 60000 && item.gateFee === 17000),
+      true,
+    );
+
+    const updatedFromEntry = await call('POST', '/api/entries', {
+      token: adminToken,
+      body: newEntry({
+        customerId: customer.data.id,
+        customer: customer.data.customerName,
+        carrier: carrier.data.name,
+        spec: 'Thùng trung',
+        transportFee: 61000,
+        gateFee: 18000,
+        saveCarrierRate: true,
+      }),
+    });
+    assert.equal(updatedFromEntry.status, 200);
+    const ratesAfterUpdate = await call('GET', path, { token: adminToken });
+    assert.equal(
+      ratesAfterUpdate.data.items.filter((item) => item.spec === 'Thùng trung').length,
+      1,
+    );
+    assert.equal(
+      ratesAfterUpdate.data.items.find((item) => item.spec === 'Thùng trung').transportFee,
+      61000,
+    );
+
     const missingVarianceReason = await call('POST', '/api/entries', {
       token: adminToken,
       body: newEntry({

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Entry } from "../src/domain/entries/entry.model";
 import {
+	DEFAULT_ENTRY_RATE_SPECS,
 	defaultEntryRecipient,
 	emptyEntryInput,
 	entryCarrierOptions,
+	entryRateOptions,
 	toEntryInput,
 	validateEntry,
 } from "../src/domain/entries/entry.model";
@@ -130,5 +132,49 @@ describe("chọn người nhận theo khách hàng", () => {
 
 	it("để trống khi khách hàng chưa có người nhận", () => {
 		expect(defaultEntryRecipient([])).toBe("");
+	});
+});
+
+describe("quy cách gợi ý khi chưa có bảng cước", () => {
+	it("có đủ các quy cách mặc định để tạo mức cước đầu tiên", () => {
+		expect(DEFAULT_ENTRY_RATE_SPECS).toEqual([
+			"Tất cả",
+			"Thùng nhỏ",
+			"Thùng trung",
+			"Thùng lớn",
+			"Khác",
+		]);
+	});
+
+	it("đưa quy cách đã gán lên đầu và giữ quy cách mới ở bên dưới", () => {
+		const assigned = [
+			{
+				id: 7,
+				spec: "Tất cả",
+				isDefault: true,
+				transportFee: 50_000,
+				gateFee: 0,
+				note: "",
+			},
+			{
+				id: 8,
+				spec: "Hàng lạnh",
+				isDefault: false,
+				transportFee: 80_000,
+				gateFee: 10_000,
+				note: "",
+			},
+		];
+		const choices = entryRateOptions(assigned);
+		expect(choices.slice(0, 2)).toEqual(
+			assigned.map((rate) => ({ ...rate, isAssigned: true })),
+		);
+		expect(choices.slice(2).map((rate) => rate.spec)).toEqual([
+			"Thùng nhỏ",
+			"Thùng trung",
+			"Thùng lớn",
+			"Khác",
+		]);
+		expect(choices.slice(2).every((rate) => !rate.isAssigned)).toBe(true);
 	});
 });

@@ -8,6 +8,7 @@ const { badRequest, notFound, isIsoDate } = require('../http.cjs');
 
 const PAGE = 'entries';
 const MAX_LIMIT = 500;
+const DEFAULT_SPEC_KEY = '__all__';
 
 // ---------------------------------------------------------------- kiểm tra
 
@@ -105,6 +106,11 @@ function standardTransportRate(db, body, input) {
 }
 
 function ensureVarianceReason(db, body, input) {
+	// Khi người dùng chủ động lưu lại bảng cước, mức vừa nhập sẽ trở thành giá chuẩn.
+	if (body.saveCarrierRate === true) {
+		input.rateVarianceNote = '';
+		return;
+	}
   const rate = standardTransportRate(db, body, input);
   if (!rate) return;
   if (input.transportFee <= Number(rate.transport_fee)) {
@@ -114,6 +120,53 @@ function ensureVarianceReason(db, body, input) {
   if (!input.rateVarianceNote) {
     throw badRequest('Vui lòng nhập lý do chênh lệch cước với giá thiết lập.');
   }
+}
+
+function ensureCarrierRateSavingPermission(user, body) {
+  if (body.saveCarrierRate === true && !canSeeEveryone(user)) {
+    throw badRequest('Chỉ quản trị viên được lưu bảng cước nhà xe.');
+  }
+}
+
+/** Lưu hoặc cập nhật đúng một quy cách của cặp khách hàng – nhà xe. */
+function saveCarrierRate(db, user, customerId, carrierId, input, at) {
+  if (!input.spec) {
+    throw badRequest('Vui lòng chọn hoặc nhập quy cách để lưu vào bảng cước nhà xe.');
+  }
+  const isDefault = normalizeSearchText(input.spec) === 'tat ca';
+  const spec = isDefault ? 'Tất cả' : input.spec;
+  const specKey = isDefault ? DEFAULT_SPEC_KEY : normalizeSearchText(spec);
+  const before = db.prepare(
+    `SELECT * FROM carrier_customer_rates
+      WHERE carrier_id = ? AND customer_id = ? AND spec_key = ?`,
+  ).get(carrierId, customerId, specKey);
+  db.prepare(
+    `INSERT INTO carrier_customer_rates
+       (carrier_id, customer_id, spec, spec_key, is_default, transport_fee, gate_fee, note, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+     ON CONFLICT(carrier_id, customer_id, spec_key) DO UPDATE SET
+       spec = excluded.spec,
+       is_default = excluded.is_default,
+       transport_fee = excluded.transport_fee,
+       gate_fee = excluded.gate_fee,
+       updated_at = excluded.updated_at`,
+  ).run(
+    carrierId, customerId, spec, specKey, Number(isDefault),
+    input.transportFee, input.gateFee, at, at,
+  );
+  const rate = db.prepare(
+    `SELECT * FROM carrier_customer_rates
+      WHERE carrier_id = ? AND customer_id = ? AND spec_key = ?`,
+  ).get(carrierId, customerId, specKey);
+  writeAudit(
+    db,
+    user,
+    before ? 'carrier.rate.update_from_entry' : 'carrier.rate.create_from_entry',
+    'carrier_customer_rate',
+    rate.id,
+    { carrierId, customerId, before, after: rate },
+  );
+  return { id: rate.id, spec: rate.spec, transportFee: rate.transport_fee, gateFee: rate.gate_fee };
 }
 
 function recipientList(value) {
@@ -139,7 +192,7 @@ function appendRecipient(existing, next) {
 }
 
 /** Đồng bộ thông tin giao nhận người dùng vừa chỉnh vào danh mục chuẩn. */
-function syncCustomerDelivery(db, body, input, at) {
+function syncCustomerDelivery(db, user, body, input, at) {
   const customer = customerForEntry(db, body, input.customer);
   if (!customer) return;
 
@@ -150,7 +203,10 @@ function syncCustomerDelivery(db, body, input, at) {
     `UPDATE customers SET recipient = ?, updated_at = ? WHERE id = ?`,
   ).run(recipients, at, customer.id);
   const carriers = refreshCustomerCarrier(db, customer.id, at);
-  return { customerId: customer.id, carrierId: carrier?.id ?? null, carriers, recipients };
+  const rate = body.saveCarrierRate === true && carrier
+    ? saveCarrierRate(db, user, customer.id, carrier.id, input, at)
+    : null;
+  return { customerId: customer.id, carrierId: carrier?.id ?? null, carriers, recipients, rate };
 }
 
 function dateOffset(iso, offset) {
@@ -422,13 +478,14 @@ function register(router) {
 
   router.post('/api/entries', async (c) => {
     c.requirePage(PAGE);
+	ensureCarrierRateSavingPermission(c.user, c.body);
     const input = readEntryInput(c.body);
     const employeeId = readEmployeeId(c.db, c.user, c.body.employeeId);
     ensureVarianceReason(c.db, c.body, input);
     const at = new Date().toISOString();
 
     return transaction(c.db, () => {
-		const delivery = syncCustomerDelivery(c.db, c.body, input, at);
+		const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, at);
       const result = c.db
         .prepare(
           `INSERT INTO entries
@@ -472,6 +529,7 @@ function register(router) {
 
   router.patch('/api/entries/:id', async (c) => {
     c.requirePage(PAGE);
+	ensureCarrierRateSavingPermission(c.user, c.body);
     const before = loadOwned(c.db, c.user, Number(c.params.id));
     const input = readEntryInput(c.body);
     const employeeId = canSeeEveryone(c.user)
@@ -479,7 +537,7 @@ function register(router) {
       : before.employee_id;
     ensureVarianceReason(c.db, c.body, input);
     return transaction(c.db, () => {
-		const delivery = syncCustomerDelivery(c.db, c.body, input, new Date().toISOString());
+		const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, new Date().toISOString());
       c.db
         .prepare(
           `UPDATE entries SET

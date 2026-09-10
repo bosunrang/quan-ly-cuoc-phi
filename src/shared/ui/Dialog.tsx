@@ -10,6 +10,8 @@ interface DialogProps {
 	confirmClassName?: "primary" | "danger";
 	confirmDisabled?: boolean;
 	className?: string;
+	/** Nội dung ở góc trái footer mặc định, trước nhóm nút Hủy/Lưu. */
+	footerStart?: ReactNode;
 	footer?: ReactNode;
 	/** Ném lỗi để hiện thông báo và giữ hộp thoại mở. */
 	onConfirm: () => Promise<void>;
@@ -24,6 +26,7 @@ export function Dialog({
 	confirmClassName = "primary",
 	confirmDisabled = false,
 	className = "",
+	footerStart,
 	footer,
 	onConfirm,
 	onClose,
@@ -92,20 +95,25 @@ export function Dialog({
 						<div className="dialog-footer">{footer}</div>
 					) : (
 						<div className="dialog-footer">
-							<button
-								type="button"
-								className="button secondary"
-								onClick={onClose}
-							>
-								Hủy
-							</button>
-							<button
-								type="submit"
-								className={`button ${confirmClassName}`}
-								disabled={busy || confirmDisabled}
-							>
-								{busy ? "Đang lưu…" : confirmLabel}
-							</button>
+							{footerStart && (
+								<div className="dialog-footer-start">{footerStart}</div>
+							)}
+							<div className="dialog-footer-actions">
+								<button
+									type="button"
+									className="button secondary"
+									onClick={onClose}
+								>
+									Hủy
+								</button>
+								<button
+									type="submit"
+									className={`button ${confirmClassName}`}
+									disabled={busy || confirmDisabled}
+								>
+									{busy ? "Đang lưu…" : confirmLabel}
+								</button>
+							</div>
 						</div>
 					)}
 				</form>

@@ -1,3 +1,5 @@
+import { normalizeText } from "../../shared/lib/text";
+
 /** Phiếu cước gửi hàng. */
 export interface Entry {
 	id: number;
@@ -45,7 +47,18 @@ export interface EntryInput {
 	misaDocumentCode?: string;
 	/** Admin chọn nhân viên phụ trách; máy chủ vẫn xác minh nhân viên đang hoạt động. */
 	employeeId?: number;
+	/** Chỉ dùng lúc lưu phiếu: đồng thời cập nhật bảng cước của cặp khách hàng – nhà xe. */
+	saveCarrierRate: boolean;
 }
+
+/** Các quy cách gợi ý khi cặp khách hàng – nhà xe chưa thiết lập bảng cước. */
+export const DEFAULT_ENTRY_RATE_SPECS = [
+	"Tất cả",
+	"Thùng nhỏ",
+	"Thùng trung",
+	"Thùng lớn",
+	"Khác",
+] as const;
 
 export interface EntryFormOptions {
 	currentUserId: number;
@@ -116,6 +129,29 @@ export interface EntryRate {
 	note: string;
 }
 
+/** Một quy cách có sẵn trong bảng cước hoặc là gợi ý để tạo mức mới. */
+export interface EntryRateChoice extends EntryRate {
+	isAssigned: boolean;
+}
+
+/** Đưa quy cách đã gán lên đầu, sau đó thêm quy cách mặc định còn thiếu. */
+export function entryRateOptions(rates: EntryRate[]): EntryRateChoice[] {
+	const assigned = rates.map((rate) => ({ ...rate, isAssigned: true }));
+	const assignedKeys = new Set(rates.map((rate) => normalizeText(rate.spec)));
+	const newOptions = DEFAULT_ENTRY_RATE_SPECS.filter(
+		(spec) => !assignedKeys.has(normalizeText(spec)),
+	).map((spec, index) => ({
+		id: -(index + 1),
+		spec,
+		isDefault: spec === "Tất cả",
+		transportFee: 0,
+		gateFee: 0,
+		note: "",
+		isAssigned: false,
+	}));
+	return [...assigned, ...newOptions];
+}
+
 export interface EntryFilters {
 	from?: string;
 	to?: string;
@@ -150,6 +186,7 @@ export function emptyEntryInput(entryDate: string): EntryInput {
 		misaDocumentDate: "",
 		misaDocumentCode: "",
 		employeeId: undefined,
+		saveCarrierRate: false,
 	};
 }
 
@@ -170,6 +207,7 @@ export function toEntryInput(entry: Entry): EntryInput {
 		misaDocumentDate: entry.misaDocumentDate ?? "",
 		misaDocumentCode: entry.misaDocumentCode ?? "",
 		employeeId: entry.employeeId ?? undefined,
+		saveCarrierRate: false,
 	};
 }
 

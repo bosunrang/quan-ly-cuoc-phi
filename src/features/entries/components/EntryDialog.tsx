@@ -6,11 +6,13 @@ import type {
 	EntryFormOptions,
 	EntryInput,
 	EntryRate,
+	EntryRateChoice,
 	MisaOrder,
 } from "../../../domain/entries/entry.model";
 import {
 	defaultEntryRecipient,
 	entryCarrierOptions,
+	entryRateOptions,
 	validateEntry,
 } from "../../../domain/entries/entry.model";
 import { entryRepository } from "../../../domain/entries/entry.repository";
@@ -50,9 +52,10 @@ function normalizeCustomerSearch(value: string): string {
 }
 
 function rateForSpec(rates: EntryRate[], spec: string): EntryRate | null {
-	if (!spec.trim()) return null;
+	const specKey = normalizeCustomerSearch(spec);
+	if (!specKey) return null;
 	return (
-		rates.find((item) => item.spec === spec) ??
+		rates.find((item) => normalizeCustomerSearch(item.spec) === specKey) ??
 		rates.find((item) => item.isDefault) ??
 		null
 	);
@@ -87,6 +90,35 @@ function CarrierOptionGroup({
 	);
 }
 
+function RateOptionGroup({
+	label,
+	options,
+	onChoose,
+}: {
+	label: string;
+	options: EntryRateChoice[];
+	onChoose: (rate: EntryRateChoice) => void;
+}) {
+	if (!options.length) return null;
+	return (
+		<div className="entry-delivery-option-group">
+			<span className="entry-delivery-option-label">{label}</span>
+			{options.map((rate) => (
+				<button
+					key={rate.id}
+					type="button"
+					role="option"
+					onMouseDown={(event) => event.preventDefault()}
+					onClick={() => onChoose(rate)}
+				>
+					<span>{rate.spec}</span>
+					{rate.isAssigned && <small>Đã gán</small>}
+				</button>
+			))}
+		</div>
+	);
+}
+
 export function EntryDialog({
 	initial,
 	editingId,
@@ -114,6 +146,7 @@ export function EntryDialog({
 	const [error, setError] = useState<string | null>(null);
 	const deferredCustomerSearch = useDeferredValue(customerSearch);
 	const deferredCarrierSearch = useDeferredValue(form.carrier);
+	const deferredRateSearch = useDeferredValue(form.spec);
 
 	useEffect(() => {
 		void (
@@ -177,6 +210,20 @@ export function EntryDialog({
 	const otherCarriers = matchingCarriers.filter((carrier) => !carrier.isLinked);
 	const recipientOptions =
 		(context?.recipients.length ?? 0) >= 2 ? (context?.recipients ?? []) : [];
+	const rateOptions = useMemo(() => entryRateOptions(rates), [rates]);
+	const matchingRateOptions = useMemo(() => {
+		const query = normalizeCustomerSearch(deferredRateSearch.trim());
+		return rateOptions.filter(
+			(rateOption) =>
+				!query || normalizeCustomerSearch(rateOption.spec).includes(query),
+		);
+	}, [deferredRateSearch, rateOptions]);
+	const assignedRateOptions = matchingRateOptions.filter(
+		(rateOption) => rateOption.isAssigned,
+	);
+	const newRateOptions = matchingRateOptions.filter(
+		(rateOption) => !rateOption.isAssigned,
+	);
 
 	const loadOrders = async (id: number, date: string) => {
 		const requestId = ordersRequest.current + 1;
@@ -225,6 +272,7 @@ export function EntryDialog({
 				recipient: "",
 				address: "",
 				spec: "",
+				saveCarrierRate: false,
 			}));
 			if (!preserveSearch) setCustomerSearch("");
 			return;
@@ -250,6 +298,7 @@ export function EntryDialog({
 				address: "",
 				carrier: "",
 				spec: "",
+				saveCarrierRate: false,
 				misaDocumentDate: "",
 				misaDocumentCode: "",
 			}));
@@ -286,7 +335,12 @@ export function EntryDialog({
 		if (!carrier) return;
 		setCarrierId(id);
 		setRate(null);
-		setForm((current) => ({ ...current, carrier: carrier.name, spec: "" }));
+		setForm((current) => ({
+			...current,
+			carrier: carrier.name,
+			spec: "",
+			saveCarrierRate: false,
+		}));
 		void loadRates(nextCustomerId, id);
 	};
 	const chooseCarrier = async (id: number) => {
@@ -295,7 +349,12 @@ export function EntryDialog({
 		setCarrierId(id);
 		setCarrierPickerOpen(false);
 		setRate(null);
-		setForm((current) => ({ ...current, carrier: carrier.name, spec: "" }));
+		setForm((current) => ({
+			...current,
+			carrier: carrier.name,
+			spec: "",
+			saveCarrierRate: false,
+		}));
 		const isAssigned = context?.carriers.some((item) => item.id === id);
 		if (!customerId || !isAssigned) {
 			ratesRequest.current += 1;
@@ -314,6 +373,11 @@ export function EntryDialog({
 	const save = async () => {
 		const problem = validateEntry(form);
 		if (problem) throw new Error(problem);
+		if (form.saveCarrierRate && !form.spec.trim()) {
+			throw new Error(
+				"Vui lòng chọn hoặc nhập quy cách để lưu vào bảng cước nhà xe.",
+			);
+		}
 		if (transportOverRate && !form.rateVarianceNote.trim()) {
 			throw new Error("Vui lòng nhập lý do chênh lệch cước.");
 		}
@@ -332,6 +396,24 @@ export function EntryDialog({
 			onConfirm={save}
 			onClose={onClose}
 			className="entry-dialog"
+			footerStart={
+				options?.isAdmin ? (
+					<label className="entry-save-rate-toggle">
+						<input
+							type="checkbox"
+							checked={form.saveCarrierRate}
+							disabled={!customerId || !carrierId}
+							onChange={(event) =>
+								setForm((current) => ({
+									...current,
+									saveCarrierRate: event.target.checked,
+								}))
+							}
+						/>
+						<span>Lưu quy cách, cước và phí cổng vào bảng cước nhà xe</span>
+					</label>
+				) : null
+			}
 		>
 			{error && <Alert tone="error">{error}</Alert>}
 			<FieldGrid>
@@ -553,7 +635,12 @@ export function EntryDialog({
 									setRates([]);
 									setRate(null);
 									setCarrierPickerOpen(true);
-									setForm((current) => ({ ...current, carrier, spec: "" }));
+									setForm((current) => ({
+										...current,
+										carrier,
+										spec: "",
+										saveCarrierRate: false,
+									}));
 									if (matched) void chooseCarrier(matched.id);
 								}}
 							/>
@@ -633,24 +720,29 @@ export function EntryDialog({
 									setForm((current) => ({ ...current, spec }));
 								}}
 							/>
-							{rateOptionsOpen && rates.length ? (
+							{rateOptionsOpen && carrierId && matchingRateOptions.length ? (
 								<div className="entry-delivery-options" role="listbox">
-									{rates.map((item) => (
-										<button
-											key={item.id}
-											type="button"
-											role="option"
-											onMouseDown={(event) => event.preventDefault()}
-											onClick={() => {
-												setRate(item);
-												setForm((current) => ({ ...current, spec: item.spec }));
-												setRateOptionsOpen(false);
-											}}
-										>
-											{item.spec}
-											{item.isDefault ? " (mặc định)" : ""}
-										</button>
-									))}
+									<RateOptionGroup
+										label="Quy cách đã gán"
+										options={assignedRateOptions}
+										onChoose={(item) => {
+											setRate(
+												rates.find((rateItem) => rateItem.id === item.id) ??
+													null,
+											);
+											setForm((current) => ({ ...current, spec: item.spec }));
+											setRateOptionsOpen(false);
+										}}
+									/>
+									<RateOptionGroup
+										label="Thiết lập quy cách mới"
+										options={newRateOptions}
+										onChoose={(item) => {
+											setRate(null);
+											setForm((current) => ({ ...current, spec: item.spec }));
+											setRateOptionsOpen(false);
+										}}
+									/>
 								</div>
 							) : null}
 						</div>

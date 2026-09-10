@@ -1,1 +1,133 @@
-.entry-dialog{width:min(900px,100%)}.entry-date-field .datebox input.date-text{text-align:left}.entry-misa-orders{border:1px solid var(--status-info-border);border-radius:8px;background:var(--status-info-bg);overflow:hidden}.entry-misa-orders header{padding:9px 11px;display:flex;align-items:center;justify-content:space-between;color:var(--status-info-text)}.entry-misa-orders header div{display:grid;gap:2px}.entry-misa-orders strong{font-size:var(--type-body-sm)}.entry-misa-orders header span,.entry-misa-orders p{font-size:var(--type-caption)}.entry-misa-orders>div{padding:0 8px 8px;display:grid;gap:5px}.entry-misa-orders button{display:grid;grid-template-columns:85px minmax(0,1fr);gap:8px;align-items:start;padding:8px;border:1px solid var(--status-info-border);border-radius:6px;background:var(--panel);color:var(--text-body);font:inherit;text-align:left;cursor:pointer}.entry-misa-orders button:hover{border-color:var(--teal-border);background:var(--surface-accent-faint)}.entry-misa-orders button strong{color:var(--teal);font-size:var(--type-caption)}.entry-misa-orders button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--type-caption)}.entry-misa-orders p{margin:0;padding:0 11px 11px;color:var(--status-info-text)}.entry-rate-standard{padding:9px 11px;border:1px solid var(--status-success-border);border-radius:7px;background:var(--status-success-bg);color:var(--status-success-text);font-size:var(--type-meta)}.entry-rate-warning{display:flex;gap:8px;align-items:flex-start;padding:9px 11px;border:1px solid var(--status-warning-border);border-radius:7px;background:var(--status-warning-bg);color:var(--status-warning-text);font-size:var(--type-meta)}.entry-rate-warning svg{flex:none;margin-top:1px}
+.entry-dialog {
+	width: min(900px, 100%);
+}
+
+.entry-date-field .datebox input.date-text {
+	text-align: left;
+}
+
+.entry-misa-orders {
+	overflow: hidden;
+	border: 1px solid var(--status-info-border);
+	border-radius: 8px;
+	background: var(--status-info-bg);
+}
+
+.entry-misa-orders header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 9px 11px;
+	color: var(--status-info-text);
+}
+
+.entry-misa-orders header div {
+	display: grid;
+	gap: 2px;
+}
+
+.entry-misa-orders strong {
+	font-size: var(--type-body-sm);
+}
+
+.entry-misa-orders header span,
+.entry-misa-orders p {
+	font-size: var(--type-caption);
+}
+
+.entry-misa-orders > div {
+	display: grid;
+	gap: 5px;
+	padding: 0 8px 8px;
+}
+
+.entry-misa-orders button {
+	display: grid;
+	grid-template-columns: 85px minmax(0, 1fr);
+	gap: 8px;
+	align-items: start;
+	padding: 8px;
+	border: 1px solid var(--status-info-border);
+	border-radius: 6px;
+	background: var(--panel);
+	color: var(--text-body);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.entry-misa-orders button:hover {
+	border-color: var(--teal-border);
+	background: var(--surface-accent-faint);
+}
+
+.entry-misa-orders button strong {
+	color: var(--teal);
+	font-size: var(--type-caption);
+}
+
+.entry-misa-orders button span {
+	overflow: hidden;
+	font-size: var(--type-caption);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.entry-misa-orders p {
+	margin: 0;
+	padding: 0 11px 11px;
+	color: var(--status-info-text);
+}
+
+.entry-rate-standard {
+	padding: 9px 11px;
+	border: 1px solid var(--status-success-border);
+	border-radius: 7px;
+	background: var(--status-success-bg);
+	color: var(--status-success-text);
+	font-size: var(--type-meta);
+}
+
+.entry-save-rate-toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 32px;
+	color: var(--text-body);
+	font: var(--type-body-sm) var(--sans);
+	cursor: pointer;
+}
+
+.entry-save-rate-toggle input {
+	width: 16px;
+	height: 16px;
+	margin: 0;
+	accent-color: var(--teal);
+	cursor: pointer;
+}
+
+.entry-save-rate-toggle:has(input:disabled) {
+	color: var(--muted);
+	cursor: not-allowed;
+}
+
+.entry-save-rate-toggle input:disabled {
+	cursor: not-allowed;
+}
+
+.entry-rate-warning {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	padding: 9px 11px;
+	border: 1px solid var(--status-warning-border);
+	border-radius: 7px;
+	background: var(--status-warning-bg);
+	color: var(--status-warning-text);
+	font-size: var(--type-meta);
+}
+
+.entry-rate-warning svg {
+	flex: none;
+	margin-top: 1px;
+}

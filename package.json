@@ -1,6 +1,6 @@
 {
   "name": "app-cuoc-phi",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "private": true,
   "type": "module",
   "description": "Quản lý cước phí giao hàng — dùng chung cho nhiều máy trong mạng nội bộ",
