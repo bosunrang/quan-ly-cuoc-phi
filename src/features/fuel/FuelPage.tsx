@@ -54,7 +54,23 @@ const locationKey = (value: string) =>
 		.replace(/[\u0300-\u036f]/g, "")
 		.replace(/[đĐ]/g, "d")
 		.toLocaleLowerCase("vi-VN")
+		.replace(/[^a-z0-9]+/g, " ")
 		.trim();
+const LOCATION_MATCH_MIN_LENGTH = 12;
+const sameLocation = (left: string, right: string) =>
+	locationKey(left) === locationKey(right);
+const compatibleLocation = (left: string, right: string) => {
+	const leftKey = locationKey(left);
+	const rightKey = locationKey(right);
+	if (leftKey === rightKey) return true;
+	const [shorter, longer] =
+		leftKey.length < rightKey.length
+			? [leftKey, rightKey]
+			: [rightKey, leftKey];
+	return (
+		shorter.length >= LOCATION_MATCH_MIN_LENGTH && longer.includes(shorter)
+	);
+};
 const locationType = {
 	customer: "Khách hàng",
 	carrier: "Nhà xe",
@@ -87,7 +103,7 @@ function LocationInput({
 	placeholder: string;
 	locations: FuelData["locations"];
 	readOnly?: boolean;
-	onChange: (value: string) => void;
+	onChange: (value: string, allowLegacyRouteMatch?: boolean) => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const matches = useMemo(() => {
@@ -105,7 +121,10 @@ function LocationInput({
 		const exact = locations.filter(
 			(item) => locationKey(item.name) === locationKey(value),
 		);
-		onChange(exact.length === 1 ? locationRouteText(exact[0]) : value);
+		onChange(
+			exact.length === 1 ? locationRouteText(exact[0]) : value,
+			exact.length === 1,
+		);
 	};
 	return (
 		<div className="fuel-location-picker">
@@ -132,7 +151,7 @@ function LocationInput({
 								key={`${item.type}-${item.id}`}
 								onMouseDown={(event) => event.preventDefault()}
 								onClick={() => {
-									onChange(locationRouteText(item));
+									onChange(locationRouteText(item), true);
 									setOpen(false);
 								}}
 							>
@@ -246,33 +265,40 @@ export function FuelPage() {
 		setLegs((rows) =>
 			rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
 		);
-	const setDestination = (index: number, destination: string) => {
+	const setDestination = (
+		index: number,
+		destination: string,
+		allowLegacyRouteMatch = false,
+	) => {
 		const from = index ? legs[index - 1].destination : origin;
+		const routeLocationMatches = (left: string, right: string) =>
+			sameLocation(left, right) ||
+			(allowLegacyRouteMatch && compatibleLocation(left, right));
 		const liveDirect = legs.find((leg, legIndex) => {
 			const legFrom = legIndex ? legs[legIndex - 1].destination : origin;
 			return (
 				decimal(leg.km) > 0 &&
-				locationKey(legFrom) === locationKey(from) &&
-				locationKey(leg.destination) === locationKey(destination)
+				routeLocationMatches(legFrom, from) &&
+				routeLocationMatches(leg.destination, destination)
 			);
 		});
 		const liveReverse = legs.find((leg, legIndex) => {
 			const legFrom = legIndex ? legs[legIndex - 1].destination : origin;
 			return (
 				decimal(leg.km) > 0 &&
-				locationKey(legFrom) === locationKey(destination) &&
-				locationKey(leg.destination) === locationKey(from)
+				routeLocationMatches(legFrom, destination) &&
+				routeLocationMatches(leg.destination, from)
 			);
 		});
 		const saved = data?.distances.find(
 			(item) =>
-				locationKey(item.from) === locationKey(from) &&
-				locationKey(item.to) === locationKey(destination),
+				routeLocationMatches(item.from, from) &&
+				routeLocationMatches(item.to, destination),
 		);
 		const reverseSaved = data?.distances.find(
 			(item) =>
-				locationKey(item.from) === locationKey(destination) &&
-				locationKey(item.to) === locationKey(from),
+				routeLocationMatches(item.from, destination) &&
+				routeLocationMatches(item.to, from),
 		);
 		const reusableDistance = liveDirect ?? liveReverse ?? saved ?? reverseSaved;
 		const reusableSource = liveDirect
@@ -543,7 +569,9 @@ export function FuelPage() {
 											ariaLabel={`Điểm ${String.fromCharCode(66 + index)}`}
 											placeholder="Ví dụ: Bệnh viện A, số nhà, đường, tỉnh/TP"
 											locations={data.locations}
-											onChange={(value) => setDestination(index, value)}
+											onChange={(value, allowLegacyRouteMatch) =>
+												setDestination(index, value, allowLegacyRouteMatch)
+											}
 										/>
 									</div>
 									<label>

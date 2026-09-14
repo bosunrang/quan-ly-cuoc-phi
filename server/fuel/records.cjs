@@ -73,7 +73,7 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
     .prepare('SELECT * FROM fuel_prices ORDER BY effective_date DESC, fuel_type, region')
     .all();
   const distances = db
-    .prepare('SELECT id, from_name, to_name, distance_km FROM route_distances ORDER BY updated_at DESC LIMIT 500')
+    .prepare('SELECT id, from_name, to_name, distance_km FROM route_distances ORDER BY updated_at DESC')
     .all();
   const locations = [
     ...db
