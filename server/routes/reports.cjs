@@ -99,6 +99,12 @@ function fuelHistoryReport(db, input) {
   const recordsTotal = Number(
     db.prepare(`SELECT COUNT(*) AS count FROM fuel_records f WHERE ${whereSql}`).get(...params).count,
   );
+  const summary = db.prepare(
+    `SELECT COALESCE(SUM(f.distance_km), 0) AS distance_km,
+            COALESCE(SUM(f.total_fee), 0) AS total_fee
+       FROM fuel_records f
+      WHERE ${whereSql}`,
+  ).get(...params);
   const rows = db.prepare(
     `SELECT f.*, e.full_name AS employee_name
        FROM fuel_records f LEFT JOIN employees e ON e.id = f.employee_id
@@ -145,6 +151,10 @@ function fuelHistoryReport(db, input) {
   return {
     items,
     recordsTotal,
+    summary: {
+      distanceKm: Number(summary.distance_km),
+      totalFee: Number(summary.total_fee),
+    },
     employees: db.prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE').all().map((row) => ({ id: Number(row.id), fullName: row.full_name })),
   };
 }
@@ -359,6 +369,12 @@ function annualSheet(data, year, employee) {
 }
 
 function fuelHistorySheet(items, input, employeeName, company) {
+  const orderedItems = [...items].sort(
+    (left, right) =>
+      left.periodFrom.localeCompare(right.periodFrom) ||
+      left.periodTo.localeCompare(right.periodTo) ||
+      left.id - right.id,
+  );
   const ws = XLSX.utils.aoa_to_sheet([]);
   const whiteFill = { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } };
   const metaStyle = { font: { name: 'Times New Roman', sz: 11 }, alignment: { vertical: 'center' } };
@@ -387,7 +403,7 @@ function fuelHistorySheet(items, input, employeeName, company) {
   );
 
   let row = 8;
-  items.forEach((item, index) => {
+  orderedItems.forEach((item, index) => {
     const legs = item.legs.length
       ? item.legs
       : [{ from: 'Chưa lưu chi tiết lộ trình', to: '', km: item.distanceKm }];

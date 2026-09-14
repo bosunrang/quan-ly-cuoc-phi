@@ -69,13 +69,23 @@ test('lưu, sửa và xóa kỳ tính xăng vẫn giữ tổng tiền và các c
   assert.equal(updated.status, 200);
   assert.equal(updated.data.totalFee, 96_000);
 
+  const later = await call('POST', '/api/fuel/records', {
+    ...body,
+    periodFrom: '2026-09-10',
+    periodTo: '2026-09-12',
+    legs: [{ from: 'C', to: 'D', km: 20 }],
+  });
+  assert.equal(later.status, 200);
+
   const history = await call(
     'GET',
     '/api/reports/fuel-history?from=2026-09-01&to=2026-09-30&fuelType=X%C4%83ng%20E10',
   );
   assert.equal(history.status, 200);
-  assert.equal(history.data.recordsTotal, 1);
-  assert.deepEqual(history.data.items[0], {
+  assert.equal(history.data.recordsTotal, 2);
+  assert.deepEqual(history.data.summary, { distanceKm: 60, totalFee: 144_000 });
+  assert.deepEqual(history.data.items.map((item) => item.id), [later.data.id, created.data.id]);
+  assert.deepEqual(history.data.items[1], {
     id: created.data.id,
     periodFrom: '2026-09-01',
     periodTo: '2026-09-05',
@@ -105,10 +115,16 @@ test('lưu, sửa và xóa kỳ tính xăng vẫn giữ tổng tiền và các c
   assert.deepEqual(workbook.SheetNames, ['Nhân viên tính xăng']);
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   assert.equal(sheet.A1.v, 'BẢNG THỐNG KÊ TIỀN XĂNG');
+  assert.equal(sheet.A9.v, 1);
+  assert.equal(sheet.B9.v, '01/09/2026 - 05/09/2026');
   assert.equal(sheet.C9.v, 'A → B');
   assert.equal(sheet.D9.v, '40 Km');
   assert.equal(sheet.F9.v, 96_000);
+  assert.equal(sheet.A10.v, 2);
+  assert.equal(sheet.B10.v, '10/09/2026 - 12/09/2026');
 
   const deleted = await call('DELETE', `/api/fuel/records/${created.data.id}`);
   assert.deepEqual(deleted.data, { ok: true, voided: false });
+  const deletedLater = await call('DELETE', `/api/fuel/records/${later.data.id}`);
+  assert.deepEqual(deletedLater.data, { ok: true, voided: false });
 });

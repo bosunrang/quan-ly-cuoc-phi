@@ -31,6 +31,7 @@
 @media (max-width: 760px) { .report-variance-header{align-items:stretch;flex-direction:column;gap:0}.report-variance-filters{grid-template-columns:repeat(2,minmax(0,1fr));padding-top:0} }
 @media (max-width: 640px) { .report-form, .report-form-annual, .report-extra-cost, .report-extra-cost.is-assigned { grid-template-columns: 1fr; } .report-extra-cost-remove { justify-self: start; } .report-card-footer { align-items: stretch; flex-direction: column; } .report-card-footer .button { width: 100%; } .report-variance-filters{grid-template-columns:1fr;padding-top:0} }
 .fuel-price-report-card { overflow: hidden; }
+.fuel-price-report-stats { margin: 0; }
 .fuel-price-report-header { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
 .fuel-price-report-header > .panel-header { flex: 1 1 auto; min-width: 250px; border-bottom: 0; }
 .fuel-price-report-filters { display: grid; flex: 0 1 690px; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 12px; padding: 16px; }
@@ -39,6 +40,7 @@
 .fuel-price-report-table table { min-width: 1120px; }
 .fuel-price-report-table th, .fuel-price-report-table td { text-align: center; }
 .fuel-price-report-table th:first-child, .fuel-price-report-table td:first-child, .fuel-price-report-table th:nth-child(3), .fuel-price-report-table td:nth-child(3) { text-align: left; }
+.fuel-price-report-table.table-scroll th:nth-child(2), .fuel-price-report-table.table-scroll th:nth-child(4), .fuel-price-report-table.table-scroll th:nth-child(5), .fuel-price-report-table.table-scroll th:nth-child(6), .fuel-price-report-table.table-scroll td:nth-child(2), .fuel-price-report-table.table-scroll td:nth-child(5), .fuel-price-report-table.table-scroll .fuel-route-distance, .fuel-price-report-table.table-scroll .fuel-price-report-money { text-align: center; }
 .fuel-price-report-table th:first-child { width: 180px; }
 .fuel-price-report-table th:nth-child(3) { width: 52%; }
 .fuel-price-report-table td:nth-child(n + 4), .fuel-route-distance { white-space: nowrap; }

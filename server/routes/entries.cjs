@@ -128,6 +128,34 @@ function ensureCarrierRateSavingPermission(user, body) {
   }
 }
 
+/** Nhân viên chỉ được lập phiếu theo quy cách đã có trong bảng giá của Admin. */
+function ensureStaffUsesConfiguredRate(db, user, body, input) {
+  if (canSeeEveryone(user)) return;
+  if (!input.spec) {
+    throw badRequest('Vui lòng chọn quy cách đã được quản trị viên thiết lập.');
+  }
+  const customer = customerForEntry(db, body, input.customer);
+  const carrier = db.prepare('SELECT id FROM carriers WHERE carrier_key = ?').get(
+    normalizeSearchText(input.carrier),
+  );
+  if (!customer || !carrier) {
+    throw badRequest('Vui lòng chọn khách hàng và nhà xe có bảng cước đã thiết lập.');
+  }
+  const specKey = normalizeSearchText(input.spec);
+  const configuredRate = db.prepare(
+    `SELECT 1 FROM carrier_customer_rates rate
+       INNER JOIN carrier_customers assignment
+         ON assignment.customer_id = rate.customer_id
+        AND assignment.carrier_id = rate.carrier_id
+      WHERE rate.customer_id = ? AND rate.carrier_id = ?
+        AND (rate.spec_key = ? OR (rate.is_default = 1 AND ? = 'tat ca'))
+      LIMIT 1`,
+  ).get(customer.id, carrier.id, specKey, specKey);
+  if (!configuredRate) {
+    throw badRequest('Quy cách chưa được quản trị viên thiết lập cho khách hàng và nhà xe này.');
+  }
+}
+
 /** Lưu hoặc cập nhật đúng một quy cách của cặp khách hàng – nhà xe. */
 function saveCarrierRate(db, user, customerId, carrierId, input, at) {
   if (!input.spec) {
@@ -392,7 +420,9 @@ function register(router) {
       customers: customers.map((row) => ({
         id: row.id, name: row.customer_name, provinceCity: row.province_city,
       })),
-      carriers: carriers.map((row) => ({ id: row.id, name: row.name })),
+      carriers: canSeeEveryone(c.user)
+        ? carriers.map((row) => ({ id: row.id, name: row.name }))
+        : [],
       employees: employees.map((row) => ({ id: row.id, userId: row.user_id, name: row.full_name })),
     };
   });
@@ -481,6 +511,7 @@ function register(router) {
 	ensureCarrierRateSavingPermission(c.user, c.body);
     const input = readEntryInput(c.body);
     const employeeId = readEmployeeId(c.db, c.user, c.body.employeeId);
+	ensureStaffUsesConfiguredRate(c.db, c.user, c.body, input);
     ensureVarianceReason(c.db, c.body, input);
     const at = new Date().toISOString();
 
@@ -532,6 +563,7 @@ function register(router) {
 	ensureCarrierRateSavingPermission(c.user, c.body);
     const before = loadOwned(c.db, c.user, Number(c.params.id));
     const input = readEntryInput(c.body);
+	ensureStaffUsesConfiguredRate(c.db, c.user, c.body, input);
     const employeeId = canSeeEveryone(c.user)
       ? readEmployeeId(c.db, c.user, c.body.employeeId)
       : before.employee_id;

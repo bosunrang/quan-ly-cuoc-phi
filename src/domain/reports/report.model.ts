@@ -32,6 +32,7 @@ export interface CarrierVarianceReport {
 export interface FuelHistoryReport {
 	employees: ReportEmployee[];
 	recordsTotal: number;
+	summary: { distanceKm: number; totalFee: number };
 	items: Array<{
 		id: number;
 		periodFrom: string;

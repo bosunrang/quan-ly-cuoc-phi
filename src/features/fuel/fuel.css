@@ -1,6 +1,6 @@
 .fuel-calculator, .fuel-history-panel { padding: 0; overflow: hidden; }
 .fuel-calculator { container-type: inline-size; }
-.fuel-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(360px, .9fr); gap: var(--space-4); align-items: start; }
+.fuel-layout { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(360px, .85fr); gap: var(--space-4); align-items: start; }
 .fuel-section-head { display: flex; box-sizing: border-box; min-height: 76px; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--line-soft); background: linear-gradient(110deg, var(--panel), var(--surface-subtle)); }
 .fuel-section-head .fuel-section-title strong, .fuel-section-head .fuel-section-title span { display: block; }
 .fuel-section-head .fuel-section-title strong { color: var(--ink); font-size: var(--type-subhead); line-height: var(--line-heading); }
@@ -24,15 +24,15 @@
 .fuel-route-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .fuel-route-head strong { display: block; font-size: var(--type-body-sm); color: var(--ink); }
 .fuel-route-head span { display: block; margin-top: 3px; color: var(--muted); font-size: var(--type-caption); }
-.fuel-leg { position: relative; display: grid; grid-template-columns: 28px minmax(180px,1.25fr) minmax(190px,1.3fr) 92px 94px; gap: 10px; align-items: end; padding: 16px 0; border-top: 1px solid var(--line-soft); }
-.fuel-leg-removable { grid-template-columns: 28px minmax(180px,1.25fr) minmax(190px,1.3fr) 92px 94px 34px; }
+.fuel-leg { position: relative; display: grid; grid-template-columns: 28px minmax(180px,1.25fr) minmax(190px,1.3fr) 76px 94px; gap: 10px; align-items: end; padding: 16px 0; border-top: 1px solid var(--line-soft); }
+.fuel-leg-removable { grid-template-columns: 28px minmax(180px,1.25fr) minmax(190px,1.3fr) 76px 94px 34px; }
 .fuel-leg input[readonly] { background: var(--surface-subtle); color: var(--muted); }
 .fuel-location-picker { position: relative; }
 .fuel-location-menu { position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; left: 0; max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); box-shadow: var(--shadow-elevated); }
 .fuel-location-menu button { display: grid; width: 100%; gap: 2px; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--line-soft); background: var(--panel); color: var(--text-body); font: inherit; text-align: left; cursor: pointer; }
 .fuel-location-menu button:last-child { border-bottom: 0; }
 .fuel-location-menu button:hover { background: var(--surface-accent-faint); }
-.fuel-location-menu strong { font-size: var(--type-body-sm); }
+.fuel-location-menu strong { font-size: var(--type-body-sm); font-weight: 700; }
 .fuel-location-menu span, .fuel-location-menu p { margin: 0; color: var(--muted); font-size: var(--type-overline); }
 .fuel-location-menu p { padding: 10px; }
 .fuel-leg-fee-field { display: grid; gap: 6px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; }
@@ -120,7 +120,7 @@
 .fuel-consumption-fields input:focus { outline: 0; border-color: var(--teal-border); box-shadow: 0 0 0 3px var(--surface-accent-faint); }
 @media (max-width: 640px) { .fuel-price-dialog .fuel-price-fields, .fuel-online-group { grid-template-columns: 1fr; } }
 @media (max-width: 1450px) { .fuel-layout { grid-template-columns: 1fr; } }
-@media (max-width: 1250px) { .fuel-leg { grid-template-columns: 28px minmax(150px,1fr) minmax(160px,1fr) 88px 82px; } .fuel-leg-removable { grid-template-columns: 28px minmax(150px,1fr) minmax(160px,1fr) 88px 82px 34px; } }
+@media (max-width: 1250px) { .fuel-leg { grid-template-columns: 28px minmax(150px,1fr) minmax(160px,1fr) 76px 82px; } .fuel-leg-removable { grid-template-columns: 28px minmax(150px,1fr) minmax(160px,1fr) 76px 82px 34px; } }
 @media (max-width: 820px) { .fuel-leg { grid-template-columns: 28px 1fr 1fr; } .fuel-leg-fee { grid-column: 2; } .fuel-delete-leg { justify-self: end; } .fuel-calculator-footer { justify-content: flex-start; flex-wrap: wrap; } }
 @media (max-width: 720px) { .fuel-history-list article { grid-template-columns: minmax(0, 1fr) 112px auto; } .fuel-history-metric.is-total { display: none; } }
 @media (max-width: 560px) { .fuel-section-head { align-items: flex-start; padding: 14px; } .fuel-route-head { align-items: flex-start; flex-direction: column; } .fuel-leg { grid-template-columns: 28px 1fr; } .fuel-leg-step { grid-row: span 4; } .fuel-delete-leg { grid-row: 1; grid-column: 2; justify-self: end; } .fuel-calculator-footer { gap: 12px; padding: 14px; } .fuel-calculator-footer > div + div { padding-left: 0; border-left: 0; } .fuel-calculator-footer .button { width: 100%; } .fuel-history-filter { width: 100%; min-width: 0; } .fuel-history-list article { grid-template-columns: minmax(0, 1fr) auto; } .fuel-history-metric { display: none; } .fuel-history-actions { grid-column: 1 / -1; justify-content: flex-start; } }

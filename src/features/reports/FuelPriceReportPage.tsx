@@ -1,4 +1,12 @@
-import { ChevronLeft, ChevronRight, Download, Fuel } from "lucide-react";
+import {
+	CalendarDays,
+	ChevronLeft,
+	ChevronRight,
+	Download,
+	Fuel,
+	MapPin,
+	WalletCards,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FuelHistoryReport } from "../../domain/reports/report.model";
 import { reportRepository } from "../../domain/reports/report.repository";
@@ -141,6 +149,29 @@ export function FuelPriceReportPage() {
 					<Download size={16} />
 					{exporting ? "Đang xuất..." : "Xuất Excel"}
 				</button>
+			</section>
+			<section className="stat-overview fuel-price-report-stats">
+				<article>
+					<span className="stat-icon neutral">
+						<CalendarDays size={18} />
+					</span>
+					<span>Kỳ tính</span>
+					<strong>{data.recordsTotal}</strong>
+				</article>
+				<article>
+					<span className="stat-icon success">
+						<MapPin size={18} />
+					</span>
+					<span>Tổng quãng đường</span>
+					<strong>{decimal(data.summary.distanceKm)} km</strong>
+				</article>
+				<article>
+					<span className="stat-icon info">
+						<WalletCards size={18} />
+					</span>
+					<span>Tổng tiền xăng</span>
+					<strong>{formatMoney(data.summary.totalFee)} đ</strong>
+				</article>
 			</section>
 			<section className="panel fuel-price-report-card">
 				<div className="fuel-price-report-header">

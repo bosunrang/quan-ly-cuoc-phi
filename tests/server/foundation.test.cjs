@@ -60,6 +60,33 @@ function newEntry(overrides = {}) {
   };
 }
 
+async function configureStaffRate(customerName) {
+  const customer = await call('POST', '/api/customers', {
+    token: adminToken,
+    body: { customerName },
+  });
+  assert.equal(customer.status, 200);
+  const carrier = await call('POST', '/api/carriers', {
+    token: adminToken,
+    body: { name: `Nhà xe ${customerName}` },
+  });
+  assert.equal(carrier.status, 200);
+  await call('PATCH', `/api/carriers/${carrier.data.id}/customers`, {
+    token: adminToken,
+    body: { customerIds: [customer.data.id] },
+  });
+  const rate = await call(
+    'POST',
+    `/api/carriers/${carrier.data.id}/customers/${customer.data.id}/rates`,
+    {
+      token: adminToken,
+      body: { isDefault: true, transportFee: 200000, gateFee: 5000, note: '' },
+    },
+  );
+  assert.equal(rate.status, 200);
+  return { customer: customer.data, carrier: carrier.data };
+}
+
 before(async () => {
   workDir = mkdtempSync(join(tmpdir(), 'cuocphi-test-'));
   app = createApp({ dbFile: join(workDir, 'test.sqlite'), staticRoot: null });
@@ -665,6 +692,36 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     assert.equal(staffCannotSaveRate.status, 400);
     assert.match(staffCannotSaveRate.data.error, /Chỉ quản trị viên/);
 
+    const staffCannotUseUnconfiguredSpec = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: newEntry({
+        customerId: customer.data.id,
+        customer: customer.data.customerName,
+        carrier: carrier.data.name,
+        spec: 'Thùng trung',
+        transportFee: 60000,
+        gateFee: 17000,
+      }),
+    });
+    assert.equal(staffCannotUseUnconfiguredSpec.status, 400);
+    assert.match(staffCannotUseUnconfiguredSpec.data.error, /Quy cách chưa được quản trị viên/);
+
+    const staffConfiguredEntry = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: newEntry({
+        customerId: customer.data.id,
+        customer: customer.data.customerName,
+        carrier: carrier.data.name,
+        spec: '01 thùng nhỏ',
+        transportFee: 50000,
+        gateFee: 15000,
+      }),
+    });
+    assert.equal(staffConfiguredEntry.status, 200);
+    await call('DELETE', `/api/entries/${staffConfiguredEntry.data.id}`, {
+      token: adminToken,
+    });
+
     const savedFromEntry = await call('POST', '/api/entries', {
       token: adminToken,
       body: newEntry({
@@ -881,9 +938,14 @@ describe('phân quyền thẻ', () => {
 
 describe('mỗi người chỉ thấy phiếu của mình', () => {
   test('nhân viên tạo phiếu và chỉ thấy phiếu của mình', async () => {
+    const staffDelivery = await configureStaffRate('Khách của A');
     await call('POST', '/api/entries', {
       token: staffAToken,
-      body: newEntry({ customer: 'Khách của A' }),
+      body: newEntry({
+        customer: staffDelivery.customer.customerName,
+        carrier: staffDelivery.carrier.name,
+        spec: 'Tất cả',
+      }),
     });
     await call('POST', '/api/entries', {
       token: adminToken,
@@ -903,10 +965,16 @@ describe('mỗi người chỉ thấy phiếu của mình', () => {
 
   test('người tạo lấy từ phiên đăng nhập, không lấy từ dữ liệu gửi lên', async () => {
     const admin = await call('GET', '/api/me', { token: adminToken });
+    const staffDelivery = await configureStaffRate('Giả mạo');
     // Nhân viên A cố khai phiếu này là của Admin.
     const created = await call('POST', '/api/entries', {
       token: staffAToken,
-      body: newEntry({ customer: 'Giả mạo', createdBy: admin.data.user.id }),
+      body: newEntry({
+        customer: staffDelivery.customer.customerName,
+        carrier: staffDelivery.carrier.name,
+        spec: 'Tất cả',
+        createdBy: admin.data.user.id,
+      }),
     });
     assert.equal(created.status, 200);
 
