@@ -91,7 +91,7 @@
 .fuel-online-group strong { grid-column: 1 / -1; color: var(--text-body); font-size: var(--type-meta); }
 .fuel-online-choice { display: block; width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text-body); text-align: left; cursor: pointer; }
 .fuel-online-choice:hover { border-color: var(--teal-border); background: var(--surface-accent-faint); }
-.fuel-price-dialog .fuel-price-fields { display: grid; grid-template-columns: 145px 120px 150px minmax(180px, 1fr); gap: 12px; padding: 0; }
+.fuel-price-dialog .fuel-price-fields { display: grid; grid-template-columns: 145px 120px 95px 92px minmax(0, 1fr); gap: 12px; padding: 0; }
 .fuel-price-dialog .fuel-price-fields > label, .fuel-price-dialog .fuel-date-field { display: grid; gap: 6px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; }
 .fuel-price-dialog .fuel-price-fields > label > input, .fuel-price-dialog .fuel-price-fields > label > select { box-sizing: border-box; width: 100%; height: 36px; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text-body); font-size: var(--type-meta); }
 .fuel-price-dialog > .button.secondary { width: 100%; margin-top: 14px; }

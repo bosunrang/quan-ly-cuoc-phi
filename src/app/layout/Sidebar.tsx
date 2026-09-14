@@ -53,12 +53,6 @@ export function Sidebar({
 					<ChevronLeft size={17} />
 				</button>
 			</div>
-
-			<div className="sync-status">
-				<span className="sync-dot" />
-				{!collapsed && <span>Dữ liệu dùng chung</span>}
-			</div>
-
 			<nav className="nav-groups" aria-label="Điều hướng chính">
 				{groups.map((group) => (
 					<div className="nav-group" key={group.label}>

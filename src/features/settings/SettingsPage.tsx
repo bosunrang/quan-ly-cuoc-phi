@@ -422,6 +422,7 @@ export function SettingsPage({
 							? "Xóa tất cả dữ liệu"
 							: "Xóa dữ liệu đã chọn"
 					}
+					confirmClassName="danger"
 					confirmDisabled={deleteGroups.length === 0}
 					className="settings-delete-dialog"
 					onClose={() => setShowDeleteDialog(false)}
@@ -438,6 +439,7 @@ export function SettingsPage({
 						<button
 							type="button"
 							className={`settings-delete-option settings-delete-all ${deleteGroups.length === 6 ? "is-selected" : ""}`}
+							aria-pressed={deleteGroups.length === 6}
 							onClick={() =>
 								setDeleteGroups(
 									deleteGroups.length === 6
@@ -453,6 +455,9 @@ export function SettingsPage({
 								)
 							}
 						>
+							<span className="settings-delete-check">
+								{deleteGroups.length === 6 && <Check size={13} />}
+							</span>
 							<strong>Tất cả dữ liệu nghiệp vụ</strong>
 							<span>
 								Phiếu, MISA, khách hàng, nhà xe, nhân viên và tính xăng
@@ -480,6 +485,7 @@ export function SettingsPage({
 								key={group}
 								type="button"
 								className={`settings-delete-option ${deleteGroups.includes(group) ? "is-selected" : ""}`}
+								aria-pressed={deleteGroups.includes(group)}
 								onClick={() => toggleDeleteGroup(group)}
 							>
 								<span className="settings-delete-check">

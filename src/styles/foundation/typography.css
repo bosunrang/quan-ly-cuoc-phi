@@ -3,7 +3,7 @@ body{font-size:var(--type-body);line-height:var(--line-body)}
 
 /* Điều hướng và nhận diện */
 .brand-copy strong{font-size:var(--type-heading-sm);line-height:var(--line-heading)}
-.brand-copy span,.sync-status,.sidebar-footer strong{font-size:var(--type-caption);line-height:var(--line-compact)}
+.brand-copy span,.sidebar-footer strong{font-size:var(--type-caption);line-height:var(--line-compact)}
 .sidebar-footer span{font-size:var(--type-overline);line-height:var(--line-compact)}
 .nav-group-label{font-size:var(--type-nav-section);line-height:var(--line-compact)}
 .nav-item{font-size:var(--type-subhead);line-height:var(--line-compact)}

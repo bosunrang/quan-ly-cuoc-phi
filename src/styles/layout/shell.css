@@ -15,9 +15,6 @@
 .is-collapsed .brand{justify-content:center}
 .is-collapsed .sidebar-toggle{position:absolute;right:-25px;background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow-control)}
 .is-collapsed .sidebar-toggle svg{transform:rotate(180deg)}
-.sync-status{margin:14px 4px 0;padding:9px 10px;display:flex;align-items:center;gap:8px;border-radius:7px;background:var(--sidebar-surface-muted);font-size:var(--type-caption);color:var(--sidebar-status);white-space:nowrap}
-.is-collapsed .sync-status{justify-content:center;padding:9px 0}
-.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--sidebar-success);box-shadow:var(--sidebar-success-ring)}
 .nav-groups{min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--sidebar-scroll) transparent;padding:15px 0 11px;display:flex;flex-direction:column;gap:18px}
 .nav-group{flex:none}
 .nav-group-label{font-size:var(--type-nav-section);font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--sidebar-section);padding:0 11px 7px}

@@ -4,10 +4,10 @@ import { pageConfig } from "../src/app/pageConfig";
 import type { PageId } from "../src/types";
 
 describe("thanh điều hướng theo quyền", () => {
-	it("nhân viên chỉ được cấp thẻ nhập cước thì chỉ thấy nhóm Theo dõi", () => {
+	it("nhân viên chỉ được cấp thẻ nhập cước thì chỉ thấy nhóm Theo dõi & vận hành", () => {
 		const groups = visibleGroups(["entries"]);
 		expect(groups).toHaveLength(1);
-		expect(groups[0].label).toBe("Theo dõi");
+		expect(groups[0].label).toBe("Theo dõi & vận hành");
 		expect(groups[0].items.map((item) => item.id)).toEqual(["entries"]);
 	});
 
@@ -23,6 +23,32 @@ describe("thanh điều hướng theo quyền", () => {
 			all.length,
 		);
 	});
+
+	it("giữ đúng cấu trúc menu nghiệp vụ đã duyệt", () => {
+		expect(
+			navGroups.map((group) => ({
+				label: group.label,
+				items: group.items.map((item) => item.label),
+			})),
+		).toEqual([
+			{
+				label: "Theo dõi & vận hành",
+				items: ["Tổng quan", "Nhập chi phí gửi hàng", "Tính giá xăng"],
+			},
+			{
+				label: "Dữ liệu",
+				items: ["Dữ liệu MISA", "Khách hàng", "Nhân viên", "Nhà xe"],
+			},
+			{
+				label: "Báo cáo",
+				items: ["Cước gửi hàng", "Cước chênh lệch", "Chi phí tiền xăng"],
+			},
+			{
+				label: "Hệ thống",
+				items: ["Người dùng", "Nhật ký hoạt động", "Cài đặt"],
+			},
+		]);
+	});
 });
 
 describe("cấu hình trang", () => {
@@ -31,5 +57,9 @@ describe("cấu hình trang", () => {
 			expect(pageConfig[item.id]?.title, item.id).toBeTruthy();
 			expect(pageConfig[item.id]?.subtitle, item.id).toBeTruthy();
 		}
+	});
+
+	it("trang báo cáo cước gửi hàng dùng tên mới", () => {
+		expect(pageConfig.reports_employee.title).toBe("Báo cáo cước gửi hàng");
 	});
 });

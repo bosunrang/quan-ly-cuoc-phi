@@ -214,7 +214,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 				<div>
 					<h2>
 						{section === "employee"
-							? "Báo cáo cước nhân viên"
+							? "Báo cáo cước gửi hàng"
 							: "Báo cáo chênh lệch cước nhà xe"}
 					</h2>
 					<p>

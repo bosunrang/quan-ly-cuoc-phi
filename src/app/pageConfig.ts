@@ -36,7 +36,7 @@ export const pageConfig: Record<PageId, PageMeta> = {
 		subtitle: "Quy đổi chi phí nhiên liệu theo quãng đường",
 	},
 	reports_employee: {
-		title: "Báo cáo cước nhân viên",
+		title: "Báo cáo cước gửi hàng",
 		subtitle: "Tổng hợp chi phí giao hàng theo nhân viên và kỳ báo cáo",
 	},
 	reports_carrier: {

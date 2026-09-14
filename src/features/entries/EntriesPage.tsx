@@ -3,7 +3,6 @@ import {
 	ChevronRight,
 	Pencil,
 	Plus,
-	RefreshCw,
 	Search,
 	Trash2,
 	Truck,
@@ -230,13 +229,6 @@ export function EntriesPage() {
 							onChange={(to) => updateFilters({ to: to || undefined })}
 						/>
 					</label>
-					<button
-						type="button"
-						className="button primary"
-						onClick={() => void load()}
-					>
-						<RefreshCw size={15} /> Làm mới
-					</button>
 				</div>
 				{data.items.length === 0 ? (
 					<EmptyState>

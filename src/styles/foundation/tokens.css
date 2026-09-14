@@ -131,19 +131,15 @@
   --sidebar-text-muted:#aab9c1;
   --sidebar-icon:#90a3ad;
   --sidebar-section:#788d99;
-  --sidebar-status:#bfccd2;
   --sidebar-footer:#adbbc2;
   --sidebar-footer-strong:#dce4e8;
   --sidebar-scroll:#50626c;
   --sidebar-toggle:#b7c4ca;
-  --sidebar-success:#57c7a0;
   --sidebar-border:rgba(255,255,255,.1);
   --sidebar-surface:rgba(255,255,255,.06);
-  --sidebar-surface-muted:rgba(255,255,255,.055);
   --sidebar-surface-strong:rgba(255,255,255,.12);
   --sidebar-icon-surface:rgba(255,255,255,.07);
   --sidebar-brand-shadow:0 6px 18px rgba(0,0,0,.16);
-  --sidebar-success-ring:0 0 0 3px rgba(87,199,160,.12);
 
   /* Banner và biểu đồ. */
   --summary-bg:#17303f;

@@ -35,28 +35,32 @@ export interface NavGroup {
  */
 export const navGroups: NavGroup[] = [
 	{
-		label: "Theo dõi",
+		label: "Theo dõi & vận hành",
 		items: [
 			{ id: "dashboard", label: "Tổng quan", icon: LayoutGrid },
 			{ id: "entries", label: "Nhập chi phí gửi hàng", icon: Receipt },
-			{ id: "misa", label: "Dữ liệu MISA", icon: Database },
+			{ id: "fuel", label: "Tính giá xăng", icon: Fuel },
 		],
 	},
 	{
-		label: "Vận hành",
+		label: "Dữ liệu",
 		items: [
-			{ id: "employees", label: "Nhân viên", icon: User },
+			{ id: "misa", label: "Dữ liệu MISA", icon: Database },
 			{ id: "customers", label: "Khách hàng", icon: Building2 },
+			{ id: "employees", label: "Nhân viên", icon: User },
 			{ id: "carriers", label: "Nhà xe", icon: Truck },
-			{ id: "fuel", label: "Tính giá xăng", icon: Fuel },
 		],
 	},
 	{
 		label: "Báo cáo",
 		items: [
-			{ id: "reports_employee", label: "Cước nhân viên", icon: ChartColumn },
-			{ id: "reports_carrier", label: "Cước nhà xe", icon: FileChartColumn },
-			{ id: "reports_fuel_price", label: "Tiền xăng", icon: Fuel },
+			{ id: "reports_employee", label: "Cước gửi hàng", icon: ChartColumn },
+			{
+				id: "reports_carrier",
+				label: "Cước chênh lệch",
+				icon: FileChartColumn,
+			},
+			{ id: "reports_fuel_price", label: "Chi phí tiền xăng", icon: Fuel },
 		],
 	},
 	{

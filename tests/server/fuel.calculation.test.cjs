@@ -3,11 +3,17 @@
 const assert = require('node:assert/strict');
 const { describe, test } = require('node:test');
 const {
+  FUEL_TYPES,
   calculateFuelTotal,
   fuelRecordInput,
 } = require('../../server/fuel/calculation.cjs');
 
 describe('tính tiền xăng', () => {
+	 test('danh mục nhiên liệu có E10 và E5 để cập nhật giá', () => {
+		assert.ok(FUEL_TYPES.includes('Xăng E10'));
+		assert.ok(FUEL_TYPES.includes('Xăng E5 RON 92'));
+	});
+
   test('tổng km của các chặng được ưu tiên và tổng tiền làm tròn theo đồng', () => {
     const input = fuelRecordInput({
       periodFrom: '2026-09-01',

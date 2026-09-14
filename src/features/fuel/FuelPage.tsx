@@ -23,6 +23,12 @@ import { Dialog } from "../../shared/ui/Dialog";
 import { LoadingState } from "../../shared/ui/Panel";
 
 type Leg = { id: string; destination: string; km: string; source?: string };
+type OnlineFuelPrice = {
+	name: string;
+	region1: number;
+	region2: number;
+	source: string;
+};
 const newLegId = () =>
 	typeof globalThis.crypto?.randomUUID === "function"
 		? globalThis.crypto.randomUUID()
@@ -33,6 +39,7 @@ const newLeg = (): Leg => ({
 	km: "",
 });
 const DEFAULT_FUEL_TYPE = "Xăng E10";
+const E5_FUEL_TYPE = "Xăng E5 RON 92";
 const DEFAULT_REGION = "region1" as const;
 const CONSUMPTION_DRAFT_KEY = "fuel-consumption-liters";
 const BASE_KM_DRAFT_KEY = "fuel-consumption-base-km";
@@ -786,10 +793,16 @@ export function FuelPage() {
 					defaultDate={periodTo}
 					defaultPrice={fuelPrice}
 					prices={data.prices}
+					fuelTypes={[DEFAULT_FUEL_TYPE, E5_FUEL_TYPE]}
 					close={() => setPriceEditor(false)}
 					saved={async (savedPrice) => {
 						setPriceEditor(false);
-						setFuelPrice(formatMoney(savedPrice.price));
+						if (
+							savedPrice.fuelType === DEFAULT_FUEL_TYPE &&
+							savedPrice.region === DEFAULT_REGION
+						) {
+							setFuelPrice(formatMoney(savedPrice.price));
+						}
 						await load();
 					}}
 				/>
@@ -1077,29 +1090,31 @@ function PriceDialog({
 	defaultDate,
 	defaultPrice,
 	prices,
+	fuelTypes,
 	close,
 	saved,
 }: {
 	defaultDate: string;
 	defaultPrice: string;
 	prices: FuelPrice[];
+	fuelTypes: string[];
 	close: () => void;
 	saved: (price: FuelPrice) => Promise<void>;
 }) {
 	const [date, setDate] = useState(defaultDate),
 		[price, setPrice] = useState(defaultPrice),
+		[fuelType, setFuelType] = useState(DEFAULT_FUEL_TYPE),
 		[region, setRegion] = useState<FuelPrice["region"]>(DEFAULT_REGION),
 		[source, setSource] = useState("Nhập tay"),
-		[online, setOnline] = useState<
-			Array<{ name: string; region1: number; region2: number }>
-		>([]);
+		[online, setOnline] = useState<OnlineFuelPrice[]>([]);
 	const fillStoredPrice = (
 		nextDate: string,
 		nextRegion: FuelPrice["region"],
+		nextFuelType = fuelType,
 	) => {
 		const stored = prices.find(
 			(item) =>
-				item.fuelType === DEFAULT_FUEL_TYPE &&
+				item.fuelType === nextFuelType &&
 				item.region === nextRegion &&
 				item.effectiveDate <= nextDate,
 		);
@@ -1114,6 +1129,19 @@ function PriceDialog({
 		setRegion(nextRegion);
 		fillStoredPrice(date, nextRegion);
 	};
+	const selectFuelType = (nextFuelType: string) => {
+		setFuelType(nextFuelType);
+		fillStoredPrice(date, region, nextFuelType);
+	};
+	const selectOnlinePrice = (
+		item: OnlineFuelPrice,
+		nextRegion: FuelPrice["region"],
+	) => {
+		selectFuelType(item.name.includes("E5") ? E5_FUEL_TYPE : DEFAULT_FUEL_TYPE);
+		setRegion(nextRegion);
+		setPrice(formatMoney(item[nextRegion]));
+		setSource(item.source);
+	};
 	return (
 		<Dialog
 			className="fuel-price-dialog"
@@ -1124,7 +1152,7 @@ function PriceDialog({
 			onConfirm={async () => {
 				const savedPrice = await fuelRepository.savePrice({
 					effectiveDate: date,
-					fuelType: DEFAULT_FUEL_TYPE,
+					fuelType,
 					region,
 					price: Number(price.replace(/\D/g, "")),
 					source,
@@ -1141,6 +1169,19 @@ function PriceDialog({
 						onChange={selectDate}
 					/>
 				</div>
+				<label>
+					Loại xăng
+					<select
+						value={fuelType}
+						onChange={(event) => selectFuelType(event.target.value)}
+					>
+						{fuelTypes.map((item) => (
+							<option key={item} value={item}>
+								{item}
+							</option>
+						))}
+					</select>
+				</label>
 				<label>
 					Khu vực
 					<select
@@ -1177,7 +1218,9 @@ function PriceDialog({
 				type="button"
 				onClick={async () => {
 					const next = await fuelRepository.online();
-					setOnline(next.items);
+					setOnline(
+						next.items.map((item) => ({ ...item, source: next.source })),
+					);
 					setSource(next.source);
 					if (next.priceDate) setDate(next.priceDate);
 				}}
@@ -1186,27 +1229,23 @@ function PriceDialog({
 			</button>
 			<div className="fuel-online-choices">
 				{online
-					.filter((item) => item.name.includes("E10"))
+					.filter(
+						(item) => item.name.includes("E10") || item.name.includes("E5"),
+					)
 					.map((item) => (
 						<div className="fuel-online-group" key={item.name}>
 							<strong>{item.name}</strong>
 							<button
 								className="fuel-online-choice"
 								type="button"
-								onClick={() => {
-									setRegion("region1");
-									setPrice(formatMoney(item.region1));
-								}}
+								onClick={() => selectOnlinePrice(item, "region1")}
 							>
 								Vùng 1: {formatMoney(item.region1)} đ/lít
 							</button>
 							<button
 								className="fuel-online-choice"
 								type="button"
-								onClick={() => {
-									setRegion("region2");
-									setPrice(formatMoney(item.region2));
-								}}
+								onClick={() => selectOnlinePrice(item, "region2")}
 							>
 								Vùng 2: {formatMoney(item.region2)} đ/lít
 							</button>
