@@ -4,11 +4,9 @@ const { normalizeSearchText } = require('../db.cjs');
 const { cleanText } = require('./calculation.cjs');
 
 const CACHE_LIMIT = 500;
-const GOOGLE_TIMEOUT_MS = 15_000;
-const FALLBACK_TIMEOUT_MS = 10_000;
-const APP_USER_AGENT = 'QuanLyCuocPhi/1.0.3';
-const googleRouteCache = new Map();
-const fallbackRouteCache = new Map();
+const VIETMAP_TIMEOUT_MS = 15_000;
+const vietmapRouteCache = new Map();
+const vietmapPlaceCache = new Map();
 
 function cacheResult(cache, key, value) {
   if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value);
@@ -26,86 +24,88 @@ function roundedKilometers(meters) {
   return Math.round((value / 1000) * 10) / 10;
 }
 
-async function googleRouteDistance(from, to, apiKey) {
-  const key = routeKey(from, to);
-  const cached = googleRouteCache.get(key);
-  if (cached) return cached;
+function vietmapUrl(path, params) {
+  const url = new URL(path, 'https://maps.vietmap.vn');
+  for (const [name, value] of params) url.searchParams.append(name, value);
+  return url;
+}
 
-  const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': 'routes.distanceMeters',
-    },
-    body: JSON.stringify({
-      origin: { address: from },
-      destination: { address: to },
-      travelMode: 'DRIVE',
-      routingPreference: 'TRAFFIC_UNAWARE',
-      units: 'METRIC',
-      languageCode: 'vi',
-    }),
-    signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
-  });
+async function vietmapJson(url, failureMessage) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(VIETMAP_TIMEOUT_MS) });
+  const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    const detail = cleanText(payload?.error?.message, 300);
-    throw new Error(detail || 'Google Maps không thể tính tuyến đường');
+    const detail = cleanText(
+      Array.isArray(payload?.messages) ? payload.messages.join(', ') : payload?.message,
+      300,
+    );
+    throw new Error(detail || failureMessage);
   }
-  const payload = await response.json();
-  const km = roundedKilometers(payload?.routes?.[0]?.distanceMeters);
-  if (!km) throw new Error('Google Maps không trả về quãng đường');
-  return cacheResult(googleRouteCache, key, {
-    km,
-    source: 'Google Maps',
-    estimated: false,
-  });
+  return payload;
 }
 
-async function geocodeVietnameseAddress(address) {
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=vn&q=${encodeURIComponent(address)}`,
-    {
-      headers: { 'User-Agent': APP_USER_AGENT, 'Accept-Language': 'vi' },
-      signal: AbortSignal.timeout(FALLBACK_TIMEOUT_MS),
-    },
-  );
-  if (!response.ok) throw new Error('Không tìm được địa chỉ');
-  const items = await response.json();
-  const item = Array.isArray(items) ? items[0] : null;
-  const lat = Number(item?.lat);
-  const lon = Number(item?.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    throw new Error('Không tìm được địa chỉ');
-  }
-  return { lat, lon };
-}
-
-async function fallbackRouteDistance(from, to) {
-  const key = routeKey(from, to);
-  const cached = fallbackRouteCache.get(key);
+async function vietmapCoordinates(address, apiKey) {
+  const key = normalizeSearchText(address);
+  const cached = vietmapPlaceCache.get(key);
   if (cached) return cached;
 
-  const [start, end] = await Promise.all([
-    geocodeVietnameseAddress(from),
-    geocodeVietnameseAddress(to),
-  ]);
-  const response = await fetch(
-    `https://router.project-osrm.org/route/v1/driving/${start.lon},${start.lat};${end.lon},${end.lat}?overview=false`,
-    {
-      headers: { 'User-Agent': APP_USER_AGENT },
-      signal: AbortSignal.timeout(FALLBACK_TIMEOUT_MS),
-    },
+  const matches = await vietmapJson(
+    vietmapUrl('/api/search/v4', [
+      ['apikey', apiKey],
+      ['text', address],
+      ['display_type', '5'],
+    ]),
+    'VietMap không tìm được địa chỉ',
   );
-  if (!response.ok) throw new Error('Không tính được tuyến đường');
-  const payload = await response.json();
-  const km = roundedKilometers(payload?.routes?.[0]?.distance);
-  if (!km) throw new Error('Không tính được tuyến đường');
-  return cacheResult(fallbackRouteCache, key, {
+  const refId = cleanText(Array.isArray(matches) ? matches[0]?.ref_id : '', 1000);
+  if (!refId) throw new Error('VietMap không tìm được địa chỉ');
+
+  const place = await vietmapJson(
+    vietmapUrl('/api/place/v4', [
+      ['apikey', apiKey],
+      ['refid', refId],
+    ]),
+    'VietMap không lấy được tọa độ địa chỉ',
+  );
+  const lat = Number(place?.lat);
+  const lng = Number(place?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('VietMap không lấy được tọa độ địa chỉ');
+  }
+  return cacheResult(vietmapPlaceCache, key, { lat, lng });
+}
+
+async function vietmapRouteDistance(from, to, apiKey) {
+  const key = routeKey(from, to);
+  const cached = vietmapRouteCache.get(key);
+  if (cached) return cached;
+
+  const [origin, destination] = await Promise.all([
+    vietmapCoordinates(from, apiKey),
+    vietmapCoordinates(to, apiKey),
+  ]);
+  const payload = await vietmapJson(
+    vietmapUrl('/api/route/v4', [
+      ['apikey', apiKey],
+      ['point', `${origin.lat},${origin.lng}`],
+      ['point', `${destination.lat},${destination.lng}`],
+      ['vehicle', 'car'],
+      ['points_encoded', 'true'],
+    ]),
+    'VietMap không thể tính tuyến đường',
+  );
+  const detail = cleanText(
+    Array.isArray(payload?.messages) ? payload.messages.join(', ') : payload?.messages,
+    300,
+  );
+  if (payload?.code && payload.code !== 'OK') {
+    throw new Error(detail || 'VietMap không thể tính tuyến đường');
+  }
+  const km = roundedKilometers(payload?.paths?.[0]?.distance);
+  if (!km) throw new Error('VietMap không trả về quãng đường');
+  return cacheResult(vietmapRouteCache, key, {
     km,
-    source: 'OpenStreetMap / OSRM',
-    estimated: true,
+    source: 'VietMap',
+    estimated: false,
   });
 }
 
@@ -133,7 +133,7 @@ function saveRouteLegs(db, recordId, legs, at) {
   });
 }
 
-async function estimateRoute({ db, from, to, googleApiKey }) {
+async function estimateRoute({ db, from, to, vietmapApiKey }) {
   const fromKey = normalizeSearchText(from);
   const toKey = normalizeSearchText(to);
   const saved = db
@@ -148,9 +148,10 @@ async function estimateRoute({ db, from, to, googleApiKey }) {
   if (reverseSaved) {
     return { km: reverseSaved.distance_km, source: 'Chặng ngược đã lưu trong ứng dụng', estimated: true };
   }
-  return googleApiKey
-    ? googleRouteDistance(from, to, googleApiKey)
-    : fallbackRouteDistance(from, to);
+  if (!vietmapApiKey) {
+    throw new Error('Chưa cấu hình VIETMAP_API_KEY trên máy chủ.');
+  }
+  return vietmapRouteDistance(from, to, vietmapApiKey);
 }
 
 module.exports = { estimateRoute, saveRouteLegs };

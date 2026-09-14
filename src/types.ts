@@ -9,6 +9,7 @@ export type PageId =
 	| "fuel"
 	| "reports_employee"
 	| "reports_carrier"
+	| "reports_fuel_price"
 	| "users"
 	| "audit"
 	| "settings";

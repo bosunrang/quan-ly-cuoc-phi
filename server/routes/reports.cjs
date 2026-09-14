@@ -7,6 +7,7 @@ const { badRequest, isIsoDate } = require('../http.cjs');
 
 const EMPLOYEE_PAGE = 'reports_employee';
 const CARRIER_PAGE = 'reports_carrier';
+const FUEL_PRICE_PAGE = 'reports_fuel_price';
 const number = (value) => Number(value || 0);
 
 function filters(query, allowAll = false) {
@@ -54,6 +55,98 @@ function extraCosts(query) {
     }
     return { name, amount, employeeId: employeeId ? Number(employeeId) : null };
   }).filter(Boolean);
+}
+
+function fuelHistoryFilters(query) {
+  const from = String(query.from ?? '').trim();
+  const to = String(query.to ?? '').trim();
+  if (!isIsoDate(from) || !isIsoDate(to) || from > to) {
+    throw badRequest('Vui lòng chọn khoảng ngày hợp lệ.');
+  }
+  const fuelType = String(query.fuelType ?? '').trim().slice(0, 100);
+  const employeeId = String(query.employeeId ?? '').trim();
+  if (employeeId && (!Number.isInteger(Number(employeeId)) || Number(employeeId) < 1)) {
+    throw badRequest('Nhân viên không hợp lệ.');
+  }
+  const pagination = String(query.pagination ?? '1') !== '0';
+  const limit = Number(query.limit ?? 20);
+  const offset = Number(query.offset ?? 0);
+  if (pagination && (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0)) {
+    throw badRequest('Phân trang không hợp lệ.');
+  }
+  return {
+    from,
+    to,
+    fuelType,
+    employeeId: employeeId ? Number(employeeId) : null,
+    limit: pagination ? limit : null,
+    offset: pagination ? offset : 0,
+  };
+}
+
+function fuelHistoryReport(db, input) {
+  const where = ['period_from >= ?', 'period_to <= ?'];
+  const params = [input.from, input.to];
+  if (input.fuelType) {
+    where.push('fuel_type = ?');
+    params.push(input.fuelType);
+  }
+  if (input.employeeId) {
+    where.push('employee_id = ?');
+    params.push(input.employeeId);
+  }
+  const whereSql = where.map((clause) => `f.${clause}`).join(' AND ');
+  const recordsTotal = Number(
+    db.prepare(`SELECT COUNT(*) AS count FROM fuel_records f WHERE ${whereSql}`).get(...params).count,
+  );
+  const rows = db.prepare(
+    `SELECT f.*, e.full_name AS employee_name
+       FROM fuel_records f LEFT JOIN employees e ON e.id = f.employee_id
+       WHERE ${whereSql}
+       ORDER BY f.period_to DESC, f.id DESC${input.limit === null ? '' : ' LIMIT ? OFFSET ?'}`,
+  ).all(...params, ...(input.limit === null ? [] : [input.limit, input.offset]));
+  const legsByRecordId = new Map();
+  if (rows.length) {
+    const recordIds = rows.map((row) => row.id);
+    const placeholders = recordIds.map(() => '?').join(', ');
+    const legs = db.prepare(
+      `SELECT fuel_record_id, sequence_no, from_name, to_name, distance_km
+         FROM fuel_record_legs
+        WHERE fuel_record_id IN (${placeholders})
+        ORDER BY fuel_record_id, sequence_no`,
+    ).all(...recordIds);
+    legs.forEach((leg) => {
+      const recordLegs = legsByRecordId.get(leg.fuel_record_id) || [];
+      recordLegs.push({
+        sequenceNo: Number(leg.sequence_no),
+        from: leg.from_name,
+        to: leg.to_name,
+        km: Number(leg.distance_km),
+      });
+      legsByRecordId.set(leg.fuel_record_id, recordLegs);
+    });
+  }
+  const items = rows.map((row) => ({
+    id: Number(row.id),
+    periodFrom: row.period_from,
+    periodTo: row.period_to,
+    employeeName: row.employee_name || 'Chưa gán nhân viên',
+    distanceKm: Number(row.distance_km),
+    consumptionLiters: Number(row.consumption_liters),
+    consumptionBaseKm: Number(row.consumption_base_km),
+    fuelType: row.fuel_type,
+    region: row.region,
+    fuelPrice: Number(row.fuel_price),
+    totalFee: Number(row.total_fee),
+    status: row.status,
+    voidReason: row.void_reason || '',
+    legs: legsByRecordId.get(row.id) || [],
+  }));
+  return {
+    items,
+    recordsTotal,
+    employees: db.prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE').all().map((row) => ({ id: Number(row.id), fullName: row.full_name })),
+  };
 }
 
 function reportData(db, input) {
@@ -127,6 +220,7 @@ function carrierVariance(db, input) {
 
 const formatDate = (value) => `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
 const formatFileDate = (value) => `${value.slice(8, 10)}-${value.slice(5, 7)}-${value.slice(0, 4)}`;
+const fileNamePart = (value) => String(value || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
 const baseStyle = { font: { name: 'Times New Roman', sz: 11 }, alignment: { vertical: 'center', wrapText: true }, border: { top: { style: 'thin', color: { rgb: '000000' } }, bottom: { style: 'thin', color: { rgb: '000000' } }, left: { style: 'thin', color: { rgb: '000000' } }, right: { style: 'thin', color: { rgb: '000000' } } } };
 const centered = { ...baseStyle, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } };
 const money = { ...baseStyle, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '#,##0' };
@@ -264,6 +358,76 @@ function annualSheet(data, year, employee) {
   return ws;
 }
 
+function fuelHistorySheet(items, input, employeeName, company) {
+  const ws = XLSX.utils.aoa_to_sheet([]);
+  const whiteFill = { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } };
+  const metaStyle = { font: { name: 'Times New Roman', sz: 11 }, alignment: { vertical: 'center' } };
+  const centerStyle = { ...centered, fill: whiteFill };
+  const headerStyle = { ...heading, fill: whiteFill, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } };
+  const routeStyle = { ...baseStyle, fill: whiteFill, alignment: { horizontal: 'left', vertical: 'center', wrapText: true } };
+  const totalStyle = { ...centered, fill: whiteFill, numFmt: '#,##0' };
+  ws['!cols'] = [
+    { wch: 8 }, { wch: 22 }, { wch: 67 }, { wch: 22 }, { wch: 16 }, { wch: 17 },
+  ];
+  set(ws, 'A1', 'BẢNG THỐNG KÊ TIỀN XĂNG', {
+    font: { name: 'Times New Roman', sz: 16, bold: true },
+    alignment: { horizontal: 'center', vertical: 'center' },
+  });
+  merge(ws, 'A1:F1');
+  set(ws, 'A2', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, {
+    font: { name: 'Times New Roman', sz: 11, italic: true },
+    alignment: { horizontal: 'center', vertical: 'center' },
+  });
+  merge(ws, 'A2:F2');
+  set(ws, 'A4', `Đơn vị: ${company.company_name || ''}`, metaStyle);
+  set(ws, 'A5', `Địa chỉ: ${company.company_address || ''}`, metaStyle);
+  set(ws, 'A6', `Nhân viên: ${employeeName}`, metaStyle);
+  ['STT', 'Kỳ tính', 'Lộ trình di chuyển', 'Quãng đường', 'Giá xăng', 'Tổng tiền'].forEach(
+    (value, index) => set(ws, XLSX.utils.encode_cell({ r: 7, c: index }), value, headerStyle),
+  );
+
+  let row = 8;
+  items.forEach((item, index) => {
+    const legs = item.legs.length
+      ? item.legs
+      : [{ from: 'Chưa lưu chi tiết lộ trình', to: '', km: item.distanceKm }];
+    const lastRow = row + legs.length - 1;
+    legs.forEach((leg, legIndex) => {
+      const excelRow = row + legIndex;
+      const route = leg.to ? `${leg.from} → ${leg.to}` : leg.from;
+      set(ws, XLSX.utils.encode_cell({ r: excelRow, c: 0 }), legIndex ? '' : index + 1, centerStyle);
+      set(ws, XLSX.utils.encode_cell({ r: excelRow, c: 1 }), legIndex ? '' : `${formatDate(item.periodFrom)} - ${formatDate(item.periodTo)}`, centerStyle);
+      set(ws, XLSX.utils.encode_cell({ r: excelRow, c: 2 }), route, routeStyle);
+      set(ws, XLSX.utils.encode_cell({ r: excelRow, c: 3 }), `${Number(leg.km).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} Km`, centerStyle);
+      set(ws, XLSX.utils.encode_cell({ r: excelRow, c: 4 }), legIndex ? '' : item.fuelPrice, totalStyle);
+      set(ws, XLSX.utils.encode_cell({ r: excelRow, c: 5 }), legIndex ? '' : item.totalFee, totalStyle);
+      ws['!rows'] ??= [];
+      ws['!rows'][excelRow] = { hpt: route.length > 210 ? 60 : route.length > 120 ? 45 : 30 };
+    });
+    if (legs.length > 1) {
+      for (const column of ['A', 'B', 'E', 'F']) merge(ws, `${column}${row + 1}:${column}${lastRow + 1}`);
+    }
+    row = lastRow + 1;
+  });
+  ws['!rows'] ??= [];
+  ws['!rows'][0] = { hpt: 20.25 };
+  ws['!rows'][7] = { hpt: 30 };
+  ws['!ref'] = `A1:F${row}`;
+  return ws;
+}
+
+function uniqueSheetName(name, used) {
+  const base = String(name || 'Chưa gán nhân viên').replace(/[\\/?*\[\]:]/g, ' ').trim().slice(0, 31) || 'Chưa gán nhân viên';
+  let candidate = base;
+  let suffix = 2;
+  while (used.has(candidate)) {
+    candidate = `${base.slice(0, 28)} (${suffix})`;
+    suffix += 1;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
 function carrierVarianceSheet(items, input) {
   const ws = XLSX.utils.aoa_to_sheet([]);
   ws['!cols'] = [
@@ -309,6 +473,46 @@ function carrierVarianceSheet(items, input) {
 }
 
 function register(router) {
+  router.get('/api/reports/fuel-history/export', async (c) => {
+    c.requirePage(FUEL_PRICE_PAGE);
+    if (!canSeeEveryone(c.user)) throw badRequest('Bạn không có quyền xuất báo cáo tiền xăng.');
+    const input = fuelHistoryFilters({ ...c.query, pagination: '0' });
+    const report = fuelHistoryReport(c.db, input);
+    if (!report.items.length) throw badRequest('Không có kỳ tính xăng phù hợp để xuất Excel.');
+    const groups = new Map();
+    report.items.forEach((item) => {
+      const name = item.employeeName || 'Chưa gán nhân viên';
+      const records = groups.get(name) || [];
+      records.push(item);
+      groups.set(name, records);
+    });
+    const company = c.db.prepare('SELECT company_name, company_address FROM app_settings WHERE id = 1').get() || {};
+    const workbook = XLSX.utils.book_new();
+    const usedNames = new Set();
+    for (const [employeeName, items] of groups) {
+      XLSX.utils.book_append_sheet(
+        workbook,
+        fuelHistorySheet(items, input, employeeName, company),
+        uniqueSheetName(employeeName, usedNames),
+      );
+    }
+    const contentBase64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx', compression: true });
+    writeAudit(c.db, c.user, 'report.fuel_history.export', 'report', null, { ...input, rows: report.items.length, sheetCount: workbook.SheetNames.length });
+    const employeeName = input.employeeId
+      ? c.db.prepare('SELECT full_name FROM employees WHERE id = ?').get(input.employeeId)?.full_name || 'Chưa gán nhân viên'
+      : 'Tất cả nhân viên';
+    return {
+      fileName: `Bảng thống kê tiền xăng - ${fileNamePart(employeeName)} - từ ngày ${formatFileDate(input.from)} đến ${formatFileDate(input.to)}.xlsx`,
+      contentBase64,
+    };
+  });
+
+  router.get('/api/reports/fuel-history', async (c) => {
+    c.requirePage(FUEL_PRICE_PAGE);
+    if (!canSeeEveryone(c.user)) throw badRequest('Bạn không có quyền xem báo cáo tiền xăng.');
+    return fuelHistoryReport(c.db, fuelHistoryFilters(c.query));
+  });
+
   router.get('/api/reports', async (c) => {
     c.requirePage(EMPLOYEE_PAGE);
     if (!canSeeEveryone(c.user)) throw badRequest('Bạn không có quyền xem báo cáo tổng hợp.');

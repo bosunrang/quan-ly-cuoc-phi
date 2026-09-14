@@ -1,6 +1,6 @@
 {
   "name": "app-cuoc-phi",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "private": true,
   "type": "module",
   "description": "Quản lý cước phí giao hàng — dùng chung cho nhiều máy trong mạng nội bộ",
@@ -15,7 +15,7 @@
     "lint": "biome check src tests vite.config.ts vitest.config.ts --error-on-warnings",
     "check:server": "node --check electron/main.cjs && node --check electron/preload.cjs && node --check server/start.cjs",
     "test": "vitest run",
-    "test:server": "node --test tests/server/foundation.test.cjs tests/server/fuel.calculation.test.cjs tests/server/fuel.records.test.cjs",
+    "test:server": "node --test tests/server/foundation.test.cjs tests/server/fuel.calculation.test.cjs tests/server/fuel.records.test.cjs tests/server/fuel.routes.test.cjs",
     "test:performance": "node tests/performance/catalog.benchmark.cjs",
     "test:performance:misa": "node tests/performance/misa.benchmark.cjs",
     "check": "npm run lint && npm run typecheck && npm run check:server && npm test && npm run test:server",

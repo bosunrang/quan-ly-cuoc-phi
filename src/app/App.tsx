@@ -9,6 +9,7 @@ import { EmployeesPage } from "../features/employees/EmployeesPage";
 import { EntriesPage } from "../features/entries/EntriesPage";
 import { FuelPage } from "../features/fuel/FuelPage";
 import { MisaPage } from "../features/misa/MisaPage";
+import { FuelPriceReportPage } from "../features/reports/FuelPriceReportPage";
 import { ReportsPage } from "../features/reports/ReportsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { useAppSettings } from "../features/settings/useAppSettings";
@@ -88,6 +89,8 @@ export function App() {
 				return <ReportsPage section="employee" />;
 			case "reports_carrier":
 				return <ReportsPage section="carrier" />;
+			case "reports_fuel_price":
+				return <FuelPriceReportPage />;
 			case "users":
 				return <UsersPage currentUser={profile.user} />;
 			case "audit":

@@ -61,6 +61,19 @@ const locationType = {
 	employee: "Nhân viên",
 } as const;
 
+/**
+ * VietMap định vị POI chính xác hơn khi có cả tên (ví dụ bệnh viện/kho) lẫn
+ * địa chỉ. Không được rút gọn về mỗi địa chỉ sau khi người dùng chọn danh mục.
+ */
+const locationRouteText = (item: FuelData["locations"][number]) => {
+	const name = item.name.trim();
+	const address = item.address.trim();
+	if (!name) return address;
+	if (!address || locationKey(address).includes(locationKey(name)))
+		return address;
+	return `${name}, ${address}`;
+};
+
 function LocationInput({
 	value,
 	ariaLabel,
@@ -92,7 +105,7 @@ function LocationInput({
 		const exact = locations.filter(
 			(item) => locationKey(item.name) === locationKey(value),
 		);
-		onChange(exact.length === 1 ? exact[0].address : value);
+		onChange(exact.length === 1 ? locationRouteText(exact[0]) : value);
 	};
 	return (
 		<div className="fuel-location-picker">
@@ -119,7 +132,7 @@ function LocationInput({
 								key={`${item.type}-${item.id}`}
 								onMouseDown={(event) => event.preventDefault()}
 								onClick={() => {
-									onChange(item.address);
+									onChange(locationRouteText(item));
 									setOpen(false);
 								}}
 							>
@@ -484,7 +497,13 @@ export function FuelPage() {
 					</div>
 					<div className="fuel-route">
 						<div className="fuel-route-head">
-							<strong>Lộ trình</strong>
+							<div>
+								<strong>Lộ trình</strong>
+								<span>
+									Ghi tên địa điểm kèm địa chỉ đầy đủ để VietMap xác định đúng
+									vị trí.
+								</span>
+							</div>
 						</div>
 						{legs.map((leg, index) => {
 							const from = index ? legs[index - 1].destination : origin;
@@ -511,7 +530,7 @@ export function FuelPage() {
 											placeholder={
 												index
 													? "Điểm đến của chặng trước"
-													: "Ví dụ: Công ty Naviva"
+													: "Ví dụ: Kho Naviva, 123 đường A, TP.HCM"
 											}
 											locations={data.locations}
 											onChange={(value) => !index && setOrigin(value)}
@@ -522,7 +541,7 @@ export function FuelPage() {
 										<LocationInput
 											value={leg.destination}
 											ariaLabel={`Điểm ${String.fromCharCode(66 + index)}`}
-											placeholder="Điểm giao hoặc địa chỉ"
+											placeholder="Ví dụ: Bệnh viện A, số nhà, đường, tỉnh/TP"
 											locations={data.locations}
 											onChange={(value) => setDestination(index, value)}
 										/>
@@ -577,7 +596,7 @@ export function FuelPage() {
 								onClick={() => void estimateAllLegs()}
 							>
 								<RefreshCw size={15} />
-								Cập nhật km
+								Cập nhật km (VietMap)
 							</button>
 						</div>
 					</div>

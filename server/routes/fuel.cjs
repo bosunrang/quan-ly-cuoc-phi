@@ -85,15 +85,12 @@ function register(router) {
     const from = cleanText(c.body.from, 250);
     const to = cleanText(c.body.to, 250);
     if (!from || !to) throw badRequest('Vui lòng nhập điểm đi và điểm đến trước khi lấy km.');
-    const googleApiKey = cleanText(process.env.GOOGLE_MAPS_API_KEY, 250);
+    const vietmapApiKey = cleanText(process.env.VIETMAP_API_KEY, 250);
     try {
-      return await estimateRoute({ db: c.db, from, to, googleApiKey });
+      return await estimateRoute({ db: c.db, from, to, vietmapApiKey });
     } catch (cause) {
       const message = cause instanceof Error ? cleanText(cause.message, 320) : '';
-      if (googleApiKey) {
-        throw badRequest(`Google Maps không lấy được km: ${message || 'kiểm tra lại key và thanh toán.'}`);
-      }
-      throw badRequest('Không lấy được km tự động lúc này. Bạn có thể nhập km theo Google Maps.');
+      throw badRequest(`VietMap không lấy được km: ${message || 'kiểm tra lại API key và hạn mức.'}`);
     }
   });
 

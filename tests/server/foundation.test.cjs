@@ -853,6 +853,7 @@ describe('phân quyền thẻ', () => {
         'fuel',
         'reports_employee',
         'reports_carrier',
+        'reports_fuel_price',
         'users',
         'audit',
         'settings',

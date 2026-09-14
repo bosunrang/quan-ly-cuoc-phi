@@ -4,8 +4,10 @@ release/
 release-*/
 data/
 coverage/
+outputs/
 *.log
 electron-framework-*/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+.env

@@ -28,3 +28,24 @@ export interface CarrierVarianceReport {
 	}>;
 	summary: { entries: number; difference: number };
 }
+
+export interface FuelHistoryReport {
+	employees: ReportEmployee[];
+	recordsTotal: number;
+	items: Array<{
+		id: number;
+		periodFrom: string;
+		periodTo: string;
+		employeeName: string;
+		distanceKm: number;
+		consumptionLiters: number;
+		consumptionBaseKm: number;
+		fuelType: string;
+		region: "region1" | "region2";
+		fuelPrice: number;
+		totalFee: number;
+		status: "active" | "voided";
+		voidReason: string;
+		legs: Array<{ sequenceNo: number; from: string; to: string; km: number }>;
+	}>;
+}

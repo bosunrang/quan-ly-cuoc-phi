@@ -56,6 +56,7 @@ export const navGroups: NavGroup[] = [
 		items: [
 			{ id: "reports_employee", label: "Cước nhân viên", icon: ChartColumn },
 			{ id: "reports_carrier", label: "Cước nhà xe", icon: FileChartColumn },
+			{ id: "reports_fuel_price", label: "Tiền xăng", icon: Fuel },
 		],
 	},
 	{

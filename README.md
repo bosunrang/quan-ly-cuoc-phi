@@ -50,6 +50,29 @@ npm run server
 
 Rồi mở `http://localhost:3100`.
 
+## Tính quãng đường bằng VietMap
+
+Ứng dụng lấy km tự động trong mục **Tính xăng** thông qua VietMap Map API.
+Tạo *Services key* tại VietMap rồi cấu hình key **chỉ trên máy chủ**; không đặt
+key vào mã giao diện hoặc máy nhân viên.
+
+Khi phát triển, chạy PowerShell ở thư mục dự án:
+
+```powershell
+$env:VIETMAP_API_KEY = "key-cua-ban"
+npm run server
+```
+
+Với bản Electron đã cài, đặt biến môi trường Windows một lần trên máy chủ,
+sau đó đóng hẳn và mở lại ứng dụng:
+
+```powershell
+setx VIETMAP_API_KEY "key-cua-ban"
+```
+
+Ứng dụng gửi địa chỉ đến VietMap từ backend, nhận tọa độ rồi tính tuyến đường
+cho profile ô tô. Chặng đã lưu được ưu tiên và không gọi API lại.
+
 ## Kiểm thử
 
 ```bash

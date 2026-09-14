@@ -74,6 +74,13 @@ const PAGES = [
     ownScope: false,
   },
   {
+    key: 'reports_fuel_price',
+    label: 'Báo cáo tiền xăng',
+    description: 'Theo dõi lịch sử các kỳ tính xăng đã lưu.',
+    adminOnly: true,
+    ownScope: false,
+  },
+  {
     key: 'users',
     label: 'Người dùng',
     description: 'Tài khoản và thẻ truy cập của từng nhân viên.',

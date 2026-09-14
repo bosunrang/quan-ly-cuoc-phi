@@ -43,6 +43,10 @@ export const pageConfig: Record<PageId, PageMeta> = {
 		title: "Báo cáo cước nhà xe",
 		subtitle: "Đối chiếu giá thiết lập với cước thực tế theo nhà xe",
 	},
+	reports_fuel_price: {
+		title: "Báo cáo tiền xăng",
+		subtitle: "Theo dõi lịch sử các kỳ tính xăng đã lưu",
+	},
 	users: {
 		title: "Người dùng & phân quyền",
 		subtitle: "Quản lý tài khoản và thẻ truy cập của từng nhân viên",

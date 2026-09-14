@@ -22,7 +22,8 @@
 .fuel-price-field input { text-align: center; }
 .fuel-route { position: relative; margin: 0; padding: 20px; border: 0; border-radius: 0; background: linear-gradient(135deg, var(--surface-subtle), var(--panel)); }
 .fuel-route-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.fuel-route-head strong { font-size: var(--type-body-sm); color: var(--ink); }
+.fuel-route-head strong { display: block; font-size: var(--type-body-sm); color: var(--ink); }
+.fuel-route-head span { display: block; margin-top: 3px; color: var(--muted); font-size: var(--type-caption); }
 .fuel-leg { position: relative; display: grid; grid-template-columns: 28px minmax(180px,1.25fr) minmax(190px,1.3fr) 92px 94px; gap: 10px; align-items: end; padding: 16px 0; border-top: 1px solid var(--line-soft); }
 .fuel-leg-removable { grid-template-columns: 28px minmax(180px,1.25fr) minmax(190px,1.3fr) 92px 94px 34px; }
 .fuel-leg input[readonly] { background: var(--surface-subtle); color: var(--muted); }
