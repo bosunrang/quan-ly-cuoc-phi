@@ -472,16 +472,7 @@ export function EntryDialog({
 			)}
 			<Field label="Khách hàng">
 				{(id) => (
-					<div
-						style={{
-							position: "relative",
-							display: "flex",
-							alignItems: "center",
-							border: "1px solid var(--line)",
-							borderRadius: 7,
-							background: "var(--panel)",
-						}}
-					>
+					<div className="entry-customer-picker">
 						<input
 							id={id}
 							value={customerSearch}

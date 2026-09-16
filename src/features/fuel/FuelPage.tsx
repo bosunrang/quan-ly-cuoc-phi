@@ -1142,6 +1142,9 @@ function PriceDialog({
 		setPrice(formatMoney(item[nextRegion]));
 		setSource(item.source);
 	};
+	const onlineChoices = online.filter(
+		(item) => item.name.includes("E10") || item.name.includes("E5"),
+	);
 	return (
 		<Dialog
 			className="fuel-price-dialog"
@@ -1227,12 +1230,9 @@ function PriceDialog({
 			>
 				Lấy giá online
 			</button>
-			<div className="fuel-online-choices">
-				{online
-					.filter(
-						(item) => item.name.includes("E10") || item.name.includes("E5"),
-					)
-					.map((item) => (
+			{onlineChoices.length > 0 && (
+				<div className="fuel-online-choices">
+					{onlineChoices.map((item) => (
 						<div className="fuel-online-group" key={item.name}>
 							<strong>{item.name}</strong>
 							<button
@@ -1251,7 +1251,8 @@ function PriceDialog({
 							</button>
 						</div>
 					))}
-			</div>
+				</div>
+			)}
 		</Dialog>
 	);
 }

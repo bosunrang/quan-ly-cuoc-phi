@@ -92,8 +92,8 @@
 }
 
 .carrier-preview-stats button:focus-visible {
-	outline: 2px solid var(--focus-border);
-	outline-offset: 2px;
+	outline: none;
+	box-shadow: inset 0 0 0 1px var(--focus-border);
 }
 
 .carrier-preview-stat-icon {

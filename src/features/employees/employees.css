@@ -90,13 +90,6 @@
 .employee-table th:nth-child(6),
 .employee-table td:nth-child(6) { text-align: center; }
 
-.employee-areas {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 5px;
-}
-.employee-areas span,
 .employee-account {
   display: inline-flex;
   padding: 3px 7px;

@@ -35,16 +35,10 @@
 
 .topbar{height:82px;flex:0 0 82px;background:linear-gradient(180deg,var(--header-bg-start) 0%,var(--header-bg-end) 100%);border-bottom:1px solid var(--header-border);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:space-between;padding:0 24px 0 28px;gap:20px}
 .topbar-title-wrap{display:flex;align-items:center;gap:10px;min-width:0}
-.eyebrow{font-size:var(--type-overline);font-weight:750;letter-spacing:.13em;color:var(--teal);margin-bottom:3px}
 .topbar h1{font-size:var(--type-page-title);line-height:1.2;margin:0;letter-spacing:-.03em;font-weight:750}
 .topbar p{margin:4px 0 0;color:var(--muted);font-size:var(--type-body-sm);white-space:nowrap}
 .topbar-actions{display:flex;align-items:center;gap:10px;min-width:0}
-.global-search{height:38px;width:250px;border:1px solid var(--line);border-radius:7px;display:flex;align-items:center;gap:8px;padding:0 9px;background:var(--surface-subtle);color:var(--muted)}
-.global-search input{border:0;outline:0;background:transparent;min-width:0;flex:1;font-size:var(--type-meta);color:var(--ink)}
-.global-search input::placeholder{color:var(--text-faint)}
-.global-search kbd{font:600 var(--type-overline) Manrope;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:3px 4px;color:var(--text-faint);white-space:nowrap}
-.period-filter{height:38px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);display:flex;align-items:center;gap:7px;padding:0 10px;cursor:pointer;font-size:var(--type-meta);font-weight:650;white-space:nowrap}
-.period-filter:hover,.icon-button:hover{background:var(--surface-hover)}
+.icon-button:hover{background:var(--surface-hover)}
 .icon-button{position:relative;width:38px;height:38px;border:1px solid var(--line);border-radius:7px;background:var(--panel);display:grid;place-items:center;color:var(--muted);cursor:pointer}
 .icon-button.has-notice:after{content:"";position:absolute;width:6px;height:6px;border-radius:50%;background:var(--danger-notice);right:8px;top:7px;box-shadow:0 0 0 2px var(--panel)}
 .profile-menu{height:50px;min-width:202px;display:flex;align-items:center;gap:10px;padding:6px 6px 6px 7px;border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow-card)}

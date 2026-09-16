@@ -18,7 +18,7 @@
 .fuel-period-fields .manage-date { height: 36px; }
 .fuel-period-fields .manage-date input.date-text { height: 34px; }
 .fuel-period-fields .manage-date .datepick { min-height: 34px; }
-.fuel-period-fields input:focus, .fuel-period-fields select:focus, .fuel-route input:focus { outline: 0; border-color: var(--teal-border); box-shadow: 0 0 0 3px var(--surface-accent-faint); }
+.fuel-period-fields input:focus, .fuel-period-fields select:focus, .fuel-route input:focus { outline: 0; border-color: var(--focus-border); box-shadow: none; }
 .fuel-price-field input { text-align: center; }
 .fuel-route { position: relative; margin: 0; padding: 20px; border: 0; border-radius: 0; background: linear-gradient(135deg, var(--surface-subtle), var(--panel)); }
 .fuel-route-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
@@ -44,7 +44,7 @@
 .fuel-leg-fee { display: grid; box-sizing: border-box; height: 36px; min-height: 36px; align-items: center; padding: 0 10px; border: 1px solid var(--status-success-border); border-radius: 7px; background: var(--status-success-bg); color: var(--status-success-text); box-shadow: none; }
 .fuel-leg-fee strong { font-size: var(--type-body-sm); font-variant-numeric: tabular-nums; }
 .fuel-delete-leg { width: 36px; height: 36px; }
-.fuel-delete-leg:focus-visible { outline: 0; border-color: var(--status-danger-border); box-shadow: 0 0 0 3px var(--status-danger-bg); color: var(--status-danger-text); }
+.fuel-delete-leg:focus-visible { outline: 0; border-color: var(--focus-border); box-shadow: none; color: var(--status-danger-text); }
 .fuel-calculator-footer { display: flex; min-height: 76px; align-items: center; gap: 18px; padding: 14px 20px; border-top: 1px solid var(--line-soft); background: linear-gradient(100deg, var(--surface-subtle), var(--teal-soft)); }
 .fuel-footer-caption, .fuel-footer-metric { display: grid; align-content: center; gap: 3px; color: var(--muted); font-size: var(--type-caption); }
 .fuel-footer-caption { min-width: 142px; margin-right: auto; }
@@ -117,7 +117,7 @@
 .fuel-consumption-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .fuel-consumption-fields label { display: grid; gap: 6px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; }
 .fuel-consumption-fields input { box-sizing: border-box; width: 100%; height: 38px; min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text-body); font-size: var(--type-meta); }
-.fuel-consumption-fields input:focus { outline: 0; border-color: var(--teal-border); box-shadow: 0 0 0 3px var(--surface-accent-faint); }
+.fuel-consumption-fields input:focus { outline: 0; border-color: var(--focus-border); box-shadow: none; }
 @media (max-width: 640px) { .fuel-price-dialog .fuel-price-fields, .fuel-online-group { grid-template-columns: 1fr; } }
 @media (max-width: 1450px) { .fuel-layout { grid-template-columns: 1fr; } }
 @media (max-width: 1250px) { .fuel-leg { grid-template-columns: 28px minmax(150px,1fr) minmax(160px,1fr) 76px 82px; } .fuel-leg-removable { grid-template-columns: 28px minmax(150px,1fr) minmax(160px,1fr) 76px 82px 34px; } }

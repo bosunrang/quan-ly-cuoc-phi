@@ -6,6 +6,28 @@
 	text-align: left;
 }
 
+.entry-customer-picker {
+	position: relative;
+	display: flex;
+	align-items: center;
+	border: 1px solid var(--line-strong);
+	border-radius: 7px;
+	background: var(--panel);
+	transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.entry-customer-picker:focus-within {
+	border-color: var(--focus-border);
+	box-shadow: none;
+}
+
+.entry-customer-picker > input {
+	border: 0;
+	border-radius: inherit;
+	box-shadow: none;
+	outline: 0;
+}
+
 .entry-misa-orders {
 	overflow: hidden;
 	border: 1px solid var(--status-info-border);

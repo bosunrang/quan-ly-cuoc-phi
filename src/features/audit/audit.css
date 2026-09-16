@@ -6,9 +6,9 @@
 .audit-log-panel > .panel-header { padding: 17px 18px 14px; border-bottom: 1px solid var(--line-soft); }
 .audit-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 10px 14px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--surface-subtle); }
 .audit-search { width: min(360px, 100%); height: 38px; display: flex; align-items: center; gap: 9px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--panel); color: var(--muted); box-shadow: inset 0 1px 1px rgba(20,36,46,.02); }
-.audit-search:focus-within { border-color: var(--teal); box-shadow: 0 0 0 3px var(--focus-ring); }
+.audit-search:focus-within { border-color: var(--focus-border); box-shadow: none; }
 .audit-search input, .audit-search input:focus, .audit-search input:focus-visible { width: 100%; min-width: 0; border: 0 !important; outline: 0 !important; box-shadow: none !important; background: transparent; color: var(--ink); font-size: var(--type-body-sm); }
-.audit-date-filters { display: flex; align-items: end; gap: 8px; }.audit-date-filters label { display: grid; gap: 4px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; }.audit-date-filters .datebox { width: 130px; height: 38px; }.audit-date-filters .date-text { font-size: var(--type-body-sm); }
+.audit-date-filters { display: flex; align-items: end; gap: 8px; }.audit-date-filters label { display: grid; gap: 4px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; }.audit-date-filters .datebox { width: 165px; height: 38px; }.audit-date-filters .date-text { font-size: var(--type-body-sm); }
 .audit-table { min-height: 290px; max-height: calc(100vh - 355px); }
 .audit-table table { min-width: 980px; table-layout: fixed; }
 .audit-table th { height: 40px; padding: 0 16px; background: #edf3f5; color: var(--text-subtle); font-size: 11.5px; font-weight: 800; letter-spacing: .02em; text-align: left; text-transform: uppercase; }

@@ -54,4 +54,3 @@
 .form-alert.is-info{background:var(--status-info-bg);border-color:var(--status-info-border);color:var(--status-info-text)}
 
 .inline-actions{display:flex;gap:6px;align-items:center}
-.detail-json{margin:0;font-family:ui-monospace,Consolas,monospace;line-height:1.5;color:var(--text-body);white-space:pre-wrap;word-break:break-word;background:var(--surface-subtle);border:1px solid var(--line);border-radius:7px;padding:11px}

@@ -65,7 +65,7 @@
 	background: var(--panel);
 }
 
-.entry-search-field > div:focus-within { border-color: var(--teal); }
+.entry-search-field > div:focus-within { border-color: var(--focus-border); }
 .entry-search-field svg { flex: none; color: var(--muted); }
 .entry-search-field input {
 	width: 100%;

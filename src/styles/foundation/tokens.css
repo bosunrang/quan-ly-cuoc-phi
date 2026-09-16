@@ -26,7 +26,6 @@
   --ink:var(--color-gray-900);
   --muted:var(--color-gray-600);
   --line:var(--color-gray-200);
-  --line2:var(--color-gray-200);
   --line-strong:var(--color-gray-300);
   --sidebar:var(--color-gray-900);
   --teal:var(--color-teal-500);
@@ -43,11 +42,9 @@
   --table-head-bg:var(--color-gray-100);
   --table-footer-bg:var(--color-gray-25);
   --teal-border:#9fcfcd;
-  --warning-border:#e4c273;
   --app-overlay:rgba(20,36,46,.48);
   --shadow-elevated:0 20px 54px rgba(20,36,46,.22);
-  --focus-border:var(--teal-border);
-  --date-hover:#eef7f7;
+  --focus-border:var(--teal);
   --surface-hover:#f7f9fa;
   --surface-hover-subtle:#fbfcfd;
   --surface-accent-faint:#f7fbfb;
@@ -58,7 +55,6 @@
   --text-body:#304852;
   --text-button:#27414b;
   --text-button-muted:#405761;
-  --text-action:#37515b;
   --text-strong:#173c46;
   --text-accent:#0f676e;
   --text-success:#0a7969;
@@ -67,8 +63,6 @@
   --text-subtle:#687d87;
   --text-faint:#819099;
   --line-soft:#e8edef;
-  --line-faint:#e9eef0;
-  --progress-track:#e4eaed;
   --danger-action:#b23a33;
   --danger-action-hover:#992f2a;
   --danger-notice:#b93a32;
@@ -111,19 +105,12 @@
   --stat-warning-icon-bg:#fff0d5;
   --stat-warning-icon-text:#ae6b18;
   --stat-icon-inset:rgba(255,255,255,.62);
-  --focus-ring:rgba(11,116,125,.24);
   --shadow-soft:0 8px 24px rgba(20,36,46,.12);
   --shadow-control:0 2px 9px rgba(20,36,46,.12);
   --shadow-card:0 1px 1px rgba(20,36,46,.025);
-  --shadow-banner:0 4px 16px rgba(20,36,46,.08);
-  --shadow-segment:0 1px 3px rgba(20,36,46,.09);
-  --chart-warning:#dd8b1f;
-  --chart-revenue-bar:#6f91ad;
   --chart-transport:#0f828a;
   --chart-gate:#8bb7bd;
   --chart-fuel:#e3a84a;
-  --welcome-border:#bdd5d5;
-  --welcome-start:#e9f4f4;
 
   /* Màu dành riêng cho bề mặt tối của shell. */
   --sidebar-brand-start:#0f8c92;
@@ -141,15 +128,6 @@
   --sidebar-icon-surface:rgba(255,255,255,.07);
   --sidebar-brand-shadow:0 6px 18px rgba(0,0,0,.16);
 
-  /* Banner và biểu đồ. */
-  --summary-bg:#17303f;
-  --summary-accent:#96bdc0;
-  --summary-text:#bdcdd3;
-  --summary-muted:#aebfc6;
-  --summary-action:#118b92;
-  --summary-surface:rgba(255,255,255,.1);
-  --summary-divider:rgba(255,255,255,.13);
-
   /* Shell đồng bộ với QC Lab. */
   --nav-active-bg:#1c2e38;
   --nav-active-border:#2fb3a6;
@@ -159,21 +137,15 @@
   --header-border:#d8e4ea;
 
   --radius:8px;
-  --radius-sm:6px;
-  --surface-radius:7px;
   /* Thang spacing dùng chung: dùng cho gap, padding và margin giữa các khối. */
-  --space-1:4px;
   --space-2:8px;
   --space-3:12px;
   --space-4:16px;
   --space-5:24px;
-  --space-6:32px;
   --sidebar-width:258px;
   --control-height:40px;
-  --control-font-size:var(--type-body);
   --stat-label-font-size:var(--type-body-sm);
   --stat-value-font-size:var(--type-page-title);
-  --stat-meta-font-size:var(--type-caption);
 
   /* Thang typography đồng bộ với QC Lab. */
   --type-overline:10.5px;
@@ -184,12 +156,8 @@
   --type-body:14px;
   --type-subhead:14.5px;
   --type-heading-sm:16px;
-  --type-dialog-title:18px;
-  --type-symbol-lg:20px;
   --type-symbol-xl:22px;
-  --type-heading-lg:24px;
   --type-page-title:26px;
-  --type-kpi:30px;
   --line-display:1.12;
   --line-heading:1.25;
   --line-body:1.55;
