@@ -251,20 +251,20 @@ function dailySheet(data, input, employee, extras) {
   const { rows, transport, gate, fuel, total } = employeeCosts(data, employee.id);
   const companyName = data.company.company_name || 'CÔNG TY';
   const companyAddress = data.company.company_address || '';
-  ws['!cols'] = [{ wch: 7.5 }, { wch: 15.5 }, { wch: 22 }, { wch: 38.5 }, { wch: 18.5 }, { wch: 18.5 }, { wch: 18.5 }, { wch: 40.5 }];
+  ws['!cols'] = [{ wch: 7.5 }, { wch: 15.5 }, { wch: 22 }, { wch: 38.5 }, { wch: 18.5 }, { wch: 18.5 }, { wch: 18.5 }, { wch: 18.5 }, { wch: 40.5 }];
   set(ws, 'A1', companyName, { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }); merge(ws, 'A1:C2');
-  set(ws, 'G1', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'G1:H1');
-  set(ws, 'G2', 'Độc lập - Tự do - Hạnh phúc', { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'G2:H2');
-  set(ws, 'A4', 'BẢNG KÊ CƯỚC GỬI HÀNG', { font: { name: 'Times New Roman', sz: 16, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A4:H4');
-  set(ws, 'A5', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, { font: { name: 'Times New Roman', sz: 11, italic: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A5:H5');
+  set(ws, 'G1', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'G1:I1');
+  set(ws, 'G2', 'Độc lập - Tự do - Hạnh phúc', { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'G2:I2');
+  set(ws, 'A4', 'BẢNG KÊ CƯỚC GỬI HÀNG', { font: { name: 'Times New Roman', sz: 16, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A4:I4');
+  set(ws, 'A5', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, { font: { name: 'Times New Roman', sz: 11, italic: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A5:I5');
   const companyInfo = { font: { name: 'Times New Roman', sz: 11 } };
-  set(ws, 'A7', `Đơn vị: ${companyName}`, companyInfo); merge(ws, 'A7:H7');
-  set(ws, 'A8', `Địa chỉ: ${companyAddress}`, companyInfo); merge(ws, 'A8:H8');
-  set(ws, 'A9', `Nhân viên phụ trách: ${employee.full_name}`, companyInfo); merge(ws, 'A9:H9');
-  ['STT', 'Ngày gửi', 'Nhà xe', 'Khách hàng', 'Tỉnh/TP', 'Quy cách', 'Cước vận chuyển', 'Ghi chú'].forEach((value, index) => set(ws, XLSX.utils.encode_cell({ r: 10, c: index }), value, heading));
+  set(ws, 'A7', `Đơn vị: ${companyName}`, companyInfo); merge(ws, 'A7:I7');
+  set(ws, 'A8', `Địa chỉ: ${companyAddress}`, companyInfo); merge(ws, 'A8:I8');
+  set(ws, 'A9', `Nhân viên phụ trách: ${employee.full_name}`, companyInfo); merge(ws, 'A9:I9');
+  ['STT', 'Ngày gửi', 'Nhà xe', 'Khách hàng', 'Tỉnh/TP', 'Quy cách', 'Cước vận chuyển', 'Phí vào cổng', 'Ghi chú'].forEach((value, index) => set(ws, XLSX.utils.encode_cell({ r: 10, c: index }), value, heading));
   rows.forEach((row, index) => {
-    const values = [index + 1, formatDate(row.entry_date), row.carrier, row.customer, row.province_city || '', row.spec, number(row.transport_fee), row.note || ''];
-    values.forEach((value, column) => set(ws, XLSX.utils.encode_cell({ r: 11 + index, c: column }), value, column === 6 ? money : [0, 1, 2, 4, 5].includes(column) ? centered : baseStyle));
+    const values = [index + 1, formatDate(row.entry_date), row.carrier, row.customer, row.province_city || '', row.spec, number(row.transport_fee), number(row.gate_fee), row.note || ''];
+    values.forEach((value, column) => set(ws, XLSX.utils.encode_cell({ r: 11 + index, c: column }), value, [6, 7].includes(column) ? money : [0, 1, 2, 4, 5].includes(column) ? centered : baseStyle));
     ws['!rows'] ??= [];
     ws['!rows'][11 + index] = { hpt: (row.note || '').length > 80 ? 45 : 30 };
   });
@@ -290,15 +290,15 @@ function dailySheet(data, input, employee, extras) {
   const signDateRow = grandTotalRow + 2;
   const signRow = grandTotalRow + 3;
   const signature = { font: { name: 'Times New Roman', sz: 11, bold: true }, alignment: { horizontal: 'center', vertical: 'center' } };
-  set(ws, `H${signDateRow}`, 'Ngày… tháng…năm….', { font: { name: 'Times New Roman', sz: 11, italic: true }, alignment: { horizontal: 'center', vertical: 'center' } });
+  set(ws, `I${signDateRow}`, 'Ngày… tháng…năm….', { font: { name: 'Times New Roman', sz: 11, italic: true }, alignment: { horizontal: 'center', vertical: 'center' } });
   set(ws, `A${signRow}`, 'Giám Đốc Duyệt', signature); set(ws, `B${signRow}`, '', signature); merge(ws, `A${signRow}:B${signRow}`);
-  set(ws, `D${signRow}`, 'Kế Toán Trưởng', signature);
-  set(ws, `H${signRow}`, 'Người lập', signature);
+  set(ws, `E${signRow}`, 'Kế Toán Trưởng', signature); set(ws, `F${signRow}`, '', signature); merge(ws, `E${signRow}:F${signRow}`);
+  set(ws, `I${signRow}`, 'Người lập', signature);
   ws['!rows'] ??= [];
   ws['!rows'][0] = { hpt: 18 };
   ws['!rows'][1] = { hpt: 18 };
   ws['!rows'][3] = { hpt: 20.25 };
-  ws['!ref'] = `A1:H${signRow}`;
+  ws['!ref'] = `A1:I${signRow}`;
   return ws;
 }
 
