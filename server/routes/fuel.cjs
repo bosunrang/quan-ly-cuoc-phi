@@ -8,6 +8,7 @@ const {
   FUEL_TYPES, cleanText, fuelPriceInput, fuelRecordInput, toFuelPrice,
 } = require('../fuel/calculation.cjs');
 const { estimateRoute } = require('../fuel/routes.cjs');
+const { fetchPetrolimexPrices } = require('../fuel/online-prices.cjs');
 const {
   activeEmployee, listFuelData, saveFuelRecord, editableRecord, deleteFuelRecord,
 } = require('../fuel/records.cjs');
@@ -56,27 +57,9 @@ function register(router) {
   router.get('/api/fuel/online', async (c) => {
     c.requirePage(PAGE);
     try {
-      const response = await fetch('https://giahomnay.site/gia-xang', { signal: AbortSignal.timeout(10_000) });
-      if (!response.ok) throw new Error();
-      const html = await response.text();
-      const items = [];
-      const pattern = /<tr[^>]*>[\s\S]*?<p[^>]*>([^<]+)<\/p>[\s\S]*?<td[^>]*data-value[^>]*>([\d.]+)<\/td>[\s\S]*?<td[^>]*data-value[^>]*>([\d.]+)<\/td>/g;
-      for (const match of html.matchAll(pattern)) {
-        const region1 = Number(match[2].replaceAll('.', ''));
-        const region2 = Number(match[3].replaceAll('.', ''));
-        if (match[1] && Number.isFinite(region1) && Number.isFinite(region2)) {
-          items.push({ name: match[1].trim(), region1, region2 });
-        }
-      }
-      if (!items.length) throw new Error();
-      const date = /hôm nay ngày (\d{2})\/(\d{2})\/(\d{4})/i.exec(html);
-      return {
-        priceDate: date ? `${date[3]}-${date[2]}-${date[1]}` : '',
-        source: 'Giá Hôm Nay · Petrolimex',
-        items,
-      };
+      return await fetchPetrolimexPrices();
     } catch {
-      throw badRequest('Không lấy được giá xăng online lúc này. Bạn vẫn có thể nhập tay.');
+      throw badRequest('Không lấy được giá Petrolimex online lúc này. Bạn vẫn có thể nhập tay.');
     }
   });
 

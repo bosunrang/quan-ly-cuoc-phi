@@ -115,13 +115,17 @@ function saveRouteLegs(db, recordId, legs, at) {
   );
   const saveDistance = db.prepare(
     `INSERT INTO route_distances
-       (from_name, to_name, from_key, to_key, distance_km, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
+       (from_name, to_name, from_key, to_key, distance_km, source, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'record', ?)
      ON CONFLICT(from_key, to_key) DO UPDATE SET
-       distance_km = excluded.distance_km, updated_at = excluded.updated_at`,
+       from_name = excluded.from_name, to_name = excluded.to_name,
+       distance_km = excluded.distance_km, source = excluded.source,
+       updated_at = excluded.updated_at`,
   );
   legs.forEach((leg, index) => {
     saveLeg.run(recordId, index + 1, leg.from, leg.to, leg.km);
+    // Km trên phiếu (kể cả người dùng sửa tay) là dữ liệu lộ trình chuẩn
+    // của ứng dụng và được tái sử dụng ở kỳ sau.
     saveDistance.run(
       leg.from,
       leg.to,
@@ -131,6 +135,25 @@ function saveRouteLegs(db, recordId, legs, at) {
       at,
     );
   });
+}
+
+function saveVietmapDistance(db, from, to, distanceKm) {
+  db.prepare(
+    `INSERT INTO route_distances
+       (from_name, to_name, from_key, to_key, distance_km, source, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'vietmap', ?)
+     ON CONFLICT(from_key, to_key) DO UPDATE SET
+       from_name = excluded.from_name, to_name = excluded.to_name,
+       distance_km = excluded.distance_km, source = excluded.source,
+       updated_at = excluded.updated_at`,
+  ).run(
+    from,
+    to,
+    normalizeSearchText(from),
+    normalizeSearchText(to),
+    distanceKm,
+    new Date().toISOString(),
+  );
 }
 
 async function estimateRoute({ db, from, to, vietmapApiKey }) {
@@ -146,12 +169,14 @@ async function estimateRoute({ db, from, to, vietmapApiKey }) {
     .prepare('SELECT distance_km FROM route_distances WHERE from_key = ? AND to_key = ?')
     .get(toKey, fromKey);
   if (reverseSaved) {
-    return { km: reverseSaved.distance_km, source: 'Chặng ngược đã lưu trong ứng dụng', estimated: true };
+    return { km: reverseSaved.distance_km, source: 'Chặng ngược đã lưu trong ứng dụng', estimated: false };
   }
   if (!vietmapApiKey) {
     throw new Error('Chưa cấu hình VIETMAP_API_KEY trên máy chủ.');
   }
-  return vietmapRouteDistance(from, to, vietmapApiKey);
+  const result = await vietmapRouteDistance(from, to, vietmapApiKey);
+  saveVietmapDistance(db, from, to, result.km);
+  return result;
 }
 
 module.exports = { estimateRoute, saveRouteLegs };

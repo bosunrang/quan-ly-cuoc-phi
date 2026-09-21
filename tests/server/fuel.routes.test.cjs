@@ -2,10 +2,10 @@
 
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { estimateRoute } = require('../../server/fuel/routes.cjs');
+const { estimateRoute, saveRouteLegs } = require('../../server/fuel/routes.cjs');
 
 function emptyRouteDatabase() {
-  return { prepare: () => ({ get: () => undefined }) };
+  return { prepare: () => ({ get: () => undefined, run: () => undefined }) };
 }
 
 function json(payload) {
@@ -63,4 +63,36 @@ test('yêu cầu cấu hình key khi không có km đã lưu', async () => {
     }),
     /VIETMAP_API_KEY/,
   );
+});
+
+test('dùng cache chiều ngược khi lộ trình đã được thiết lập', async () => {
+  let reads = 0;
+  const db = {
+    prepare: () => ({
+      get: () => {
+        reads += 1;
+        return reads === 2 ? { distance_km: 7 } : undefined;
+      },
+      run: () => undefined,
+    }),
+  };
+  const result = await estimateRoute({ db, from: 'A', to: 'B', vietmapApiKey: '' });
+  assert.deepEqual(result, {
+    km: 7, source: 'Chặng ngược đã lưu trong ứng dụng', estimated: false,
+  });
+  assert.equal(reads, 2);
+});
+
+test('km nhập tay trong chứng từ ghi đè cache lộ trình dùng chung', () => {
+  const statements = [];
+  const db = {
+    prepare: (sql) => {
+      statements.push(sql);
+      return { run: () => undefined };
+    },
+  };
+  saveRouteLegs(db, 1, [{ from: 'A', to: 'B', km: 10 }], '2026-09-21T00:00:00Z');
+  assert.equal(statements.length, 2);
+  assert.match(statements[0], /fuel_record_legs/);
+  assert.match(statements[1], /route_distances/);
 });

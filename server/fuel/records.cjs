@@ -77,13 +77,13 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
     .all();
   const locations = [
     ...db
-      .prepare("SELECT id, customer_name AS name, address, 'customer' AS type FROM customers WHERE trim(address) <> ''")
+      .prepare("SELECT id, customer_name AS name, address, 'customer' AS type FROM customers WHERE trim(customer_name) <> ''")
       .all(),
     ...db
-      .prepare("SELECT id, name, address, 'carrier' AS type FROM carriers WHERE is_active = 1 AND trim(address) <> ''")
+      .prepare("SELECT id, name, address, 'carrier' AS type FROM carriers WHERE is_active = 1 AND trim(name) <> ''")
       .all(),
     ...db
-      .prepare("SELECT id, full_name AS name, address, 'employee' AS type FROM employees WHERE is_active = 1 AND trim(address) <> ''")
+      .prepare("SELECT id, full_name AS name, address, 'employee' AS type FROM employees WHERE is_active = 1 AND trim(full_name) <> ''")
       .all(),
   ].sort((left, right) => left.name.localeCompare(right.name, 'vi'));
 

@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 23;
+const SCHEMA_VERSION = 24;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -479,6 +479,15 @@ function migrate(db) {
       ALTER TABLE fuel_records ADD COLUMN status TEXT NOT NULL DEFAULT 'active'
         CHECK (status IN ('active', 'voided'));
       CREATE INDEX fuel_records_status_idx ON fuel_records(status, period_from, period_to);
+    `);
+  }
+
+  if (current < 24) {
+    db.exec(`
+      -- Lưu nguồn km để truy vết. Tất cả các chặng đã lưu vẫn được dùng làm
+      -- dữ liệu lộ trình, kể cả chặng người dùng đã hiệu chỉnh thủ công.
+      ALTER TABLE route_distances ADD COLUMN source TEXT NOT NULL DEFAULT 'legacy';
+      CREATE INDEX route_distances_source_idx ON route_distances(source, updated_at DESC);
     `);
   }
 

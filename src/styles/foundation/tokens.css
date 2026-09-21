@@ -156,8 +156,11 @@
   --type-body:14px;
   --type-subhead:14.5px;
   --type-heading-sm:16px;
+  --type-dialog-title:18px;
   --type-symbol-xl:22px;
+  --type-heading-lg:24px;
   --type-page-title:26px;
+  --type-kpi:30px;
   --line-display:1.12;
   --line-heading:1.25;
   --line-body:1.55;

@@ -47,4 +47,19 @@ describe('tính tiền xăng', () => {
       /Định mức km phải lớn hơn 0/,
     );
   });
+
+  test('không âm thầm bỏ chặng thiếu dữ liệu hoặc vượt giới hạn', () => {
+    const base = {
+      periodFrom: '2026-09-01', periodTo: '2026-09-01',
+      consumptionLiters: 1, consumptionBaseKm: 40, fuelPrice: 20_000,
+    };
+    assert.throws(
+      () => fuelRecordInput({ ...base, legs: [{ from: 'A', to: '', km: 10 }] }),
+      /Mỗi chặng cần có điểm đi, điểm đến và số km lớn hơn 0/,
+    );
+    assert.throws(
+      () => fuelRecordInput({ ...base, legs: Array.from({ length: 51 }, () => ({ from: 'A', to: 'B', km: 1 })) }),
+      /tối đa 50 chặng/,
+    );
+  });
 });

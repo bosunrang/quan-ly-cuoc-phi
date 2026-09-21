@@ -21,7 +21,7 @@ const BACKUP_TABLES = {
   entries: { table: 'entries', columns: ['id', 'entry_date', 'customer', 'carrier', 'recipient', 'address', 'spec', 'ticket_fee', 'transport_fee', 'gate_fee', 'note', 'created_by', 'created_at', 'updated_at', 'misa_document_date', 'misa_document_code', 'employee_id', 'rate_variance_note'] },
   fuelPrices: { table: 'fuel_prices', columns: ['id', 'effective_date', 'fuel_type', 'region', 'price', 'source', 'created_by', 'created_at', 'updated_at'] },
   fuelRecords: { table: 'fuel_records', columns: ['id', 'entry_date', 'employee_id', 'distance_km', 'consumption_liters', 'consumption_base_km', 'fuel_type', 'region', 'fuel_price', 'total_fee', 'note', 'created_by', 'created_at', 'period_from', 'period_to', 'updated_at', 'finalized_at', 'finalized_by', 'voided_at', 'voided_by', 'void_reason', 'status'] },
-  routeDistances: { table: 'route_distances', columns: ['id', 'from_name', 'to_name', 'from_key', 'to_key', 'distance_km', 'updated_at'] },
+  routeDistances: { table: 'route_distances', columns: ['id', 'from_name', 'to_name', 'from_key', 'to_key', 'distance_km', 'source', 'updated_at'] },
   fuelLegs: { table: 'fuel_record_legs', columns: ['id', 'fuel_record_id', 'sequence_no', 'from_name', 'to_name', 'distance_km'] },
 };
 
@@ -80,6 +80,9 @@ function importRows(db, name, rows, userId, knownUserIds) {
       value.status ??= 'active';
       value.void_reason ??= '';
     }
+    // Backup trước v2.0.5 chưa lưu nguồn km vẫn dùng bình thường để tái sử
+    // dụng lộ trình; chỉ gắn nhãn phục vụ truy vết.
+    if (name === 'routeDistances') value.source ??= 'legacy';
     insert.run(...spec.columns.map((column) => value[column] ?? null));
   }
 }

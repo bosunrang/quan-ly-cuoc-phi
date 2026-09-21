@@ -45,6 +45,20 @@ after(async () => {
   if (workDir) rmSync(workDir, { recursive: true, force: true });
 });
 
+test('gợi ý lộ trình gồm khách hàng chưa lưu địa chỉ', async () => {
+  const customer = await call('POST', '/api/customers', { customerName: 'Y Tế Ben Kin', address: '' });
+  assert.equal(customer.status, 200);
+
+  const listed = await call('GET', '/api/fuel');
+  const location = listed.data.locations.find((item) => item.id === customer.data.id && item.type === 'customer');
+  assert.deepEqual(location, {
+    id: customer.data.id,
+    name: 'Y Tế Ben Kin',
+    address: '',
+    type: 'customer',
+  });
+});
+
 test('lưu, sửa và xóa kỳ tính xăng vẫn giữ tổng tiền và các chặng đường', async () => {
   const employee = await call('POST', '/api/employees', {
     fullName: 'Nhân viên tính xăng', address: '', userId: null, isActive: true,

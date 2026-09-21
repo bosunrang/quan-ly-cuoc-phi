@@ -51,16 +51,19 @@ function fuelRecordInput(body) {
   const consumptionBaseKm = nonNegativeNumber(body.consumptionBaseKm, 'Định mức km');
   if (!consumptionBaseKm) throw badRequest('Định mức km phải lớn hơn 0.');
 
-  const legs = Array.isArray(body.legs)
-    ? body.legs
-      .slice(0, MAX_ROUTE_LEGS)
+  const rawLegs = Array.isArray(body.legs) ? body.legs : [];
+  if (rawLegs.length > MAX_ROUTE_LEGS) {
+    throw badRequest(`Lộ trình chỉ hỗ trợ tối đa ${MAX_ROUTE_LEGS} chặng.`);
+  }
+  const legs = rawLegs
       .map((leg) => ({
         from: cleanText(leg?.from),
         to: cleanText(leg?.to),
         km: nonNegativeNumber(leg?.km, 'Quãng đường'),
-      }))
-      .filter((leg) => leg.from && leg.to && leg.km > 0)
-    : [];
+      }));
+  if (legs.some((leg) => !leg.from || !leg.to || leg.km <= 0)) {
+    throw badRequest('Mỗi chặng cần có điểm đi, điểm đến và số km lớn hơn 0.');
+  }
   const distanceKm = legs.length
     ? legs.reduce((sum, leg) => sum + leg.km, 0)
     : nonNegativeNumber(body.distanceKm, 'Quãng đường');

@@ -46,6 +46,7 @@ const BASE_KM_DRAFT_KEY = "fuel-consumption-base-km";
 const PERIOD_FROM_DRAFT_KEY = "fuel-period-from";
 const PERIOD_TO_DRAFT_KEY = "fuel-period-to";
 const HISTORY_PAGE_SIZE = 10;
+const MAX_ROUTE_LEGS = 50;
 const decimal = (value: string) => Number(value.replace(",", ".")) || 0;
 const savedDraft = (key: string, fallback: string) => {
 	const value = localStorage.getItem(key);
@@ -92,8 +93,8 @@ const locationRouteText = (item: FuelData["locations"][number]) => {
 	const name = item.name.trim();
 	const address = item.address.trim();
 	if (!name) return address;
-	if (!address || locationKey(address).includes(locationKey(name)))
-		return address;
+	if (!address) return name;
+	if (locationKey(address).includes(locationKey(name))) return address;
 	return `${name}, ${address}`;
 };
 
@@ -118,9 +119,7 @@ function LocationInput({
 		return locations
 			.filter(
 				(item) =>
-					!query ||
-					locationKey(item.name).includes(query) ||
-					locationKey(item.address).includes(query),
+					!query || locationKey(`${item.name} ${item.address}`).includes(query),
 			)
 			.slice(0, 8);
 	}, [locations, value]);
@@ -164,7 +163,8 @@ function LocationInput({
 							>
 								<strong>{item.name}</strong>
 								<span>
-									{locationType[item.type]} · {item.address}
+									{locationType[item.type]} ·{" "}
+									{item.address || "Chưa có địa chỉ"}
 								</span>
 							</button>
 						))
@@ -259,7 +259,15 @@ export function FuelPage() {
 		setFuelPrice(stored ? formatMoney(stored.price) : "");
 	};
 	const appliedPrice = Number(fuelPrice.replace(/\D/g, ""));
-	const totalKm = legs.reduce((sum, leg) => sum + decimal(leg.km), 0);
+	const routeLegs = legs.map((leg, index) => ({
+		from: index ? legs[index - 1].destination : origin,
+		to: leg.destination,
+		km: decimal(leg.km),
+	}));
+	const incompleteRouteLeg = routeLegs.find(
+		(leg) => !leg.from.trim() || !leg.to.trim() || leg.km <= 0,
+	);
+	const totalKm = routeLegs.reduce((sum, leg) => sum + leg.km, 0);
 	const total = Math.round(
 		((totalKm * decimal(consumption)) / (decimal(baseKm) || 1)) * appliedPrice,
 	);
@@ -326,12 +334,28 @@ export function FuelPage() {
 		});
 	};
 	const estimateAllLegs = async () => {
-		const completeLegs = legs.filter((leg, index) => {
-			const from = index ? legs[index - 1].destination : origin;
-			return Boolean(from.trim() && leg.destination.trim());
-		});
-		if (!completeLegs.length) {
-			setError("Vui lòng nhập điểm đi và điểm đến trước khi cập nhật km.");
+		const routeWithMissingPlace = routeLegs.find(
+			(leg) => !leg.from.trim() || !leg.to.trim(),
+		);
+		if (routeWithMissingPlace) {
+			setError(
+				"Hoàn thành điểm đi và điểm đến của mọi chặng trước khi cập nhật km.",
+			);
+			return;
+		}
+		const missingAddress = (data?.locations ?? []).find(
+			(item) =>
+				!item.address.trim() &&
+				routeLegs.some(
+					(leg) =>
+						sameLocation(item.name, leg.from) ||
+						sameLocation(item.name, leg.to),
+				),
+		);
+		if (missingAddress) {
+			setError(
+				`${locationType[missingAddress.type]} “${missingAddress.name}” chưa có địa chỉ. Hãy bổ sung địa chỉ vào ô trước khi tính bằng VietMap.`,
+			);
 			return;
 		}
 		setEstimatingLegId("all");
@@ -342,6 +366,9 @@ export function FuelPage() {
 			const from = index ? legs[index - 1].destination : origin;
 			const destination = legs[index].destination;
 			if (!from.trim() || !destination.trim()) continue;
+			// Giữ nguyên km đã có (từ chặng đã lưu hoặc do người dùng nhập tay).
+			// Nhờ đó, thêm B → C chỉ gọi VietMap cho B → C, không làm thay đổi A → B.
+			if (decimal(legs[index].km) > 0) continue;
 			try {
 				const result = await fuelRepository.estimateRoute(from, destination);
 				next[index] = {
@@ -412,15 +439,8 @@ export function FuelPage() {
 		if (!employeeId) throw new Error("Vui lòng chọn nhân viên.");
 		if (!origin.trim() || !totalKm)
 			throw new Error("Vui lòng nhập điểm đi và quãng đường.");
-		const routeLegs = legs
-			.map((leg, index) => ({
-				from: index ? legs[index - 1].destination : origin,
-				to: leg.destination,
-				km: decimal(leg.km),
-			}))
-			.filter((leg) => leg.from.trim() && leg.to.trim() && leg.km > 0);
-		if (!routeLegs.length)
-			throw new Error("Mỗi chặng cần có điểm đến và số km.");
+		if (incompleteRouteLeg)
+			throw new Error("Mỗi chặng cần có điểm đi, điểm đến và số km lớn hơn 0.");
 		const input = {
 			periodFrom,
 			periodTo,
@@ -589,7 +609,9 @@ export function FuelPage() {
 											onChange={(event) =>
 												setLeg(index, {
 													km: event.target.value,
-													source: undefined,
+													source: event.target.value.trim()
+														? "Nhập tay"
+														: undefined,
 												})
 											}
 										/>
@@ -619,6 +641,12 @@ export function FuelPage() {
 							<button
 								className="button secondary"
 								type="button"
+								disabled={legs.length >= MAX_ROUTE_LEGS}
+								title={
+									legs.length >= MAX_ROUTE_LEGS
+										? `Tối đa ${MAX_ROUTE_LEGS} chặng`
+										: undefined
+								}
 								onClick={() => setLegs((rows) => [...rows, newLeg()])}
 							>
 								<Plus size={15} />
@@ -631,7 +659,7 @@ export function FuelPage() {
 								onClick={() => void estimateAllLegs()}
 							>
 								<RefreshCw size={15} />
-								Cập nhật km (VietMap)
+								Cập nhật km còn thiếu (VietMap)
 							</button>
 						</div>
 					</div>
@@ -659,7 +687,9 @@ export function FuelPage() {
 						<button
 							className="button primary"
 							type="button"
-							disabled={!appliedPrice || !totalKm}
+							disabled={
+								!appliedPrice || !totalKm || Boolean(incompleteRouteLeg)
+							}
 							onClick={() =>
 								void save().catch((cause) =>
 									setError(
