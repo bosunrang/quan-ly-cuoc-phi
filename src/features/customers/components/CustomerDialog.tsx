@@ -51,6 +51,17 @@ export function CustomerDialog({
 				)}
 			</Field>
 			<FieldGrid>
+				<Field label="Mã khách hàng">
+					{(id) => (
+						<input
+							id={id}
+							type="text"
+							value={form.customerCode}
+							onChange={setText("customerCode")}
+							placeholder="Ví dụ: KH-001"
+						/>
+					)}
+				</Field>
 				<Field label="Nhà xe">
 					{(id) => (
 						<input

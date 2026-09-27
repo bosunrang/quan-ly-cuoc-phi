@@ -6,7 +6,14 @@
 .fuel-section-head .fuel-section-title strong { color: var(--ink); font-size: var(--type-subhead); line-height: var(--line-heading); }
 .fuel-section-head .fuel-section-title span { margin-top: 3px; color: var(--muted); font-size: var(--type-caption); }
 .fuel-calculator-tools { display: flex; align-items: end; gap: 10px; margin-left: auto; }
-.fuel-consumption-action { white-space: nowrap; }
+.fuel-vehicle-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.fuel-vehicle-option { display: flex; min-width: 0; }
+.fuel-consumption-action { flex: 1; display: flex; align-items: center; gap: 7px; min-width: 0; padding: 9px 10px; border-radius: 7px 0 0 7px; text-align: left; white-space: nowrap; }
+.fuel-vehicle-option .fuel-consumption-action:last-child { border-radius: 7px; }
+.fuel-vehicle-option:first-child .fuel-consumption-action > svg { position: relative; top: 1px; flex: 0 0 auto; }
+.fuel-consumption-edit { width: 34px; flex: 0 0 34px; border: 1px solid var(--line); border-left: 0; border-radius: 0 7px 7px 0; background: var(--panel); color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.fuel-consumption-edit:hover { background: var(--surface-accent-faint); color: var(--teal); }
+.fuel-vehicle-option.is-active .fuel-consumption-action, .fuel-vehicle-option.is-active .fuel-consumption-edit { border-color: var(--teal); background: var(--teal); color: var(--on-accent); }
 .fuel-price-action { flex: 0 0 auto; }
 .fuel-settings { background: var(--panel); }
 .fuel-settings-group { padding: 16px 20px; border-bottom: 1px solid var(--line-soft); }
@@ -70,14 +77,37 @@
 .fuel-leg-step span { z-index: 1; display: grid; width: 24px; height: 24px; place-items: center; border: 2px solid var(--panel); border-radius: 50%; background: var(--teal); color: var(--on-accent); font-size: var(--type-overline); font-weight: 800; box-shadow: 0 0 0 1px var(--teal-border); }
 .fuel-leg-step i { position: absolute; top: 26px; bottom: -17px; width: 2px; background: linear-gradient(var(--teal-border), transparent); }
 .fuel-delete-leg { align-self: end; }
-.fuel-history-list { display: grid; gap: var(--space-2); padding: var(--space-3); }
-.fuel-history-list article { display: grid; grid-template-columns: minmax(0, 1fr) 132px 140px auto; gap: var(--space-3); align-items: center; padding: var(--space-3); border: 1px solid var(--line-soft); border-radius: 9px; background: var(--panel); }
+.fuel-history-list {
+	display: grid;
+	max-height: min(680px, calc(100dvh - 260px));
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	gap: var(--space-2);
+	padding: var(--space-3);
+	scrollbar-gutter: stable;
+}
+.fuel-page-stack { height: 100%; }
+.fuel-page-stack .fuel-layout { flex: 1; min-height: 0; }
+.fuel-page-stack .fuel-history-panel {
+	display: flex;
+	height: 100%;
+	min-height: 0;
+	flex-direction: column;
+}
+.fuel-page-stack .fuel-history-list {
+	min-height: 0;
+	max-height: none;
+	flex: 1;
+}
+.fuel-page-stack .fuel-history-empty { flex: 1; }
+.fuel-history-list article { display: grid; grid-template-columns: minmax(0, 1fr) minmax(330px, auto) auto; gap: var(--space-3); align-items: center; padding: var(--space-3); border: 1px solid var(--line-soft); border-radius: 9px; background: var(--panel); }
 .fuel-history-list article:hover { border-color: var(--teal-border); background: var(--surface-accent-faint); }
 .fuel-history-list article.is-voided { background: var(--surface-subtle); opacity: .7; }
 .fuel-history-main, .fuel-history-metric { display: grid; min-width: 0; gap: 3px; }
 .fuel-history-main strong { overflow: hidden; color: var(--ink); font-size: var(--type-body-sm); text-overflow: ellipsis; white-space: nowrap; }
 .fuel-history-main span, .fuel-history-metric span { color: var(--muted); font-size: var(--type-caption); }
 .fuel-history-status { color: var(--status-danger-text); font-size: var(--type-caption); }
+.fuel-history-metrics { display: grid; grid-template-columns: repeat(3, minmax(100px, 1fr)); gap: var(--space-2); min-width: 0; }
 .fuel-history-metric { text-align: center; }
 .fuel-history-metric strong { color: var(--text-body); font-size: var(--type-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fuel-history-metric.is-total strong { color: var(--teal); }
@@ -104,7 +134,7 @@
 .fuel-record-detail-dialog .dialog-footer .button { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
 .fuel-record-detail-close { margin-left: auto; }
 .fuel-record-detail-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
-.fuel-record-detail-table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: var(--type-body-sm); }
+.fuel-record-detail-table { width: 100%; min-width: 800px; border-collapse: collapse; font-size: var(--type-body-sm); }
 .fuel-record-detail-table th { padding: 10px var(--space-3); background: var(--surface-subtle); color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; text-align: left; }
 .fuel-record-detail-table td { padding: var(--space-3); border-top: 1px solid var(--line-soft); color: var(--text-body); vertical-align: top; line-height: var(--line-body); }
 .fuel-record-detail-table td:first-child { display: grid; min-width: 300px; gap: 3px; }
@@ -118,12 +148,21 @@
 .fuel-consumption-fields label { display: grid; gap: 6px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; }
 .fuel-consumption-fields input { box-sizing: border-box; width: 100%; height: 38px; min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text-body); font-size: var(--type-meta); }
 .fuel-consumption-fields input:focus { outline: 0; border-color: var(--focus-border); box-shadow: none; }
-@media (max-width: 640px) { .fuel-price-dialog .fuel-price-fields, .fuel-online-group { grid-template-columns: 1fr; } }
-@media (max-width: 1450px) { .fuel-layout { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .fuel-price-dialog .fuel-price-fields, .fuel-online-group { grid-template-columns: 1fr; } .fuel-consumption-action > svg { display: none; } }
+@media (max-width: 1450px) {
+	.fuel-page-stack { height: auto; }
+	.fuel-layout { grid-template-columns: 1fr; }
+	.fuel-page-stack .fuel-layout { flex: initial; }
+	.fuel-page-stack .fuel-history-panel { height: auto; }
+	.fuel-page-stack .fuel-history-list {
+		max-height: min(680px, calc(100dvh - 260px));
+		flex: initial;
+	}
+}
 @media (max-width: 1250px) { .fuel-leg { grid-template-columns: 28px minmax(150px,1fr) minmax(160px,1fr) 76px 82px; } .fuel-leg-removable { grid-template-columns: 28px minmax(150px,1fr) minmax(160px,1fr) 76px 82px 34px; } }
 @media (max-width: 820px) { .fuel-leg { grid-template-columns: 28px 1fr 1fr; } .fuel-leg-fee { grid-column: 2; } .fuel-delete-leg { justify-self: end; } .fuel-calculator-footer { justify-content: flex-start; flex-wrap: wrap; } }
-@media (max-width: 720px) { .fuel-history-list article { grid-template-columns: minmax(0, 1fr) 112px auto; } .fuel-history-metric.is-total { display: none; } }
-@media (max-width: 560px) { .fuel-section-head { align-items: flex-start; padding: 14px; } .fuel-route-head { align-items: flex-start; flex-direction: column; } .fuel-leg { grid-template-columns: 28px 1fr; } .fuel-leg-step { grid-row: span 4; } .fuel-delete-leg { grid-row: 1; grid-column: 2; justify-self: end; } .fuel-calculator-footer { gap: 12px; padding: 14px; } .fuel-calculator-footer > div + div { padding-left: 0; border-left: 0; } .fuel-calculator-footer .button { width: 100%; } .fuel-history-filter { width: 100%; min-width: 0; } .fuel-history-list article { grid-template-columns: minmax(0, 1fr) auto; } .fuel-history-metric { display: none; } .fuel-history-actions { grid-column: 1 / -1; justify-content: flex-start; } }
+@media (max-width: 720px) { .fuel-history-list article { grid-template-columns: minmax(0, 1fr) auto; } .fuel-history-metrics { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); padding-top: var(--space-2); border-top: 1px solid var(--line-soft); } .fuel-history-actions { grid-row: 1; grid-column: 2; } }
+@media (max-width: 560px) { .fuel-section-head { align-items: flex-start; padding: 14px; } .fuel-route-head { align-items: flex-start; flex-direction: column; } .fuel-leg { grid-template-columns: 28px 1fr; } .fuel-leg-step { grid-row: span 4; } .fuel-delete-leg { grid-row: 1; grid-column: 2; justify-self: end; } .fuel-calculator-footer { gap: 12px; padding: 14px; } .fuel-calculator-footer > div + div { padding-left: 0; border-left: 0; } .fuel-calculator-footer .button { width: 100%; } .fuel-history-filter { width: 100%; min-width: 0; } .fuel-history-list { padding: var(--space-2); } .fuel-history-metric { overflow: hidden; } .fuel-history-metric strong { overflow: hidden; font-size: var(--type-caption); text-overflow: ellipsis; } }
 
 /* Khi màn hình rộng nhưng thẻ tính xăng hẹp do đặt cạnh lịch sử, dựa vào
    chính chiều rộng thẻ thay vì chiều rộng toàn màn hình để tránh cắt ô tiền. */
@@ -142,10 +181,39 @@
   .fuel-leg,
   .fuel-leg-removable { grid-template-columns: 28px minmax(0, 1fr); }
   .fuel-leg-step { grid-row: span 4; }
-  .fuel-leg:not(.fuel-leg-removable) > :not(.fuel-leg-step),
-  .fuel-leg-removable > :not(.fuel-leg-step):not(.fuel-delete-leg) { grid-column: 2; }
-  .fuel-leg-removable .fuel-leg-fee-field { grid-column: 2; }
-  .fuel-leg-removable .fuel-delete-leg { position: absolute; top: 14px; right: 0; }
+  .fuel-leg:not(.fuel-leg-removable) {
+    grid-template-columns: 28px 82px minmax(0, 1fr);
+    grid-template-areas:
+      "step origin origin"
+      "step destination destination"
+      "step distance fee";
+  }
+  .fuel-leg:not(.fuel-leg-removable) > .fuel-leg-step { grid-area: step; }
+  .fuel-leg:not(.fuel-leg-removable) > .fuel-route-field:nth-child(2) { grid-area: origin; }
+  .fuel-leg:not(.fuel-leg-removable) > .fuel-route-field:nth-child(3) { grid-area: destination; }
+  .fuel-leg:not(.fuel-leg-removable) > label { grid-area: distance; }
+  .fuel-leg:not(.fuel-leg-removable) .fuel-leg-fee-field { grid-area: fee; }
+  .fuel-leg:not(.fuel-leg-removable) .fuel-leg-fee { grid-column: auto; }
+  .fuel-leg-removable {
+    grid-template-columns: 28px 82px minmax(0, 1fr) 36px;
+    grid-template-areas:
+      "step origin origin origin"
+      "step destination destination destination"
+      "step distance fee delete";
+  }
+  .fuel-leg-removable > .fuel-leg-step { grid-area: step; }
+  .fuel-leg-removable > .fuel-route-field:nth-child(2) { grid-area: origin; }
+  .fuel-leg-removable > .fuel-route-field:nth-child(3) { grid-area: destination; }
+  .fuel-leg-removable > label { grid-area: distance; }
+  .fuel-leg-removable .fuel-leg-fee-field { grid-area: fee; }
+  .fuel-leg-removable .fuel-leg-fee { grid-column: auto; }
+  .fuel-leg-removable .fuel-delete-leg {
+    position: static;
+    grid-area: delete;
+    align-self: end;
+    justify-self: end;
+    margin-top: 0;
+  }
   .fuel-calculator-footer { justify-content: flex-start; flex-wrap: wrap; gap: 12px; padding: 14px; }
   .fuel-footer-caption { width: 100%; }
   .fuel-footer-metric { padding-left: 0; border-left: 0; }

@@ -1,4 +1,6 @@
 import {
+	Bike,
+	CarFront,
 	ChevronLeft,
 	ChevronRight,
 	ClipboardList,
@@ -7,7 +9,6 @@ import {
 	Pencil,
 	Plus,
 	RefreshCw,
-	SlidersHorizontal,
 	Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,20 +39,29 @@ const newLeg = (): Leg => ({
 	destination: "",
 	km: "",
 });
+
 const DEFAULT_FUEL_TYPE = "Xăng E10";
 const E5_FUEL_TYPE = "Xăng E5 RON 92";
 const DEFAULT_REGION = "region1" as const;
-const CONSUMPTION_DRAFT_KEY = "fuel-consumption-liters";
-const BASE_KM_DRAFT_KEY = "fuel-consumption-base-km";
+const VEHICLE_TYPE_DRAFT_KEY = "fuel-vehicle-type";
 const PERIOD_FROM_DRAFT_KEY = "fuel-period-from";
 const PERIOD_TO_DRAFT_KEY = "fuel-period-to";
 const HISTORY_PAGE_SIZE = 10;
 const MAX_ROUTE_LEGS = 50;
 const decimal = (value: string) => Number(value.replace(",", ".")) || 0;
-const savedDraft = (key: string, fallback: string) => {
-	const value = localStorage.getItem(key);
-	return value?.trim() ? value : fallback;
+type VehicleType = "motorcycle" | "truck";
+type ConsumptionProfile = { consumption: string; baseKm: string };
+const vehicleLabels: Record<VehicleType, string> = {
+	motorcycle: "Xe máy",
+	truck: "Ô tô",
 };
+const savedVehicleLabel = (
+	vehicleType: FuelData["records"][number]["vehicleType"],
+) => (vehicleType ? vehicleLabels[vehicleType] : "Chưa ghi nhận");
+const savedVehicleType = (): VehicleType =>
+	localStorage.getItem(VEHICLE_TYPE_DRAFT_KEY) === "truck"
+		? "truck"
+		: "motorcycle";
 const savedDateDraft = (key: string) => {
 	const value = localStorage.getItem(key) ?? "";
 	return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : todayIso();
@@ -181,11 +191,10 @@ export function FuelPage() {
 	const [data, setData] = useState<FuelData | null>(null),
 		[error, setError] = useState<string | null>(null),
 		[priceEditor, setPriceEditor] = useState(false),
-		[consumptionEditor, setConsumptionEditor] = useState(false),
+		[consumptionEditor, setConsumptionEditor] = useState<VehicleType | null>(
+			null,
+		),
 		[editingRecord, setEditingRecord] = useState<
-			FuelData["records"][number] | null
-		>(null),
-		[voidingRecord, setVoidingRecord] = useState<
 			FuelData["records"][number] | null
 		>(null),
 		[deletingRecord, setDeletingRecord] = useState<
@@ -204,10 +213,11 @@ export function FuelPage() {
 			savedDateDraft(PERIOD_TO_DRAFT_KEY),
 		),
 		[fuelPrice, setFuelPrice] = useState(""),
-		[consumption, setConsumption] = useState(() =>
-			savedDraft(CONSUMPTION_DRAFT_KEY, "3.5"),
+		[vehicleType, setVehicleType] = useState<VehicleType>(() =>
+			savedVehicleType(),
 		),
-		[baseKm, setBaseKm] = useState(() => savedDraft(BASE_KM_DRAFT_KEY, "40")),
+		[consumption, setConsumption] = useState("1"),
+		[baseKm, setBaseKm] = useState("40"),
 		[origin, setOrigin] = useState(""),
 		[legs, setLegs] = useState<Leg[]>([newLeg()]),
 		[estimatingLegId, setEstimatingLegId] = useState<string | null>(null);
@@ -247,6 +257,12 @@ export function FuelPage() {
 			setHistoryEmployeeId(String(data.currentEmployee.id));
 		}
 	}, [data?.currentEmployee, data?.isAdmin]);
+	useEffect(() => {
+		const profile = data?.consumptionProfiles[vehicleType];
+		if (!profile) return;
+		setConsumption(String(profile.consumptionLiters));
+		setBaseKm(String(profile.consumptionBaseKm));
+	}, [data?.consumptionProfiles, vehicleType]);
 	const findStoredPrice = (date: string) =>
 		data?.prices.find(
 			(item) =>
@@ -276,6 +292,24 @@ export function FuelPage() {
 		1,
 		Math.ceil((data?.recordsTotal ?? 0) / HISTORY_PAGE_SIZE),
 	);
+	const consumptionProfiles = data?.consumptionProfiles ?? {
+		motorcycle: { consumptionLiters: 1, consumptionBaseKm: 40 },
+		truck: { consumptionLiters: 7.5, consumptionBaseKm: 100 },
+	};
+	const vehicleProfileLabel = (nextVehicleType: VehicleType) => {
+		const profile = consumptionProfiles[nextVehicleType];
+		return profile.consumptionLiters
+			? `${profile.consumptionLiters}L / ${profile.consumptionBaseKm || "—"}km`
+			: "Chưa thiết lập";
+	};
+	const selectVehicleType = (nextVehicleType: VehicleType) => {
+		if (nextVehicleType === vehicleType) return;
+		const profile = consumptionProfiles[nextVehicleType];
+		localStorage.setItem(VEHICLE_TYPE_DRAFT_KEY, nextVehicleType);
+		setVehicleType(nextVehicleType);
+		setConsumption(String(profile.consumptionLiters));
+		setBaseKm(String(profile.consumptionBaseKm));
+	};
 	const setLeg = (index: number, patch: Partial<Leg>) =>
 		setLegs((rows) =>
 			rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
@@ -388,14 +422,6 @@ export function FuelPage() {
 			failed ? failureMessage || "Một vài chặng chưa lấy được km." : null,
 		);
 	};
-	const setSavedConsumption = (value: string) => {
-		setConsumption(value);
-		localStorage.setItem(CONSUMPTION_DRAFT_KEY, value);
-	};
-	const setSavedBaseKm = (value: string) => {
-		setBaseKm(value);
-		localStorage.setItem(BASE_KM_DRAFT_KEY, value);
-	};
 	const setSavedPeriodFrom = (value: string) => {
 		setPeriodFrom(value);
 		localStorage.setItem(PERIOD_FROM_DRAFT_KEY, value);
@@ -417,8 +443,9 @@ export function FuelPage() {
 		setSavedPeriodFrom(record.periodFrom);
 		setSavedPeriodTo(record.periodTo);
 		setFuelPrice(formatMoney(record.fuelPrice));
-		setSavedConsumption(String(record.consumptionLiters));
-		setSavedBaseKm(String(record.consumptionBaseKm));
+		if (record.vehicleType) setVehicleType(record.vehicleType);
+		setConsumption(String(record.consumptionLiters));
+		setBaseKm(String(record.consumptionBaseKm));
 		setOrigin(recordLegs[0]?.from ?? "");
 		setLegs(
 			recordLegs.length
@@ -447,6 +474,7 @@ export function FuelPage() {
 			employeeId,
 			consumptionLiters: decimal(consumption),
 			consumptionBaseKm: decimal(baseKm),
+			vehicleType,
 			fuelType: DEFAULT_FUEL_TYPE,
 			region: DEFAULT_REGION,
 			fuelPrice: appliedPrice,
@@ -476,14 +504,56 @@ export function FuelPage() {
 							</div>
 						</div>
 						<div className="fuel-calculator-tools">
-							<button
-								className="button secondary fuel-consumption-action"
-								type="button"
-								onClick={() => setConsumptionEditor(true)}
-							>
-								<SlidersHorizontal size={15} />
-								Định mức: {consumption || "—"}L / {baseKm || "—"}km
-							</button>
+							<div className="fuel-vehicle-actions">
+								<div
+									className={`fuel-vehicle-option ${vehicleType === "motorcycle" ? "is-active" : ""}`}
+								>
+									<button
+										className="button secondary fuel-consumption-action"
+										type="button"
+										onClick={() => selectVehicleType("motorcycle")}
+										aria-pressed={vehicleType === "motorcycle"}
+									>
+										<Bike size={17} />
+										<span>Xe máy · {vehicleProfileLabel("motorcycle")}</span>
+									</button>
+									{data.isAdmin && (
+										<button
+											className="fuel-consumption-edit"
+											type="button"
+											onClick={() => setConsumptionEditor("motorcycle")}
+											aria-label="Thiết lập định mức xe máy"
+											title="Thiết lập định mức xe máy"
+										>
+											<Pencil size={15} />
+										</button>
+									)}
+								</div>
+								<div
+									className={`fuel-vehicle-option ${vehicleType === "truck" ? "is-active" : ""}`}
+								>
+									<button
+										className="button secondary fuel-consumption-action"
+										type="button"
+										onClick={() => selectVehicleType("truck")}
+										aria-pressed={vehicleType === "truck"}
+									>
+										<CarFront size={17} />
+										<span>Ô tô · {vehicleProfileLabel("truck")}</span>
+									</button>
+									{data.isAdmin && (
+										<button
+											className="fuel-consumption-edit"
+											type="button"
+											onClick={() => setConsumptionEditor("truck")}
+											aria-label="Thiết lập định mức ô tô"
+											title="Thiết lập định mức ô tô"
+										>
+											<Pencil size={15} />
+										</button>
+									)}
+								</div>
+							</div>
 							{data.isAdmin && (
 								<button
 									className="button primary fuel-price-action"
@@ -756,15 +826,21 @@ export function FuelPage() {
 													</span>
 												)}
 											</div>
-											<div className="fuel-history-metric">
-												<span>Quãng đường</span>
-												<strong>
-													{item.distanceKm.toLocaleString("vi-VN")} km
-												</strong>
-											</div>
-											<div className="fuel-history-metric is-total">
-												<span>Tổng tiền</span>
-												<strong>{formatMoney(item.totalFee)} đ</strong>
+											<div className="fuel-history-metrics">
+												<div className="fuel-history-metric">
+													<span>Quãng đường</span>
+													<strong>
+														{item.distanceKm.toLocaleString("vi-VN")} km
+													</strong>
+												</div>
+												<div className="fuel-history-metric">
+													<span>Giá xăng</span>
+													<strong>{formatMoney(item.fuelPrice)} đ/lít</strong>
+												</div>
+												<div className="fuel-history-metric is-total">
+													<span>Tổng tiền</span>
+													<strong>{formatMoney(item.totalFee)} đ</strong>
+												</div>
 											</div>
 											<div className="fuel-history-actions">
 												<button
@@ -839,24 +915,30 @@ export function FuelPage() {
 			)}
 			{consumptionEditor && (
 				<ConsumptionDialog
-					consumption={consumption}
-					baseKm={baseKm}
-					close={() => setConsumptionEditor(false)}
-					saved={(nextConsumption, nextBaseKm) => {
-						setSavedConsumption(nextConsumption);
-						setSavedBaseKm(nextBaseKm);
-						setConsumptionEditor(false);
+					vehicleType={consumptionEditor}
+					profile={{
+						consumption: String(
+							consumptionProfiles[consumptionEditor].consumptionLiters,
+						),
+						baseKm: String(
+							consumptionProfiles[consumptionEditor].consumptionBaseKm,
+						),
 					}}
-				/>
-			)}
-			{voidingRecord && (
-				<VoidFuelRecordDialog
-					record={voidingRecord}
-					close={() => setVoidingRecord(null)}
-					saved={async (reason) => {
-						await fuelRepository.deleteRecord(voidingRecord.id, reason);
-						setVoidingRecord(null);
-						await load();
+					close={() => setConsumptionEditor(null)}
+					saved={async (nextConsumption, nextBaseKm) => {
+						const profiles = await fuelRepository.saveConsumption({
+							vehicleType: consumptionEditor,
+							consumptionLiters: decimal(nextConsumption),
+							consumptionBaseKm: decimal(nextBaseKm),
+						});
+						setData((current) =>
+							current ? { ...current, consumptionProfiles: profiles } : current,
+						);
+						localStorage.setItem(VEHICLE_TYPE_DRAFT_KEY, consumptionEditor);
+						setVehicleType(consumptionEditor);
+						setConsumption(nextConsumption);
+						setBaseKm(nextBaseKm);
+						setConsumptionEditor(null);
 					}}
 				/>
 			)}
@@ -882,10 +964,6 @@ export function FuelPage() {
 						setDeletingRecord(detailRecord);
 						setDetailRecord(null);
 					}}
-					voidRecord={() => {
-						setVoidingRecord(detailRecord);
-						setDetailRecord(null);
-					}}
 				/>
 			)}
 		</>
@@ -893,29 +971,29 @@ export function FuelPage() {
 }
 
 function ConsumptionDialog({
-	consumption: initialConsumption,
-	baseKm: initialBaseKm,
+	vehicleType,
+	profile,
 	close,
 	saved,
 }: {
-	consumption: string;
-	baseKm: string;
+	vehicleType: VehicleType;
+	profile: ConsumptionProfile;
 	close: () => void;
-	saved: (consumption: string, baseKm: string) => void;
+	saved: (consumption: string, baseKm: string) => Promise<void>;
 }) {
-	const [consumption, setConsumption] = useState(initialConsumption);
-	const [baseKm, setBaseKm] = useState(initialBaseKm);
+	const [consumption, setConsumption] = useState(profile.consumption);
+	const [baseKm, setBaseKm] = useState(profile.baseKm);
 	return (
 		<Dialog
 			className="fuel-consumption-dialog"
-			title="Định mức nhiên liệu"
-			subtitle="Thiết lập mức tiêu hao dùng để tính tiền xăng cho các chặng."
+			title={`Định mức ${vehicleLabels[vehicleType]}`}
+			subtitle="Thiết lập mức tiêu hao riêng cho loại xe này."
 			onClose={close}
 			confirmLabel="Lưu định mức"
 			onConfirm={async () => {
 				if (decimal(consumption) <= 0 || decimal(baseKm) <= 0)
 					throw new Error("Mức tiêu hao và định mức km phải lớn hơn 0.");
-				saved(consumption, baseKm);
+				await saved(consumption, baseKm);
 			}}
 		>
 			<div className="fuel-consumption-fields">
@@ -937,41 +1015,6 @@ function ConsumptionDialog({
 					/>
 				</label>
 			</div>
-		</Dialog>
-	);
-}
-
-function VoidFuelRecordDialog({
-	record,
-	close,
-	saved,
-}: {
-	record: FuelData["records"][number];
-	close: () => void;
-	saved: (reason: string) => Promise<void>;
-}) {
-	const [reason, setReason] = useState("");
-	return (
-		<Dialog
-			className="fuel-void-dialog"
-			title="Hủy lần tính xăng đã chốt"
-			subtitle={`Bản ghi ${formatDate(record.periodFrom)} – ${formatDate(record.periodTo)} sẽ không còn được tính vào báo cáo sau này.`}
-			onClose={close}
-			confirmLabel="Xác nhận hủy"
-			onConfirm={async () => {
-				if (!reason.trim()) throw new Error("Vui lòng nhập lý do hủy.");
-				await saved(reason.trim());
-			}}
-		>
-			<label className="field">
-				Lý do hủy
-				<textarea
-					autoFocus
-					value={reason}
-					placeholder="Ví dụ: Nhân viên nhập nhầm quãng đường"
-					onChange={(event) => setReason(event.target.value)}
-				/>
-			</label>
 		</Dialog>
 	);
 }
@@ -1007,13 +1050,11 @@ function FuelRecordDetailDialog({
 	close,
 	edit,
 	remove,
-	voidRecord,
 }: {
 	record: FuelData["records"][number];
 	close: () => void;
 	edit: () => void;
 	remove: () => void;
-	voidRecord: () => void;
 }) {
 	const legs = record.legs ?? [];
 	return (
@@ -1035,15 +1076,6 @@ function FuelRecordDetailDialog({
 							<Trash2 size={15} /> Xóa lần tính
 						</button>
 					)}
-					{record.canVoid && (
-						<button
-							className="button danger"
-							type="button"
-							onClick={voidRecord}
-						>
-							<Trash2 size={15} /> Hủy lần tính
-						</button>
-					)}
 					<button
 						className="button secondary fuel-record-detail-close"
 						type="button"
@@ -1059,6 +1091,7 @@ function FuelRecordDetailDialog({
 					<thead>
 						<tr>
 							<th>Lộ trình</th>
+							<th>Phương tiện</th>
 							<th>Giá xăng</th>
 							<th>Quãng đường</th>
 							<th>Số tiền tính</th>
@@ -1083,6 +1116,7 @@ function FuelRecordDetailDialog({
 												</span>
 											</div>
 										</td>
+										<td>{savedVehicleLabel(record.vehicleType)}</td>
 										<td>{formatMoney(record.fuelPrice)} đ/lít</td>
 										<td>{leg.km.toLocaleString("vi-VN")} km</td>
 										<td>{formatMoney(legFee)} đ</td>
@@ -1092,6 +1126,7 @@ function FuelRecordDetailDialog({
 						) : (
 							<tr>
 								<td>Chưa lưu chi tiết lộ trình</td>
+								<td>{savedVehicleLabel(record.vehicleType)}</td>
 								<td>{formatMoney(record.fuelPrice)} đ/lít</td>
 								<td>{record.distanceKm.toLocaleString("vi-VN")} km</td>
 								<td>{formatMoney(record.totalFee)} đ</td>
@@ -1101,7 +1136,7 @@ function FuelRecordDetailDialog({
 					{legs.length > 1 && (
 						<tfoot>
 							<tr>
-								<th colSpan={2}>Tổng toàn bộ lộ trình</th>
+								<th colSpan={3}>Tổng toàn bộ lộ trình</th>
 								<th>{record.distanceKm.toLocaleString("vi-VN")} km</th>
 								<th>{formatMoney(record.totalFee)} đ</th>
 							</tr>

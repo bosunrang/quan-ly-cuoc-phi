@@ -22,6 +22,7 @@ let workDir;
 let adminToken;
 let staffAToken;
 let staffBToken;
+let staffAEmployeeId;
 
 /** Gọi API như một máy trạm thật: qua HTTP, kèm token. */
 async function call(method, path, { token, body } = {}) {
@@ -53,9 +54,15 @@ function newEntry(overrides = {}) {
     entryDate: '2026-08-01',
     customer: 'Khách A',
     carrier: 'Nhà xe A',
+		recipient: 'Người nhận A',
+		address: 'Địa chỉ A',
+		spec: 'Tất cả',
     ticketFee: 10000,
     transportFee: 200000,
     gateFee: 5000,
+		note: 'Sản phẩm A',
+		billStatus: 'Có bill',
+		employeeId: staffAEmployeeId,
     ...overrides,
   };
 }
@@ -131,7 +138,7 @@ before(async () => {
   const users = await call('GET', '/api/users', { token: adminToken });
   const staffA = users.data.items.find((user) => user.username === 'nhanviena');
   // Nhân viên tự lập phiếu phải có bản ghi nhân viên liên kết tài khoản.
-  await call('POST', '/api/employees', {
+  const staffEmployee = await call('POST', '/api/employees', {
     token: adminToken,
     body: {
       fullName: 'Nhân viên A',
@@ -140,6 +147,8 @@ before(async () => {
       isActive: true,
     },
   });
+  assert.equal(staffEmployee.status, 200);
+  staffAEmployeeId = staffEmployee.data.id;
   staffAToken = await login('nhanviena', 'MatKhau123');
   staffBToken = await login('nhanvienb', 'MatKhau123');
 });
@@ -293,6 +302,7 @@ describe('nhập dữ liệu MISA', () => {
   const misaRow = (overrides = {}) => ({
     rowNumber: 4,
     documentDate: '2026-06-01',
+    customerCode: 'KH001',
     customerName: 'Bệnh viện A',
     address: '01 Nguyễn Huệ',
     productName: 'Mặt hàng A',
@@ -342,6 +352,7 @@ describe('nhập dữ liệu MISA', () => {
       },
       { total: 3, ready: 1, duplicate: 1, skipped: 1 },
     );
+    assert.equal(result.data.rows[0].customerCode, 'KH001');
   });
 
   test('nhập dòng mới và lần sau nhận ra dòng đã tồn tại', async () => {
@@ -356,8 +367,23 @@ describe('nhập dữ liệu MISA', () => {
     assert.equal(list.status, 200);
     assert.equal(list.data.count, 1);
     assert.equal(list.data.totalQuantity, 4);
+    assert.equal(list.data.items[0].customerCode, 'KH001');
     assert.equal(list.data.items[0].customerName, 'Bệnh viện A');
     assert.equal(list.data.items[0].productName, 'Mặt hàng A');
+
+    const customer = await call('POST', '/api/customers', {
+      token: adminToken,
+      body: { customerName: 'Bệnh viện A' },
+    });
+    assert.equal(customer.status, 200);
+    const options = await call('GET', '/api/entries/form-options', {
+      token: adminToken,
+    });
+    assert.equal(options.status, 200);
+    assert.equal(
+      options.data.customers.find((item) => item.id === customer.data.id).customerCode,
+      'KH001',
+    );
 
     const preview = await call('POST', '/api/misa/preview', {
       token: adminToken,
@@ -391,6 +417,71 @@ describe('nhập dữ liệu MISA', () => {
     const list = await call('GET', '/api/misa', { token: adminToken });
     assert.equal(list.data.count, 1);
     assert.equal(list.data.items[0].productName, 'Mặt hàng A');
+  });
+
+  test('mã khách hàng MISA giữ liên kết nhà xe khi tên khách thay đổi', async () => {
+    const customerCode = 'KH-MISA-LIEN-KET';
+    const imported = await call('POST', '/api/misa/import', {
+      token: adminToken,
+      body: {
+        fileName: 'MISA lien ket theo ma.xlsx',
+        rows: [misaRow({
+          rowNumber: 9,
+          documentDate: '2026-06-08',
+          customerCode,
+          customerName: 'Bệnh viện tên cũ trên MISA',
+          productName: 'Sản phẩm liên kết theo mã',
+          quantitySold: 7,
+          provinceCity: 'Cần Thơ',
+          sourceKey: '2026-06-08|kh-misa-lien-ket|san-pham-lien-ket|7',
+        })],
+      },
+    });
+    assert.equal(imported.status, 200);
+    assert.equal(imported.data.inserted, 1);
+
+    const customer = await call('POST', '/api/customers', {
+      token: adminToken,
+      body: {
+        customerName: 'Bệnh viện đã đổi tên trong danh mục',
+        customerCode,
+      },
+    });
+    const carrier = await call('POST', '/api/carriers', {
+      token: adminToken,
+      body: { name: 'Nhà xe Mã Cố Định 2026' },
+    });
+    assert.equal(customer.status, 200);
+    assert.equal(carrier.status, 200);
+
+    const assigned = await call('PATCH', `/api/carriers/${carrier.data.id}/customers`, {
+      token: adminToken,
+      body: { customerIds: [customer.data.id] },
+    });
+    assert.equal(assigned.status, 200);
+
+    const options = await call('GET', '/api/entries/form-options', { token: adminToken });
+    const option = options.data.customers.find((item) => item.id === customer.data.id);
+    assert.equal(option.customerCode, customerCode);
+    assert.equal(option.provinceCity, 'Cần Thơ');
+
+    const context = await call(
+      'GET',
+      `/api/entries/customer-context?customerId=${customer.data.id}`,
+      { token: adminToken },
+    );
+    assert.equal(context.status, 200);
+    assert.equal(context.data.carriers[0].name, carrier.data.name);
+
+    const orders = await call(
+      'GET',
+      `/api/entries/misa-orders?customerId=${customer.data.id}&endDate=2026-06-10`,
+      { token: adminToken },
+    );
+    assert.equal(orders.status, 200);
+    assert.equal(orders.data.items.length, 1);
+    assert.equal(orders.data.items[0].totalQuantity, 7);
+    assert.match(orders.data.items[0].note, /Sản phẩm liên kết theo mã/);
   });
 
   test('tìm tiếng Việt không phân biệt dấu, hoa thường và Đ/đ', async () => {
@@ -451,8 +542,8 @@ describe('danh mục khách hàng', () => {
 
     const keys = await call('GET', '/api/customers/import-keys', { token: adminToken });
     assert.equal(keys.status, 200);
-    assert(keys.data.includes('khach hang da co a'));
-    assert(keys.data.includes('khach hang da co b'));
+    assert(keys.data.items.some((item) => item.nameKey === 'khach hang da co a'));
+    assert(keys.data.items.some((item) => item.nameKey === 'khach hang da co b'));
   });
 
   test('nhập khách hàng không âm thầm cắt sau 1.000 dòng', async () => {
@@ -465,7 +556,98 @@ describe('danh mục khách hàng', () => {
     });
     assert.equal(result.status, 200);
     assert.equal(result.data.inserted, 1_001);
+    assert.equal(result.data.updated, 0);
     assert.equal(result.data.duplicates, 0);
+  });
+
+  test('mã khách hàng là duy nhất; import cập nhật tên nhưng giữ nhà xe và bảng cước', async () => {
+    const customerCode = 'KH-DUY-NHAT-001';
+    const customer = await call('POST', '/api/customers', {
+      token: adminToken,
+      body: {
+        customerName: 'Khách hàng tên cũ',
+        customerCode,
+        carrier: 'Nhà xe giữ nguyên khi import',
+        recipient: 'Người nhận cũ',
+      },
+    });
+    assert.equal(customer.status, 200);
+    const carriers = await call('GET', '/api/carriers', { token: adminToken });
+    const carrier = carriers.data.items.find(
+      (item) => item.name === 'Nhà xe giữ nguyên khi import',
+    );
+    assert.ok(carrier);
+    const rate = await call(
+      'POST',
+      `/api/carriers/${carrier.id}/customers/${customer.data.id}/rates`,
+      {
+        token: adminToken,
+        body: {
+          isDefault: true,
+          transportFee: 123000,
+          gateFee: 4000,
+          note: 'Bảng cước phải được giữ',
+        },
+      },
+    );
+    assert.equal(rate.status, 200);
+
+    const imported = await call('POST', '/api/customers/import', {
+      token: adminToken,
+      body: {
+        rows: [{
+          customerName: 'Khách hàng đã đổi tên',
+          customerCode: customerCode.toLowerCase(),
+          carrier: '',
+          recipient: 'Người nhận mới',
+          address: '30 Đường mới',
+        }],
+      },
+    });
+    assert.equal(imported.status, 200);
+    assert.deepEqual(imported.data, { inserted: 0, updated: 1, duplicates: 0 });
+
+    const listed = await call('GET', `/api/customers?search=${customerCode}`, {
+      token: adminToken,
+    });
+    assert.equal(listed.data.resultCount, 1);
+    assert.equal(listed.data.items[0].id, customer.data.id);
+    assert.equal(listed.data.items[0].customerName, 'Khách hàng đã đổi tên');
+    assert.equal(listed.data.items[0].carrier, carrier.name);
+    assert.equal(listed.data.items[0].recipient, 'Người nhận mới');
+
+    const rates = await call(
+      'GET',
+      `/api/carriers/${carrier.id}/customers/${customer.data.id}/rates`,
+      { token: adminToken },
+    );
+    assert.equal(rates.status, 200);
+    assert.equal(rates.data.items.length, 1);
+    assert.equal(rates.data.items[0].transportFee, 123000);
+
+    const duplicateCode = await call('POST', '/api/customers', {
+      token: adminToken,
+      body: {
+        customerName: 'Khách hàng khác nhưng trùng mã',
+        customerCode: customerCode.toLowerCase(),
+      },
+    });
+    assert.equal(duplicateCode.status, 400);
+    assert.match(duplicateCode.data.error, /mã khách hàng.*đã được sử dụng/i);
+
+    const uniqueIndex = app.db
+      .prepare("PRAGMA index_list('customers')")
+      .all()
+      .find((index) => index.name === 'customers_customer_code_unique_idx');
+    assert.equal(uniqueIndex?.unique, 1);
+
+    const misaCustomerCodeLookupIndex = app.db
+      .prepare("PRAGMA index_list('misa_rows')")
+      .all()
+      .find(
+        (index) => index.name === 'misa_customer_code_nocase_order_idx',
+      );
+    assert.ok(misaCustomerCodeLookupIndex);
   });
 
   test('Admin thêm, tìm, sửa và xóa được khách hàng', async () => {
@@ -473,6 +655,7 @@ describe('danh mục khách hàng', () => {
       token: adminToken,
       body: {
         customerName: 'Công ty Đầu tư Ánh Dương',
+        customerCode: 'KH-ANH-DUONG',
         carrier: 'Nhà xe Minh Phát',
         recipient: 'Nguyễn Văn An',
         address: 'Quận 7, TP. Hồ Chí Minh',
@@ -480,12 +663,19 @@ describe('danh mục khách hàng', () => {
     });
     assert.equal(created.status, 200);
     assert.equal(created.data.customerName, 'Công ty Đầu tư Ánh Dương');
+    assert.equal(created.data.customerCode, 'KH-ANH-DUONG');
 
     const found = await call('GET', '/api/customers?search=anh%20duong', {
       token: adminToken,
     });
     assert.equal(found.status, 200);
     assert.equal(found.data.items.length, 1);
+
+    const foundByCode = await call('GET', '/api/customers?search=kh-anh-duong', {
+      token: adminToken,
+    });
+    assert.equal(foundByCode.status, 200);
+    assert.equal(foundByCode.data.items.length, 1);
 
     const updated = await call('PATCH', `/api/customers/${created.data.id}`, {
       token: adminToken,
@@ -509,7 +699,10 @@ describe('danh mục khách hàng', () => {
   test('nhà xe được gán hiển thị trong danh sách khách hàng', async () => {
     const customer = await call('POST', '/api/customers', {
       token: adminToken,
-      body: { customerName: 'Khách hàng liên kết nhà xe' },
+      body: {
+        customerName: 'Khách hàng liên kết nhà xe',
+        customerCode: 'KH-LIEN-KET-NHA-XE',
+      },
     });
     const carrier = await call('POST', '/api/carriers', {
       token: adminToken,
@@ -524,6 +717,14 @@ describe('danh mục khách hàng', () => {
       { token: adminToken, body: { customerIds: [customer.data.id] } },
     );
     assert.equal(assigned.status, 200);
+
+    const assignedCustomers = await call(
+      'GET',
+      `/api/carriers/${carrier.data.id}/customers`,
+      { token: adminToken },
+    );
+    assert.equal(assignedCustomers.status, 200);
+    assert.equal(assignedCustomers.data.items[0].customerCode, 'KH-LIEN-KET-NHA-XE');
 
     const listed = await call('GET', '/api/customers?search=nha%20xe%20lien%20ket', {
       token: adminToken,
@@ -822,8 +1023,9 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
       variance.data.items.some(
         (item) => item.customer === customer.data.customerName
           && item.carrier === carrier.data.name
+          && item.entryDate === '2026-08-01'
           && item.difference === 1
-          && item.varianceNote === 'Điều chỉnh giá giao thực tế',
+          && item.varianceNote.includes('Điều chỉnh giá giao thực tế'),
       ),
       true,
     );
@@ -873,6 +1075,26 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
 });
 
 describe('phân quyền thẻ', () => {
+  test('Admin tạo được tài khoản toàn quyền cho người kiểm tra', async () => {
+    const created = await call('POST', '/api/users', {
+      token: adminToken,
+      body: {
+        username: 'sepkiemtra',
+        fullName: 'Sếp kiểm tra',
+        password: 'MatKhau123',
+        isAdmin: true,
+        pages: [],
+      },
+    });
+    assert.equal(created.status, 200);
+    assert.equal(created.data.isAdmin, true);
+    assert.ok(created.data.pages.includes('users'));
+
+    const bossToken = await login('sepkiemtra', 'MatKhau123');
+    const users = await call('GET', '/api/users', { token: bossToken });
+    assert.equal(users.status, 200);
+  });
+
   test('nhân viên A vào được thẻ nhập cước', async () => {
     const result = await call('GET', '/api/entries', { token: staffAToken });
     assert.equal(result.status, 200);
@@ -1034,6 +1256,91 @@ describe('mỗi người chỉ thấy phiếu của mình', () => {
 });
 
 describe('kiểm tra dữ liệu đầu vào', () => {
+  test('nhân viên phải giải trình phiếu trùng ngày và khách hàng khi tạo hoặc sửa', async () => {
+    const delivery = await configureStaffRate('Đơn vị kiểm tra trùng phiếu');
+    const firstInput = newEntry({
+      entryDate: '2026-07-29',
+      customerId: delivery.customer.id,
+      customer: delivery.customer.customerName,
+      carrier: delivery.carrier.name,
+      spec: 'Tất cả',
+      note: '100 Mặt hàng kiểm tra trùng',
+    });
+    const first = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: firstInput,
+    });
+    assert.equal(first.status, 200);
+
+    const immediateDuplicate = await call(
+      'GET',
+      `/api/entries/duplicate-check?entryDate=2026-07-29&customer=${encodeURIComponent(delivery.customer.customerName)}`,
+      { token: staffAToken },
+    );
+    assert.equal(immediateDuplicate.status, 200);
+    assert.equal(immediateDuplicate.data.duplicate, true);
+
+    const duplicateWithoutReason = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: { ...firstInput, note: 'Một mặt hàng khác vẫn phải cảnh báo' },
+    });
+    assert.equal(duplicateWithoutReason.status, 409);
+    assert.match(duplicateWithoutReason.data.error, /cùng ngày gửi và khách hàng/);
+
+    const duplicateWithReason = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: { ...firstInput, duplicateReason: 'Giao hai chuyến riêng trong cùng ngày' },
+    });
+    assert.equal(duplicateWithReason.status, 200);
+    assert.equal(duplicateWithReason.data.duplicateReason, 'Giao hai chuyến riêng trong cùng ngày');
+
+    const anotherDay = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: { ...firstInput, entryDate: '2026-07-30' },
+    });
+    assert.equal(anotherDay.status, 200);
+
+    const updateWithoutReason = await call('PATCH', `/api/entries/${anotherDay.data.id}`, {
+      token: staffAToken,
+      body: firstInput,
+    });
+    assert.equal(updateWithoutReason.status, 409);
+
+    const updateWithReason = await call('PATCH', `/api/entries/${anotherDay.data.id}`, {
+      token: staffAToken,
+      body: { ...firstInput, duplicateReason: 'Điều chỉnh ngày cho chuyến giao thứ hai' },
+    });
+    assert.equal(updateWithReason.status, 200);
+    assert.equal(updateWithReason.data.duplicateReason, 'Điều chỉnh ngày cho chuyến giao thứ hai');
+
+    const missingProductInput = {
+      ...firstInput,
+      entryDate: '2026-07-28',
+      note: '',
+    };
+    const missingProduct = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: missingProductInput,
+    });
+    assert.equal(missingProduct.status, 400);
+    assert.match(missingProduct.data.error, /sản phẩm/);
+
+    const adminDuplicate = await call('POST', '/api/entries', {
+      token: adminToken,
+      body: firstInput,
+    });
+    assert.equal(adminDuplicate.status, 200);
+    assert.equal(adminDuplicate.data.duplicateReason, '');
+
+    const adminCheck = await call(
+      'GET',
+      `/api/entries/duplicate-check?entryDate=2026-07-29&customer=${encodeURIComponent(delivery.customer.customerName)}`,
+      { token: adminToken },
+    );
+    assert.equal(adminCheck.status, 200);
+    assert.equal(adminCheck.data.duplicate, false);
+  });
+
   test('từ chối ngày sai định dạng', async () => {
     const result = await call('POST', '/api/entries', {
       token: staffAToken,

@@ -6,7 +6,11 @@ const { mkdtempSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const XLSX = require('xlsx-js-style');
+const { strFromU8, unzipSync } = require('fflate');
 const { createApp } = require('../../server/index.cjs');
+const {
+  _test: { deliveryRows, uniqueSheetName, validateExtraCostAssignments },
+} = require('../../server/routes/reports.cjs');
 
 let app;
 let baseUrl;
@@ -45,6 +49,64 @@ after(async () => {
   if (workDir) rmSync(workDir, { recursive: true, force: true });
 });
 
+test('gộp ghi chú trống theo từng ngày và tách riêng nhà xe có lý do', () => {
+  const rows = deliveryRows([
+    { entry_date: '2026-08-31', carrier: 'Nhà xe có lý do', rate_variance_note: 'Giá xăng tăng', duplicate_reason: '', bill_status: 'Không bill' },
+    { entry_date: '2026-08-31', carrier: 'Nhà xe trống', rate_variance_note: '', duplicate_reason: '', bill_status: 'Có bill' },
+    { entry_date: '2026-08-31', carrier: 'Nhà xe trống', rate_variance_note: '', duplicate_reason: '', bill_status: 'Có bill' },
+    { entry_date: '2026-09-01', carrier: 'Nhà xe A', rate_variance_note: '', duplicate_reason: '', bill_status: 'Có bill' },
+    { entry_date: '2026-09-01', carrier: 'Nhà xe B', rate_variance_note: '', duplicate_reason: '', bill_status: 'Không bill' },
+  ]);
+
+  assert.deepEqual(
+    rows.map((row) => ({ noteValue: row.noteValue, noteSpan: row.noteSpan })),
+    [
+      { noteValue: 'Giá xăng tăng', noteSpan: 1 },
+      { noteValue: '', noteSpan: 2 },
+      { noteValue: undefined, noteSpan: undefined },
+      { noteValue: '', noteSpan: 2 },
+      { noteValue: undefined, noteSpan: undefined },
+    ],
+  );
+});
+
+test('tên sheet báo cáo được làm sạch và không trùng nhau', () => {
+  const used = new Set();
+  assert.equal(uniqueSheetName('Nguyễn/Văn:*An?', used), 'Nguyễn Văn An');
+  assert.equal(uniqueSheetName('nguyễn văn an', used), 'nguyễn văn an (2)');
+  const longName = 'Nhân viên có tên rất dài vượt giới hạn Excel';
+  const firstLongName = uniqueSheetName(longName, used);
+  const secondLongName = uniqueSheetName(longName, used);
+  assert.ok(firstLongName.length <= 31);
+  assert.ok(secondLongName.length <= 31);
+  assert.notEqual(firstLongName, secondLongName);
+});
+
+test('chi phí khác chỉ được cộng cho đúng nhân viên trên báo cáo', () => {
+  const employees = [{ id: 10 }, { id: 20 }];
+  assert.doesNotThrow(() => validateExtraCostAssignments(
+    [{ name: 'Tiền ăn', amount: 50_000, employeeId: null }],
+    [employees[0]],
+    10,
+  ));
+  assert.throws(
+    () => validateExtraCostAssignments(
+      [{ name: 'Tiền ăn', amount: 50_000, employeeId: 20 }],
+      [employees[0]],
+      10,
+    ),
+    /không thuộc nhân viên đang xuất báo cáo/,
+  );
+  assert.throws(
+    () => validateExtraCostAssignments(
+      [{ name: 'Tiền ăn', amount: 50_000, employeeId: null }],
+      employees,
+      null,
+    ),
+    /chọn nhân viên chịu phí/,
+  );
+});
+
 test('gợi ý lộ trình gồm khách hàng chưa lưu địa chỉ', async () => {
   const customer = await call('POST', '/api/customers', { customerName: 'Y Tế Ben Kin', address: '' });
   assert.equal(customer.status, 200);
@@ -67,7 +129,7 @@ test('lưu, sửa và xóa kỳ tính xăng vẫn giữ tổng tiền và các c
   const body = {
     periodFrom: '2026-09-01', periodTo: '2026-09-05', employeeId: employee.data.id,
     consumptionLiters: 12, consumptionBaseKm: 100, fuelPrice: 20_000,
-    fuelType: 'Xăng E10', region: 'region1', legs: [{ from: 'A', to: 'B', km: 30 }],
+    vehicleType: 'truck', fuelType: 'Xăng E10', region: 'region1', legs: [{ from: 'A', to: 'B', km: 30 }],
   };
   const created = await call('POST', '/api/fuel/records', body);
   assert.equal(created.status, 200);
@@ -75,13 +137,14 @@ test('lưu, sửa và xóa kỳ tính xăng vẫn giữ tổng tiền và các c
 
   const listed = await call('GET', '/api/fuel');
   assert.equal(listed.data.recordsTotal, 1);
+  assert.equal(listed.data.records[0].vehicleType, 'truck');
   assert.deepEqual(listed.data.records[0].legs, [{ from: 'A', to: 'B', km: 30 }]);
 
   const updated = await call('PATCH', `/api/fuel/records/${created.data.id}`, {
-    ...body, legs: [{ from: 'A', to: 'B', km: 40 }],
+    ...body, legs: [{ from: 'A', to: 'B', km: 40 }, { from: 'B', to: 'C', km: 10 }],
   });
   assert.equal(updated.status, 200);
-  assert.equal(updated.data.totalFee, 96_000);
+  assert.equal(updated.data.totalFee, 120_000);
 
   const later = await call('POST', '/api/fuel/records', {
     ...body,
@@ -97,23 +160,27 @@ test('lưu, sửa và xóa kỳ tính xăng vẫn giữ tổng tiền và các c
   );
   assert.equal(history.status, 200);
   assert.equal(history.data.recordsTotal, 2);
-  assert.deepEqual(history.data.summary, { distanceKm: 60, totalFee: 144_000 });
+  assert.deepEqual(history.data.summary, { distanceKm: 70, totalFee: 168_000 });
   assert.deepEqual(history.data.items.map((item) => item.id), [later.data.id, created.data.id]);
   assert.deepEqual(history.data.items[1], {
     id: created.data.id,
     periodFrom: '2026-09-01',
     periodTo: '2026-09-05',
     employeeName: 'Nhân viên tính xăng',
-    distanceKm: 40,
+    distanceKm: 50,
     consumptionLiters: 12,
     consumptionBaseKm: 100,
+    vehicleType: 'truck',
     fuelType: 'Xăng E10',
     region: 'region1',
     fuelPrice: 20_000,
-    totalFee: 96_000,
+    totalFee: 120_000,
     status: 'active',
     voidReason: '',
-    legs: [{ sequenceNo: 1, from: 'A', to: 'B', km: 40 }],
+    legs: [
+      { sequenceNo: 1, from: 'A', to: 'B', km: 40 },
+      { sequenceNo: 2, from: 'B', to: 'C', km: 10 },
+    ],
   });
 
   const exported = await call(
@@ -125,20 +192,275 @@ test('lưu, sửa và xóa kỳ tính xăng vẫn giữ tổng tiền và các c
     exported.data.fileName,
     'Bảng thống kê tiền xăng - Nhân viên tính xăng - từ ngày 01-09-2026 đến 30-09-2026.xlsx',
   );
-  const workbook = XLSX.read(Buffer.from(exported.data.contentBase64, 'base64'), { type: 'buffer' });
+  const exportedBytes = Buffer.from(exported.data.contentBase64, 'base64');
+  const workbook = XLSX.read(exportedBytes, { type: 'buffer', cellStyles: true });
   assert.deepEqual(workbook.SheetNames, ['Nhân viên tính xăng']);
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   assert.equal(sheet.A1.v, 'BẢNG THỐNG KÊ TIỀN XĂNG');
+  assert.equal(sheet.C8.v, 'Điểm đi');
+  assert.equal(sheet.D8.v, 'Điểm đến');
+  assert.equal(sheet.E8.v, 'Phương tiện');
+  assert.equal(sheet.F8.v, 'Km');
+  assert.deepEqual(sheet['!cols'].map((column) => column.wch), [8, 22, 36, 36, 15, 16, 16, 17]);
   assert.equal(sheet.A9.v, 1);
   assert.equal(sheet.B9.v, '01/09/2026 - 05/09/2026');
-  assert.equal(sheet.C9.v, 'A → B');
-  assert.equal(sheet.D9.v, '40 Km');
-  assert.equal(sheet.F9.v, 96_000);
-  assert.equal(sheet.A10.v, 2);
-  assert.equal(sheet.B10.v, '10/09/2026 - 12/09/2026');
+  assert.equal(sheet.C9.v, 'A');
+  assert.equal(sheet.D9.v, 'B');
+  assert.equal(sheet.E9.v, 'Ô tô');
+  assert.equal(sheet.F9.v, 40);
+  assert.equal(sheet.H9.v, 120_000);
+  assert.equal(sheet.C10.v, 'B');
+  assert.equal(sheet.D10.v, 'C');
+  assert.equal(sheet.F10.v, 10);
+  assert.equal(sheet.A11.v, 2);
+  assert.equal(sheet.B11.v, '10/09/2026 - 12/09/2026');
+  assert.equal(sheet.D13.v, 'Tổng quãng đường');
+  assert.equal(sheet.E13.v, 70);
+  assert.equal(sheet.D14.v, 'Tổng tiền xăng');
+  assert.equal(sheet.E14.v, 168_000);
+  assert.equal(sheet.C13, undefined);
+  assert.equal(sheet['!merges'].some((item) => item.s.c === 2 && item.s.r === 12 && item.e.c === 3 && item.e.r === 12), false);
+  assert.equal(sheet.G16.v, 'Ngày…..tháng…..năm….');
+  const fuelArchive = unzipSync(exportedBytes);
+  const fuelStylesXml = strFromU8(fuelArchive['xl/styles.xml']);
+  const fuelSheetXml = strFromU8(fuelArchive['xl/worksheets/sheet1.xml']);
+  assert.match(fuelStylesXml, /<i\/>/);
+  assert.match(fuelSheetXml, /<c r="G16" s="\d+"/);
+  assert.match(fuelSheetXml, /<pageSetUpPr fitToPage="1"\/>/);
+  assert.match(fuelSheetXml, /<pageMargins left="0.25" right="0.25" top="0.35" bottom="0.35"/);
+  assert.match(fuelSheetXml, /<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"\/>/);
+  assert.doesNotMatch(fuelSheetXml, /<ignoredErrors\b/);
+  assert.equal(sheet.A17.v, 'Giám Đốc');
+  assert.equal(sheet.D17.v, 'Kế Toán Trưởng');
+  assert.equal(sheet.E17, undefined);
+  assert.equal(sheet['!merges'].some((item) => item.s.c === 3 && item.s.r === 16 && item.e.c === 4 && item.e.r === 16), false);
+  assert.equal(sheet.G17.v, 'Người Lập');
+
+  const dailyExport = await call(
+    'GET',
+    `/api/reports/export?from=2026-09-01&to=2026-09-30&employeeId=${employee.data.id}&type=daily`,
+  );
+  assert.equal(dailyExport.status, 200);
+  const dailyWorkbook = XLSX.read(
+    Buffer.from(dailyExport.data.contentBase64, 'base64'),
+    { type: 'buffer', cellStyles: true },
+  );
+  assert.deepEqual(dailyWorkbook.SheetNames, ['Bảng kê cước', 'Chi tiết tiền xăng']);
+  const dailySheet = dailyWorkbook.Sheets['Bảng kê cước'];
+  const fuelDetailSheet = dailyWorkbook.Sheets['Chi tiết tiền xăng'];
+  assert.equal(fuelDetailSheet.A1.v, 'BẢNG THỐNG KÊ TIỀN XĂNG');
+  assert.equal(fuelDetailSheet.C8.v, 'Điểm đi');
+  assert.equal(fuelDetailSheet.C9.v, 'A');
+  assert.equal(fuelDetailSheet.D9.v, 'B');
+  assert.equal(dailySheet.O12.v, '');
+  assert.equal(dailySheet.O13.v, '');
 
   const deleted = await call('DELETE', `/api/fuel/records/${created.data.id}`);
-  assert.deepEqual(deleted.data, { ok: true, voided: false });
+  assert.deepEqual(deleted.data, { ok: true });
   const deletedLater = await call('DELETE', `/api/fuel/records/${later.data.id}`);
-  assert.deepEqual(deletedLater.data, { ok: true, voided: false });
+  assert.deepEqual(deletedLater.data, { ok: true });
+});
+
+test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục báo cáo tổng hợp', async () => {
+  const employee = await call('POST', '/api/employees', {
+    fullName: 'Nhân viên báo cáo tổng hợp', address: '', userId: null, isActive: true,
+  });
+  assert.equal(employee.status, 200);
+
+  const customer = await call('POST', '/api/customers', { customerName: 'Khách hàng tổng hợp' });
+  assert.equal(customer.status, 200);
+  const carrier = await call('POST', '/api/carriers', { name: 'Nhà xe tổng hợp' });
+  assert.equal(carrier.status, 200);
+  const assigned = await call('PATCH', `/api/carriers/${carrier.data.id}/customers`, {
+    customerIds: [customer.data.id],
+  });
+  assert.equal(assigned.status, 200);
+  const rate = await call('POST', `/api/carriers/${carrier.data.id}/customers/${customer.data.id}/rates`, {
+    isDefault: true, transportFee: 45_000, gateFee: 0, note: '',
+  });
+  assert.equal(rate.status, 200);
+  const secondCarrier = await call('POST', '/api/carriers', { name: 'Nhà xe gộp bill' });
+  assert.equal(secondCarrier.status, 200);
+  const secondAssigned = await call('PATCH', `/api/carriers/${secondCarrier.data.id}/customers`, {
+    customerIds: [customer.data.id],
+  });
+  assert.equal(secondAssigned.status, 200);
+  const secondRate = await call('POST', `/api/carriers/${secondCarrier.data.id}/customers/${customer.data.id}/rates`, {
+    isDefault: true, transportFee: 45_000, gateFee: 0, note: '',
+  });
+  assert.equal(secondRate.status, 200);
+
+  const entry = await call('POST', '/api/entries', {
+    entryDate: '2026-10-03',
+    customerId: customer.data.id,
+    customer: customer.data.customerName,
+    carrier: carrier.data.name,
+		recipient: 'Người nhận tổng hợp',
+		address: 'Địa chỉ tổng hợp',
+    spec: 'Thùng trung',
+    transportFee: 50_000,
+    gateFee: 10_000,
+    ticketFee: 0,
+    note: '300 TT + 100 Gene-HBVax',
+    rateVarianceNote: 'Khách yêu cầu giao gấp',
+    billStatus: 'Không bill',
+    employeeId: employee.data.id,
+  });
+  assert.equal(entry.status, 200);
+
+  for (const [recipient, product, duplicateReason, billStatus] of [
+    ['Điểm giao thứ hai', '200 sản phẩm B', 'Cùng ngày có nhiều điểm giao', 'Có bill'],
+    ['Điểm giao thứ ba', '300 sản phẩm C', 'Cùng ngày có nhiều điểm giao', 'Không bill'],
+  ]) {
+    const extraEntry = await call('POST', '/api/entries', {
+      entryDate: '2026-10-03',
+      customerId: customer.data.id,
+      customer: customer.data.customerName,
+      carrier: secondCarrier.data.name,
+      recipient,
+      address: 'Địa chỉ tổng hợp',
+      spec: 'Thùng trung',
+      transportFee: 45_000,
+      gateFee: 0,
+      ticketFee: 0,
+      note: product,
+      rateVarianceNote: '',
+      duplicateReason,
+      billStatus,
+      employeeId: employee.data.id,
+    });
+    assert.equal(extraEntry.status, 200);
+  }
+
+  const variance = await call(
+    'GET',
+    `/api/reports/carrier-variance?from=2026-10-03&to=2026-10-03&employeeId=${employee.data.id}`,
+  );
+  assert.equal(variance.status, 200);
+  assert.equal(variance.data.items.length, 1);
+  assert.equal(variance.data.items[0].varianceNote, 'Khách yêu cầu giao gấp');
+
+  const fuel = await call('POST', '/api/fuel/records', {
+    periodFrom: '2026-10-03', periodTo: '2026-10-05', employeeId: employee.data.id,
+    consumptionLiters: 12, consumptionBaseKm: 100, fuelPrice: 20_000,
+    vehicleType: 'truck', fuelType: 'Xăng E10', region: 'region1', legs: [{ from: 'Kho', to: 'Khách hàng tổng hợp', km: 40 }],
+  });
+  assert.equal(fuel.status, 200);
+
+  const exported = await call(
+    'GET',
+    `/api/reports/export?from=2026-10-03&to=2026-10-05&employeeId=${employee.data.id}&type=daily`,
+  );
+  assert.equal(exported.status, 200);
+
+  const fuelDataAfterExport = await call('GET', `/api/fuel?employeeId=${employee.data.id}`);
+  assert.equal(fuelDataAfterExport.status, 200);
+  const fuelAfterExport = fuelDataAfterExport.data.records.find((item) => item.id === fuel.data.id);
+  assert.equal(fuelAfterExport.finalizedAt, null);
+  assert.equal(fuelAfterExport.canEdit, true);
+  assert.equal(fuelAfterExport.canDelete, true);
+
+  const exportedBytes = Buffer.from(exported.data.contentBase64, 'base64');
+  const workbook = XLSX.read(exportedBytes, { type: 'buffer', cellStyles: true });
+  const sheet = workbook.Sheets['Bảng kê cước'];
+  assert.equal(sheet.A4.v, 'BẢNG CHI TIẾT CƯỚC NHÂN VIÊN');
+  assert.equal(sheet.D11.v, 'Khách hàng');
+  assert.equal(sheet.F11.v, 'Sản phẩm');
+  assert.equal(sheet.J11.v, 'Chênh lệch');
+  assert.equal(sheet.K11.v, 'Bill');
+  assert.equal(sheet.L11.v, 'Km');
+  assert.equal(sheet.M11.v, 'Giá xăng');
+  assert.equal(sheet.N11.v, 'Tiền xăng');
+  assert.equal(sheet.O11.v, 'Ghi chú');
+  assert.equal(sheet.P11, undefined);
+  assert.equal(sheet['!cols'].length, 15);
+  assert.equal(sheet['!cols'][3].width, 34.7109375);
+  assert.equal(sheet['!cols'][10].width, 4.42578125);
+  for (const range of ['A1:D2', 'L1:O1', 'L2:O2', 'A4:O4', 'A7:O7']) {
+    const expected = XLSX.utils.decode_range(range);
+    assert.equal(
+      sheet['!merges'].some(
+        (item) => item.s.c === expected.s.c && item.s.r === expected.s.r
+          && item.e.c === expected.e.c && item.e.r === expected.e.r,
+      ),
+      true,
+    );
+  }
+  assert.equal(sheet.A12.v, 1);
+  assert.equal(sheet.D12.v, 'Khách hàng tổng hợp');
+  assert.equal(sheet.F12.v, '300 TT + 100 Gene-HBVax');
+  assert.equal(sheet.J12.v, 5_000);
+  assert.equal(sheet.K12.v, '☐');
+  const archive = unzipSync(exportedBytes);
+  const stylesXml = strFromU8(archive['xl/styles.xml']);
+  const sheetXml = strFromU8(archive['xl/worksheets/sheet1.xml']);
+  assert.match(stylesXml, /FF0000/);
+  assert.match(sheetXml, /<c r="J12" s="\d+"/);
+  assert.match(sheetXml, /<pageSetUpPr fitToPage="1"\/>/);
+  assert.match(sheetXml, /<pageMargins left="0.25" right="0.25" top="0.35" bottom="0.35"/);
+  assert.match(sheetXml, /<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"\/>/);
+  assert.doesNotMatch(sheetXml, /<ignoredErrors\b/);
+  assert.equal(sheet.L12.v, 40);
+  assert.equal(sheet.M12.v, 20_000);
+  assert.equal(sheet.N12.v, 96_000);
+  assert.equal(sheet.O12.v, 'Khách yêu cầu giao gấp');
+  assert.equal(sheet.O13.v, 'Cùng ngày có nhiều điểm giao');
+  assert.doesNotMatch(sheet.O12.v, /bill/i);
+  assert.doesNotMatch(sheet.O13.v, /bill/i);
+  for (const column of [11, 12, 13]) {
+    assert.equal(
+      sheet['!merges'].some(
+        (item) => item.s.c === column && item.s.r === 11
+          && item.e.c === column && item.e.r === 13,
+      ),
+      true,
+    );
+  }
+  assert.equal(
+    sheet['!merges'].some(
+      (item) => item.s.c === 2 && item.s.r === 12
+        && item.e.c === 2 && item.e.r === 13,
+    ),
+    true,
+  );
+  assert.equal(
+    sheet['!merges'].some(
+      (item) => item.s.c === 10 && item.s.r === 12
+        && item.e.c === 10 && item.e.r === 13,
+    ),
+    true,
+  );
+  assert.equal(
+    sheet['!merges'].some(
+      (item) => item.s.c === 14 && item.s.r === 12
+        && item.e.c === 14 && item.e.r === 13,
+    ),
+    true,
+  );
+  assert.equal(sheet.C12.v, 'Nhà xe tổng hợp');
+  assert.equal(sheet.C13.v, 'Nhà xe gộp bill');
+  assert.equal(sheet.C14.v, '');
+  assert.equal(sheet.K13.v, '☑');
+  assert.equal(sheet.K14.v, '');
+  assert.equal(sheet.O14.v, '');
+  assert.equal(sheet.L13.v, '');
+  assert.equal(sheet.N14.v, '');
+  assert.equal(sheet.C16.v, 140_000);
+  assert.equal(sheet.C17.v, 10_000);
+  assert.equal(sheet.C18.v, 96_000);
+  assert.equal(sheet.C19.v, 246_000);
+  for (const row of [16, 17, 18, 19]) {
+    assert.equal(sheet[`D${row}`], undefined);
+    assert.equal(
+      sheet['!merges'].some(
+        (item) => item.s.c === 2 && item.s.r === row - 1
+          && item.e.c === 3 && item.e.r === row - 1,
+      ),
+      false,
+    );
+  }
+  assert.equal(archive['xl/featurePropertyBag/featurePropertyBag.xml'], undefined);
+  assert.doesNotMatch(stylesXml, /xfpb:xfComplement i="0"/);
+  assert.doesNotMatch(sheetXml, /<c r="K1[23]"[^>]*t="b">/);
+  assert.doesNotMatch(sheetXml, /<c r="K14"[^>]*t="b">/);
 });

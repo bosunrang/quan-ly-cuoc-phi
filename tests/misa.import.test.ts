@@ -57,6 +57,7 @@ describe("đọc file MISA", () => {
 		expect(result.rows[0]).toMatchObject({
 			rowNumber: 4,
 			documentDate: "2026-06-01",
+			customerCode: "KH001",
 			customerName: "Bệnh viện A",
 			address: "01 Nguyễn Huệ",
 			productName: "Mặt hàng A",
@@ -100,6 +101,7 @@ describe("đọc file MISA", () => {
 				rowNumber: 4,
 				documentDate: "2026-08-01",
 				documentCode: "PX001/08",
+				customerCode: "26PYBVVIETMY",
 				customerName: "Bệnh viện Việt Mỹ Phú Yên",
 				address: "",
 				productName: "Influvac Tetra 0.5ml",
@@ -152,6 +154,7 @@ describe("đọc file MISA", () => {
 				rowNumber: 5,
 				documentDate: "2026-08-01",
 				documentCode: "BH0001/08",
+				customerCode: "19HNTAMAN",
 				customerName: "Công Ty TNHH Dịch Vụ Y Tế Tâm An",
 				address: "36/99 đường La Thành, Hà Nội",
 				productName: "Vắc xin VA-MENGOC BC",

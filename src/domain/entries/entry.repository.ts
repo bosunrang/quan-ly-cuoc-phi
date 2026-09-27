@@ -43,6 +43,20 @@ export const entryRepository = {
 			`/api/entries/rates?customerId=${customerId}&carrierId=${carrierId}`,
 		),
 
+	duplicateCheck: ({
+		entryDate,
+		customer,
+		excludeId,
+	}: {
+		entryDate: string;
+		customer: string;
+		excludeId?: number;
+	}): Promise<{ duplicate: boolean }> => {
+		const query = new URLSearchParams({ entryDate, customer });
+		if (excludeId) query.set("excludeId", String(excludeId));
+		return api("GET", `/api/entries/duplicate-check?${query}`);
+	},
+
 	create(input: EntryInput): Promise<Entry> {
 		return api<Entry>("POST", "/api/entries", input);
 	},

@@ -4,6 +4,7 @@ export interface MisaImportRow {
 	rowNumber: number;
 	documentDate: string;
 	documentCode: string;
+	customerCode: string;
 	customerName: string;
 	address: string;
 	productName: string;
@@ -30,6 +31,7 @@ export interface MisaRecord {
 	id: number;
 	documentDate: string;
 	documentCode: string;
+	customerCode: string;
 	customerName: string;
 	address: string;
 	productName: string;

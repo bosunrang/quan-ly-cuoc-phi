@@ -189,6 +189,7 @@ function toCustomerApi(row) {
   return {
     id: row.id,
     customerName: row.customer_name,
+    customerCode: row.customer_code,
     carrier: row.carrier,
     recipient: row.recipient,
     address: row.address,

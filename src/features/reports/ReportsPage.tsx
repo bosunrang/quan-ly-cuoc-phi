@@ -13,7 +13,7 @@ import type {
 	ReportData,
 } from "../../domain/reports/report.model";
 import { reportRepository } from "../../domain/reports/report.repository";
-import { formatMoney, todayIso } from "../../shared/lib/format";
+import { formatDate, formatMoney, todayIso } from "../../shared/lib/format";
 import { Alert } from "../../shared/ui/Alert";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
 import { MoneyInput } from "../../shared/ui/MoneyInput";
@@ -495,6 +495,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 							<table>
 								<colgroup>
 									<col className="variance-col-index" />
+									<col className="variance-col-date" />
 									<col className="variance-col-carrier" />
 									<col className="variance-col-customer" />
 									<col className="variance-col-province" />
@@ -507,6 +508,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 								<thead>
 									<tr>
 										<th>STT</th>
+										<th>Ngày</th>
 										<th>Nhà xe</th>
 										<th>Khách hàng</th>
 										<th>Tỉnh/TP</th>
@@ -521,6 +523,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 									{variance.items.map((item, index) => (
 										<tr key={item.id}>
 											<td>{index + 1}</td>
+											<td>{formatDate(item.entryDate)}</td>
 											<td>{item.carrier}</td>
 											<td>{item.customer}</td>
 											<td>{item.provinceCity || "—"}</td>

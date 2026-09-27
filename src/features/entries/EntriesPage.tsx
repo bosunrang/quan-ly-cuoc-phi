@@ -105,8 +105,13 @@ export function EntriesPage() {
 		if (editor?.editingId)
 			await entryRepository.update(editor.editingId, input);
 		else await entryRepository.create(input);
-		setEditor(null);
 		await load();
+	};
+	const openNewEntry = () => {
+		setEditor({
+			initial: emptyEntryInput(draftEntryDate),
+			editingId: null,
+		});
 	};
 	if (!data)
 		return error ? <Alert tone="error">{error}</Alert> : <LoadingState />;
@@ -130,16 +135,7 @@ export function EntriesPage() {
 					<h2>Nhập chi phí gửi hàng</h2>
 					<p>{subtitle}</p>
 				</div>
-				<button
-					type="button"
-					className="button primary"
-					onClick={() =>
-						setEditor({
-							initial: emptyEntryInput(draftEntryDate),
-							editingId: null,
-						})
-					}
-				>
+				<button type="button" className="button primary" onClick={openNewEntry}>
 					<Plus size={16} /> Thêm chi phí
 				</button>
 			</section>
@@ -173,30 +169,6 @@ export function EntriesPage() {
 				</article>
 			</section>
 			<section className="panel entry-data-panel">
-				{isAdmin && (
-					<div className="entry-employee-filter">
-						<div>
-							<strong>Kiểm tra cước theo nhân viên</strong>
-							<span>Chọn một nhân viên để lọc danh sách và tổng chi phí.</span>
-						</div>
-						<label className="entry-employee-select">
-							<span className="visually-hidden">Nhân viên phụ trách</span>
-							<select
-								value={filters.employeeId ?? ""}
-								onChange={(event) =>
-									updateFilters({ employeeId: event.target.value || undefined })
-								}
-							>
-								<option value="">Tất cả nhân viên</option>
-								{options?.employees.map((employee) => (
-									<option key={employee.id} value={employee.id}>
-										{employee.name}
-									</option>
-								))}
-							</select>
-						</label>
-					</div>
-				)}
 				<div className="entry-toolbar">
 					<label className="entry-search-field">
 						<span>Tìm phiếu</span>
@@ -211,6 +183,24 @@ export function EntriesPage() {
 							/>
 						</div>
 					</label>
+					{isAdmin && (
+						<label className="entry-employee-field">
+							<span>Nhân viên</span>
+							<select
+								value={filters.employeeId ?? ""}
+								onChange={(event) =>
+									updateFilters({ employeeId: event.target.value || undefined })
+								}
+							>
+								<option value="">Tất cả nhân viên</option>
+								{options?.employees.map((employee) => (
+									<option key={employee.id} value={employee.id}>
+										{employee.name}
+									</option>
+								))}
+							</select>
+						</label>
+					)}
 					<label className="entry-date-filter" htmlFor="entry-filter-from">
 						<span>Từ ngày</span>
 						<DateInput
@@ -236,7 +226,7 @@ export function EntriesPage() {
 					</EmptyState>
 				) : (
 					<>
-						<div className="table-scroll entry-list-table-wrap">
+						<div className="table-scroll large-table entry-list-table-wrap">
 							<table
 								className={`entry-list-table${isAdmin ? " is-admin" : ""}`}
 							>
@@ -244,13 +234,14 @@ export function EntriesPage() {
 									<tr>
 										<th>Ngày gửi</th>
 										<th>Tên khách hàng</th>
-										<th>Tên chành xe</th>
-										<th>Người nhận hàng</th>
+										<th>Nhà xe</th>
+										<th>Người nhận</th>
 										<th>Quy cách</th>
+										<th>Bill</th>
 										<th>Cước phí</th>
 										<th>Phí vào cổng</th>
-										{isAdmin && <th>Nhân viên phụ trách</th>}
-										<th className="entry-note-heading">Ghi chú</th>
+										{isAdmin && <th>Nhân viên</th>}
+										<th className="entry-note-heading">Sản phẩm</th>
 										<th>Thao tác</th>
 									</tr>
 								</thead>
@@ -276,6 +267,21 @@ export function EntriesPage() {
 												<td>{entry.carrier}</td>
 												<td>{entry.recipient || "—"}</td>
 												<td>{entry.spec || "—"}</td>
+												<td>
+													{entry.billStatus ? (
+														<span
+															className={`status-pill ${
+																entry.billStatus === "Có bill"
+																	? "status-pill-success"
+																	: "status-pill-warning"
+															}`}
+														>
+															{entry.billStatus}
+														</span>
+													) : (
+														"—"
+													)}
+												</td>
 												<td className={`entry-money${rateTone}`}>
 													{formatMoney(entry.transportFee)}
 												</td>

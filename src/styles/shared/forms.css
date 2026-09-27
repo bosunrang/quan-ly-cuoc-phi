@@ -8,6 +8,9 @@
 .field textarea{height:auto;min-height:64px;padding:8px 10px;resize:vertical}
 .field input:disabled{background:var(--surface-muted);color:var(--muted)}
 .field-hint{color:var(--text-faint)}
+.field-required{color:var(--status-danger-text)}
+.field-error{color:var(--status-danger-text);font-size:var(--type-caption);font-weight:650;line-height:1.35}
+.field.has-error>input,.field.has-error>select,.field.has-error>textarea,.field.has-error .datebox,.field.has-error .entry-customer-picker,.field.has-error .entry-delivery-picker>input{border-color:var(--status-danger-border)}
 
 /* Ô tick chọn thẻ được truy cập. */
 .page-picker{display:grid;gap:7px}

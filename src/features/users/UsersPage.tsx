@@ -58,6 +58,7 @@ export function UsersPage({ currentUser }: UsersPageProps) {
 		username: string;
 		fullName: string;
 		password: string;
+		isAdmin: boolean;
 		pages: PageId[];
 	}) => {
 		if (editing) {

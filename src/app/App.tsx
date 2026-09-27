@@ -17,6 +17,7 @@ import { UsersPage } from "../features/users/UsersPage";
 import { hasToken, setUnauthorizedHandler } from "../shared/api/client";
 import { EmptyState, LoadingState } from "../shared/ui/Panel";
 import type { PageId, Profile } from "../types";
+import { ConnectionBanner } from "./layout/ConnectionBanner";
 import { Header } from "./layout/Header";
 import { Sidebar } from "./layout/Sidebar";
 import { pageConfig } from "./pageConfig";
@@ -28,6 +29,7 @@ export function App() {
 	const [profile, setProfile] = useState<Profile | null>(null);
 	const [page, setPage] = useState<PageId | null>(null);
 	const [collapsed, setCollapsed] = useState(false);
+	const [mobileNavOpen, setMobileNavOpen] = useState(false);
 	const [notice, setNotice] = useState<string | null>(null);
 	const { settings, schemaVersion, saveSettings } = useAppSettings(
 		status === "ready",
@@ -69,6 +71,11 @@ export function App() {
 	}
 
 	const meta = page ? pageConfig[page] : null;
+	const changePage = (nextPage: PageId) => {
+		setPage(nextPage);
+		// Chọn thẻ xong thì trả lại toàn bộ màn hình cho nội dung trên điện thoại.
+		setMobileNavOpen(false);
+	};
 	const content = (() => {
 		switch (page) {
 			case "dashboard":
@@ -113,29 +120,45 @@ export function App() {
 	})();
 
 	return (
-		<div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
+		<div
+			className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${mobileNavOpen ? "mobile-nav-open" : ""}`}
+		>
 			<Sidebar
 				activePage={page}
 				pages={profile.pages}
 				collapsed={collapsed}
 				settings={settings}
-				onChange={setPage}
+				onChange={changePage}
 				onToggle={() => setCollapsed((current) => !current)}
 			/>
+			{mobileNavOpen && (
+				<button
+					type="button"
+					className="mobile-nav-backdrop"
+					onClick={() => setMobileNavOpen(false)}
+					aria-label="Đóng điều hướng"
+				/>
+			)}
 			<div className="app-main">
 				<Header
 					title={meta?.title ?? "Quản lý cước phí"}
 					subtitle={meta?.subtitle ?? ""}
 					user={profile.user}
-					onMenuClick={() => setCollapsed((current) => !current)}
+					onMenuClick={() => setMobileNavOpen((current) => !current)}
+					menuOpen={mobileNavOpen}
 					onLogout={async () => {
 						await authRepository.logout();
 						setProfile(null);
 						setStatus("guest");
 					}}
 				/>
+				<ConnectionBanner />
 				<div className="page-content">
-					<div className="page-stack">{content}</div>
+					<div
+						className={`page-stack${page === "fuel" ? " fuel-page-stack" : ""}`}
+					>
+						{content}
+					</div>
 				</div>
 			</div>
 		</div>

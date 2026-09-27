@@ -39,17 +39,20 @@ function text(value, field, { max = 300, required = false } = {}) {
 
 function readCustomerInput(body) {
   const customerName = text(body.customerName, 'tên khách hàng', { required: true });
+  const customerCode = text(body.customerCode, 'mã khách hàng', { max: 100 });
   const carrier = text(body.carrier, 'nhà xe');
   const recipient = text(body.recipient, 'người nhận');
   const address = text(body.address, 'địa chỉ giao hàng', { max: 500 });
   return {
     customerName,
+    customerCode,
     carrier,
     recipient,
     address,
     customerKey: normalizeSearchText(customerName),
+    customerCodeKey: customerCode.toLocaleUpperCase('vi-VN'),
     searchText: normalizeSearchText(
-      `${customerName} ${carrier} ${recipient} ${address}`,
+      `${customerName} ${customerCode} ${carrier} ${recipient} ${address}`,
     ),
   };
 }
@@ -67,6 +70,7 @@ function toApi(row) {
   return {
     id: row.id,
     customerName: row.customer_name,
+    customerCode: row.customer_code,
     carrier: row.linked_carrier_names || row.carrier,
     recipient: row.recipient,
     address: row.address,
@@ -90,15 +94,32 @@ function ensureNameAvailable(db, customerKey, ignoreId = null) {
   if (row) throw badRequest('Tên khách hàng này đã có trong danh sách.');
 }
 
+function ensureCodeAvailable(db, customerCode, ignoreId = null) {
+  if (!customerCode) return;
+  const row = ignoreId
+    ? db
+        .prepare('SELECT id FROM customers WHERE customer_code = ? COLLATE NOCASE AND id <> ?')
+        .get(customerCode, ignoreId)
+    : db
+        .prepare('SELECT id FROM customers WHERE customer_code = ? COLLATE NOCASE')
+        .get(customerCode);
+  if (row) throw badRequest('Mã khách hàng này đã được sử dụng.');
+}
+
 function register(router) {
   // Dùng riêng cho phần xem trước Excel. Không dùng phân trang vì nếu chỉ lấy
   // trang đầu, các khách hàng ở sau sẽ bị báo nhầm là sẵn sàng nhập.
   router.get('/api/customers/import-keys', async (c) => {
     c.requirePage(PAGE);
-    return c.db
-      .prepare('SELECT customer_key FROM customers ORDER BY id')
-      .all()
-      .map((row) => row.customer_key);
+    const rows = c.db
+      .prepare('SELECT customer_key, customer_code FROM customers ORDER BY id')
+      .all();
+    return {
+      items: rows.map((row) => ({
+        nameKey: row.customer_key,
+        codeKey: String(row.customer_code || '').toLocaleUpperCase('vi-VN'),
+      })),
+    };
   });
 
   router.get('/api/customers', async (c) => {
@@ -169,14 +190,16 @@ function register(router) {
     const at = new Date().toISOString();
     return transaction(c.db, () => {
       ensureNameAvailable(c.db, input.customerKey);
+      ensureCodeAvailable(c.db, input.customerCode);
       const result = c.db
         .prepare(
           `INSERT INTO customers
-             (customer_name, carrier, recipient, address, customer_key, search_text, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              (customer_name, customer_code, carrier, recipient, address, customer_key, search_text, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.customerName,
+          input.customerCode,
           input.carrier,
           input.recipient,
           input.address,
@@ -199,21 +222,109 @@ function register(router) {
     const rows = readImportRows(c.body.rows).map(readCustomerInput);
     const at = new Date().toISOString();
     return transaction(c.db, () => {
-      const existing = new Set(
-        c.db.prepare('SELECT customer_key FROM customers').all().map((row) => row.customer_key),
+      const existingRows = c.db.prepare('SELECT * FROM customers ORDER BY id').all();
+      const existingByName = new Map(existingRows.map((row) => [row.customer_key, row]));
+      const existingByCode = new Map(
+        existingRows
+          .filter((row) => row.customer_code)
+          .map((row) => [String(row.customer_code).toLocaleUpperCase('vi-VN'), row]),
       );
       const insert = c.db.prepare(
-        'INSERT INTO customers (customer_name, carrier, recipient, address, customer_key, search_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO customers (customer_name, customer_code, carrier, recipient, address, customer_key, search_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       );
+      const update = c.db.prepare(
+        `UPDATE customers SET
+            customer_name = ?, customer_code = ?, recipient = ?, address = ?,
+            customer_key = ?, updated_at = ?
+          WHERE id = ?`,
+      );
+      const handledCodes = new Set();
+      const handledNames = new Set();
       let inserted = 0;
+      let updated = 0;
       let duplicates = 0;
       for (const input of rows) {
-        if (existing.has(input.customerKey)) {
+        if (
+          handledNames.has(input.customerKey) ||
+          (input.customerCodeKey && handledCodes.has(input.customerCodeKey))
+        ) {
           duplicates += 1;
           continue;
         }
+        handledNames.add(input.customerKey);
+        if (input.customerCodeKey) handledCodes.add(input.customerCodeKey);
+
+        const sameCode = input.customerCodeKey
+          ? existingByCode.get(input.customerCodeKey)
+          : null;
+        const sameName = existingByName.get(input.customerKey);
+        if (sameCode) {
+          if (sameName && sameName.id !== sameCode.id) {
+            duplicates += 1;
+            continue;
+          }
+          const previousKey = sameCode.customer_key;
+          const customerCode = sameCode.customer_code || input.customerCode;
+          const recipient = input.recipient || sameCode.recipient;
+          const address = input.address || sameCode.address;
+          update.run(
+            input.customerName,
+            customerCode,
+            recipient,
+            address,
+            input.customerKey,
+            at,
+            sameCode.id,
+          );
+          // Import chỉ bổ sung nhà xe mới; không gỡ các liên kết/bảng cước cũ.
+          replaceCustomerCarriers(
+            c.db,
+            sameCode.id,
+            [sameCode.carrier, input.carrier].filter(Boolean).join(', '),
+            at,
+          );
+          refreshCustomerCarrier(c.db, sameCode.id, at);
+          const after = loadCustomer(c.db, sameCode.id);
+          existingByName.delete(previousKey);
+          existingByName.set(after.customer_key, after);
+          existingByCode.set(input.customerCodeKey, after);
+          updated += 1;
+          continue;
+        }
+
+        if (sameName) {
+          // Cùng tên và bản ghi cũ chưa có mã: bổ sung mã mới mà
+          // không tạo thêm khách hàng, nhờ đó giữ nguyên liên kết nhà xe.
+          if (input.customerCode && !sameName.customer_code) {
+            update.run(
+              input.customerName,
+              input.customerCode,
+              input.recipient || sameName.recipient,
+              input.address || sameName.address,
+              input.customerKey,
+              at,
+              sameName.id,
+            );
+            replaceCustomerCarriers(
+              c.db,
+              sameName.id,
+              [sameName.carrier, input.carrier].filter(Boolean).join(', '),
+              at,
+            );
+            refreshCustomerCarrier(c.db, sameName.id, at);
+            const after = loadCustomer(c.db, sameName.id);
+            existingByName.set(after.customer_key, after);
+            existingByCode.set(input.customerCodeKey, after);
+            updated += 1;
+            continue;
+          }
+          duplicates += 1;
+          continue;
+        }
+
         const result = insert.run(
           input.customerName,
+          input.customerCode,
           input.carrier,
           input.recipient,
           input.address,
@@ -225,11 +336,17 @@ function register(router) {
         const customerId = Number(result.lastInsertRowid);
         replaceCustomerCarriers(c.db, customerId, input.carrier, at);
         refreshCustomerCarrier(c.db, customerId, at);
-        existing.add(input.customerKey);
+        const after = loadCustomer(c.db, customerId);
+        existingByName.set(after.customer_key, after);
+        if (input.customerCodeKey) existingByCode.set(input.customerCodeKey, after);
         inserted += 1;
       }
-      writeAudit(c.db, c.user, 'customer.import', 'customer', null, { inserted, duplicates });
-      return { inserted, duplicates };
+      writeAudit(c.db, c.user, 'customer.import', 'customer', null, {
+        inserted,
+        updated,
+        duplicates,
+      });
+      return { inserted, updated, duplicates };
     });
   });
 
@@ -240,15 +357,17 @@ function register(router) {
     const at = new Date().toISOString();
     return transaction(c.db, () => {
       ensureNameAvailable(c.db, input.customerKey, before.id);
+      ensureCodeAvailable(c.db, input.customerCode, before.id);
       c.db
         .prepare(
           `UPDATE customers SET
-             customer_name = ?, carrier = ?, recipient = ?, address = ?,
+              customer_name = ?, customer_code = ?, carrier = ?, recipient = ?, address = ?,
              customer_key = ?, search_text = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
           input.customerName,
+          input.customerCode,
           input.carrier,
           input.recipient,
           input.address,

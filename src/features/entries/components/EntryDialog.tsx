@@ -16,6 +16,7 @@ import {
 	validateEntry,
 } from "../../../domain/entries/entry.model";
 import { entryRepository } from "../../../domain/entries/entry.repository";
+import { ApiError } from "../../../shared/api/client";
 import { formatDate, formatMoney } from "../../../shared/lib/format";
 import { Alert } from "../../../shared/ui/Alert";
 import { DateInput } from "../../../shared/ui/DateInput/DateInput";
@@ -135,6 +136,8 @@ export function EntryDialog({
 	const customerRequest = useRef(0);
 	const ordersRequest = useRef(0);
 	const ratesRequest = useRef(0);
+	const duplicateRequest = useRef(0);
+	const productTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const [carrierId, setCarrierId] = useState<number | null>(null);
 	const [carrierPickerOpen, setCarrierPickerOpen] = useState(false);
 	const [recipientOptionsOpen, setRecipientOptionsOpen] = useState(false);
@@ -144,6 +147,10 @@ export function EntryDialog({
 	const [rates, setRates] = useState<EntryRate[]>([]);
 	const [rate, setRate] = useState<EntryRate | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [showFieldErrors, setShowFieldErrors] = useState(false);
+	const [duplicateDetected, setDuplicateDetected] = useState(
+		Boolean(initial.duplicateReason),
+	);
 	const deferredCustomerSearch = useDeferredValue(customerSearch);
 	const deferredCarrierSearch = useDeferredValue(form.carrier);
 	const deferredRateSearch = useDeferredValue(form.spec);
@@ -176,12 +183,44 @@ export function EntryDialog({
 				),
 			);
 	}, [editingId, formOptions, initial.customer]);
+	useEffect(() => {
+		const textarea = productTextareaRef.current;
+		if (!textarea || textarea.value !== form.note) return;
+		textarea.style.height = "auto";
+		textarea.style.height = `${textarea.scrollHeight}px`;
+	}, [form.note]);
+	useEffect(() => {
+		const requestId = duplicateRequest.current + 1;
+		duplicateRequest.current = requestId;
+		if (
+			!options ||
+			options.isAdmin ||
+			!/^\d{4}-\d{2}-\d{2}$/.test(form.entryDate) ||
+			!form.customer.trim()
+		) {
+			setDuplicateDetected(false);
+			return;
+		}
+		void entryRepository
+			.duplicateCheck({
+				entryDate: form.entryDate,
+				customer: form.customer,
+				excludeId: editingId ?? undefined,
+			})
+			.then((result) => {
+				if (duplicateRequest.current === requestId)
+					setDuplicateDetected(result.duplicate);
+			})
+			.catch(() => {
+				if (duplicateRequest.current === requestId) setDuplicateDetected(false);
+			});
+	}, [editingId, form.customer, form.entryDate, options]);
 	const customerSearchIndex = useMemo(
 		() =>
 			(options?.customers ?? []).map((customer) => ({
 				customer,
 				searchKey: normalizeCustomerSearch(
-					`${customer.name} ${customer.provinceCity}`,
+					`${customer.name} ${customer.customerCode} ${customer.provinceCity}`,
 				),
 			})),
 		[options?.customers],
@@ -277,6 +316,8 @@ export function EntryDialog({
 				address: "",
 				spec: "",
 				saveCarrierRate: false,
+				misaDocumentDate: "",
+				misaDocumentCode: "",
 			}));
 			if (!preserveSearch) setCustomerSearch("");
 			return;
@@ -375,23 +416,36 @@ export function EntryDialog({
 		}
 	};
 	const save = async () => {
-		const problem = validateEntry(form);
-		if (problem) throw new Error(problem);
+		setShowFieldErrors(true);
+		const problem = validateEntry(form, {
+			requireEmployee: Boolean(options?.isAdmin),
+		});
+		// Lỗi thiếu dữ liệu đã hiển thị ngay dưới từng ô, không lặp lại ở đầu form.
+		if (problem) return;
 		if (form.saveCarrierRate && !form.spec.trim()) {
-			throw new Error(
-				"Vui lòng chọn hoặc nhập quy cách để lưu vào bảng cước nhà xe.",
-			);
+			return;
 		}
 		if (transportOverRate && !form.rateVarianceNote.trim()) {
-			throw new Error("Vui lòng nhập lý do chênh lệch cước.");
+			return;
 		}
-		await onSave(form);
+		if (duplicateDetected && !form.duplicateReason.trim()) {
+			return;
+		}
+		try {
+			await onSave(form);
+			onClose();
+		} catch (cause) {
+			if (cause instanceof ApiError && cause.status === 409)
+				setDuplicateDetected(true);
+			throw cause;
+		}
 	};
 	const transportOverRate = Boolean(
 		rate && form.transportFee > rate.transportFee,
 	);
 	const difference = rate ? form.transportFee - rate.transportFee : 0;
-
+	const fieldError = (invalid: boolean, message: string) =>
+		showFieldErrors && invalid ? message : undefined;
 	return (
 		<Dialog
 			title={editingId ? "Sửa phiếu chi phí gửi hàng" : "Thêm chi phí gửi hàng"}
@@ -421,7 +475,13 @@ export function EntryDialog({
 		>
 			{error && <Alert tone="error">{error}</Alert>}
 			<FieldGrid>
-				<Field label="Ngày gửi">
+				<Field
+					label="Ngày gửi *"
+					error={fieldError(
+						!/^\d{4}-\d{2}-\d{2}$/.test(form.entryDate),
+						"Vui lòng chọn ngày gửi.",
+					)}
+				>
 					{(id) => (
 						<div className="entry-date-field">
 							<DateInput
@@ -432,7 +492,13 @@ export function EntryDialog({
 						</div>
 					)}
 				</Field>
-				<Field label="Nhân viên phụ trách">
+				<Field
+					label="Nhân viên phụ trách *"
+					error={fieldError(
+						Boolean(options?.isAdmin) && !form.employeeId,
+						"Vui lòng chọn nhân viên phụ trách.",
+					)}
+				>
 					{(id) =>
 						!options ? (
 							<input id={id} value="Đang tải danh sách nhân viên..." disabled />
@@ -470,13 +536,16 @@ export function EntryDialog({
 					Admin có thể nhập phiếu thay.
 				</p>
 			)}
-			<Field label="Khách hàng">
+			<Field
+				label="Khách hàng *"
+				error={fieldError(!form.customer.trim(), "Vui lòng chọn khách hàng.")}
+			>
 				{(id) => (
 					<div className="entry-customer-picker">
 						<input
 							id={id}
 							value={customerSearch}
-							placeholder="Gõ để tìm tên khách hàng…"
+							placeholder="Gõ tên hoặc mã khách hàng…"
 							autoComplete="off"
 							onFocus={() => setCustomerPickerOpen(true)}
 							onBlur={() =>
@@ -533,7 +602,12 @@ export function EntryDialog({
 											<small
 												style={{ color: "var(--muted)", whiteSpace: "nowrap" }}
 											>
-												{customer.provinceCity || "Chưa có tỉnh"}
+												{customer.customerCode
+													? `Mã ${customer.customerCode}`
+													: "Chưa có mã"}
+												{customer.provinceCity
+													? ` · ${customer.provinceCity}`
+													: ""}
 											</small>
 										</button>
 									))
@@ -553,7 +627,7 @@ export function EntryDialog({
 					</div>
 				)}
 			</Field>
-			{customerId && (
+			{customerId && !form.misaDocumentDate && (
 				<section className="entry-misa-orders">
 					<header>
 						<div>
@@ -604,8 +678,29 @@ export function EntryDialog({
 					)}
 				</section>
 			)}
+			<Field
+				label="Sản phẩm *"
+				error={fieldError(!form.note.trim(), "Vui lòng nhập sản phẩm.")}
+			>
+				{(id) => (
+					<textarea
+						id={id}
+						ref={productTextareaRef}
+						className="entry-product-textarea"
+						rows={1}
+						value={form.note}
+						onChange={(event) =>
+							setForm((current) => ({ ...current, note: event.target.value }))
+						}
+						placeholder="Chọn đơn MISA để tự điền danh sách mặt hàng"
+					/>
+				)}
+			</Field>
 			<FieldGrid>
-				<Field label="Nhà xe">
+				<Field
+					label="Nhà xe *"
+					error={fieldError(!form.carrier.trim(), "Vui lòng chọn nhà xe.")}
+				>
 					{(id) =>
 						options?.isAdmin ? (
 							<div className="entry-delivery-picker">
@@ -700,7 +795,13 @@ export function EntryDialog({
 						)
 					}
 				</Field>
-				<Field label="Người nhận">
+				<Field
+					label="Người nhận *"
+					error={fieldError(
+						!form.recipient.trim(),
+						"Vui lòng nhập người nhận.",
+					)}
+				>
 					{(id) => (
 						<div className="entry-delivery-picker">
 							<input
@@ -739,7 +840,10 @@ export function EntryDialog({
 						</div>
 					)}
 				</Field>
-				<Field label="Quy cách">
+				<Field
+					label="Quy cách *"
+					error={fieldError(!form.spec.trim(), "Vui lòng chọn quy cách.")}
+				>
 					{(id) =>
 						options?.isAdmin ? (
 							<div className="entry-delivery-picker">
@@ -792,7 +896,9 @@ export function EntryDialog({
 									disabled={!carrierId || !rates.length}
 									placeholder={
 										carrierId
-											? "Admin chưa thiết lập quy cách"
+											? rates.length
+												? "Chọn quy cách đã thiết lập"
+												: "Admin chưa thiết lập quy cách"
 											: "Chọn nhà xe trước"
 									}
 									onFocus={() => setRateOptionsOpen(true)}
@@ -822,6 +928,27 @@ export function EntryDialog({
 						)
 					}
 				</Field>
+				<Field
+					label="Bill *"
+					error={fieldError(!form.billStatus, "Vui lòng chọn bill.")}
+				>
+					{(id) => (
+						<select
+							id={id}
+							value={form.billStatus}
+							onChange={(event) =>
+								setForm((current) => ({
+									...current,
+									billStatus: event.target.value as EntryInput["billStatus"],
+								}))
+							}
+						>
+							<option value="">Chọn bill</option>
+							<option value="Có bill">Có bill</option>
+							<option value="Không bill">Không bill</option>
+						</select>
+					)}
+				</Field>
 			</FieldGrid>
 			{rate && (
 				<div className="entry-rate-standard">
@@ -830,11 +957,18 @@ export function EntryDialog({
 				</div>
 			)}
 			<FieldGrid>
-				<Field label="Cước vận chuyển">
+				<Field
+					label="Cước vận chuyển *"
+					error={fieldError(
+						form.transportFee === 0,
+						"Vui lòng nhập cước vận chuyển.",
+					)}
+				>
 					{(id) => (
 						<MoneyInput
 							id={id}
 							value={form.transportFee}
+							placeholder="Nhập cước vận chuyển"
 							onValueChange={(transportFee) =>
 								setForm((current) => ({ ...current, transportFee }))
 							}
@@ -846,6 +980,7 @@ export function EntryDialog({
 						<MoneyInput
 							id={id}
 							value={form.gateFee}
+							placeholder="Để trống nếu không có phí"
 							onValueChange={(gateFee) =>
 								setForm((current) => ({ ...current, gateFee }))
 							}
@@ -865,7 +1000,10 @@ export function EntryDialog({
 			{transportOverRate && (
 				<Field
 					label="Lý do chênh lệch cước"
-					hint="Hiển thị riêng trong báo cáo chênh lệch cước nhà xe."
+					error={fieldError(
+						!form.rateVarianceNote.trim(),
+						"Vui lòng nhập lý do chênh lệch cước.",
+					)}
 				>
 					{(id) => (
 						<textarea
@@ -882,18 +1020,35 @@ export function EntryDialog({
 					)}
 				</Field>
 			)}
-			<Field label="Ghi chú">
-				{(id) => (
-					<textarea
-						id={id}
-						value={form.note}
-						onChange={(event) =>
-							setForm((current) => ({ ...current, note: event.target.value }))
-						}
-						placeholder="Chọn đơn MISA để tự điền danh sách mặt hàng"
-					/>
-				)}
-			</Field>
+			{duplicateDetected && (
+				<>
+					<Alert tone="info">
+						Đã có phiếu cùng ngày gửi và khách hàng. Hãy nêu rõ lý do để tiếp
+						tục.
+					</Alert>
+					<Field
+						label="Lý do nhập trùng"
+						error={fieldError(
+							!form.duplicateReason.trim(),
+							"Vui lòng nhập lý do phiếu trùng.",
+						)}
+					>
+						{(id) => (
+							<textarea
+								id={id}
+								value={form.duplicateReason}
+								onChange={(event) =>
+									setForm((current) => ({
+										...current,
+										duplicateReason: event.target.value,
+									}))
+								}
+								placeholder="Ví dụ: Giao hai chuyến riêng trong cùng ngày..."
+							/>
+						)}
+					</Field>
+				</>
+			)}
 		</Dialog>
 	);
 }

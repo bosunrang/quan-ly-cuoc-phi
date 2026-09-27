@@ -73,7 +73,7 @@ function replaceCustomerCarriers(db, customerId, value, at) {
 /** Sao chép danh sách liên kết chuẩn về trường hiển thị và chỉ mục tìm kiếm của khách hàng. */
 function refreshCustomerCarrier(db, customerId, at) {
   const customer = db.prepare(
-    'SELECT customer_name, recipient, address FROM customers WHERE id = ?',
+    'SELECT customer_name, customer_code, recipient, address FROM customers WHERE id = ?',
   ).get(customerId);
   if (!customer) return [];
   const names = linkedCarrierNames(db, customerId);
@@ -83,7 +83,7 @@ function refreshCustomerCarrier(db, customerId, at) {
   ).run(
     carrier,
     normalizeSearchText(
-      `${customer.customer_name} ${carrier} ${customer.recipient} ${customer.address}`,
+      `${customer.customer_name} ${customer.customer_code} ${carrier} ${customer.recipient} ${customer.address}`,
     ),
     at,
     customerId,

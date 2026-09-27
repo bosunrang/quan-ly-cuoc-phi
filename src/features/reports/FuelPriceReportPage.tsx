@@ -22,6 +22,12 @@ const decimal = (value: number) =>
 	Number.isInteger(value)
 		? value.toLocaleString("vi-VN")
 		: value.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+const vehicleLabel = (vehicleType: "motorcycle" | "truck" | "") =>
+	vehicleType === "motorcycle"
+		? "Xe máy"
+		: vehicleType === "truck"
+			? "Ô tô"
+			: "Chưa ghi nhận";
 
 const errorMessage = (cause: unknown, fallback: string) =>
 	cause instanceof Error ? cause.message : fallback;
@@ -220,6 +226,7 @@ export function FuelPriceReportPage() {
 										<th>Kỳ tính</th>
 										<th>Nhân viên</th>
 										<th>Chi tiết lộ trình</th>
+										<th>Phương tiện</th>
 										<th>Quãng đường</th>
 										<th>Giá xăng</th>
 										<th>Tổng tiền</th>
@@ -254,6 +261,11 @@ export function FuelPriceReportPage() {
 												<td className="fuel-route-detail">
 													{leg.to ? `${leg.from} → ${leg.to}` : leg.from}
 												</td>
+												{index === 0 && (
+													<td rowSpan={legs.length}>
+														{vehicleLabel(item.vehicleType)}
+													</td>
+												)}
 												<td className="fuel-route-distance">
 													{decimal(leg.km)} km
 												</td>

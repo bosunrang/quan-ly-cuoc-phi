@@ -194,6 +194,7 @@ export function parseMisaRows(
 			rowNumber: dataStartIndex + offset + 1,
 			documentDate: documentDate ?? "",
 			documentCode: normalizeText(optionalCell(source, columns.documentNumber)),
+			customerCode: normalizeText(optionalCell(source, columns.customerCode)),
 			customerName,
 			address,
 			productName,

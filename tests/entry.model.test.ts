@@ -14,7 +14,12 @@ const valid = {
 	...emptyEntryInput("2026-08-29"),
 	customer: "Công ty ABC",
 	carrier: "Nhà xe Anh Sáu",
+	recipient: "Chị Lan",
+	address: "105 Hàm Nghi",
+	spec: "Thùng 20kg",
 	transportFee: 350_000,
+	note: "20 thùng hàng",
+	billStatus: "Có bill" as const,
 };
 
 describe("kiểm tra phiếu cước", () => {
@@ -28,11 +33,19 @@ describe("kiểm tra phiếu cước", () => {
 		);
 	});
 
-	it("từ chối thiếu khách hàng hoặc nhà xe", () => {
+	it("từ chối thiếu trường bắt buộc", () => {
 		expect(validateEntry({ ...valid, customer: "   " })).toContain(
 			"tên khách hàng",
 		);
 		expect(validateEntry({ ...valid, carrier: "" })).toContain("nhà xe");
+		expect(validateEntry({ ...valid, recipient: "" })).toContain("người nhận");
+		expect(validateEntry({ ...valid, spec: "" })).toContain("quy cách");
+		expect(validateEntry({ ...valid, billStatus: "" })).toContain("bill");
+		expect(validateEntry({ ...valid, note: "" })).toContain("sản phẩm");
+		expect(validateEntry({ ...valid, transportFee: 0 })).toContain("lớn hơn 0");
+		expect(validateEntry(valid, { requireEmployee: true })).toContain(
+			"nhân viên phụ trách",
+		);
 	});
 
 	it("từ chối tiền âm và tiền không nguyên", () => {
@@ -62,6 +75,8 @@ describe("chuyển phiếu sang dữ liệu biểu mẫu", () => {
 			totalFee: 385_000,
 			note: "",
 			rateVarianceNote: "",
+			duplicateReason: "",
+			billStatus: "Có bill",
 			createdBy: 2,
 			createdByName: "Nhân viên A",
 			createdAt: "2026-08-29T07:00:00.000Z",

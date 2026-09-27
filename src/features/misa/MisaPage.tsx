@@ -228,6 +228,7 @@ export function MisaPage() {
 									<thead>
 										<tr>
 											<th className="misa-col-date">Ngày</th>
+											<th className="misa-col-customer-code">Mã khách hàng</th>
 											<th>Khách hàng</th>
 											<th>Địa chỉ</th>
 											<th>Mặt hàng</th>
@@ -240,6 +241,9 @@ export function MisaPage() {
 											<tr key={row.id}>
 												<td className="misa-col-date">
 													{formatDate(row.documentDate)}
+												</td>
+												<td className="misa-col-customer-code">
+													{row.customerCode || "—"}
 												</td>
 												<td>
 													<strong>{row.customerName}</strong>

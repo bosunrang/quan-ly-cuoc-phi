@@ -11,16 +11,16 @@ const PAGE = 'settings';
 const MAX_LOGO_LENGTH = 1_500_000;
 
 const BACKUP_TABLES = {
-  settings: { table: 'app_settings', columns: ['id', 'company_name', 'company_address', 'display_name', 'tagline', 'logo_data_url', 'updated_at'] },
-  misa: { table: 'misa_rows', columns: ['id', 'document_date', 'customer_name', 'address', 'quantity_sold', 'province_city', 'source_key', 'source_file', 'imported_by', 'imported_at', 'product_name', 'document_code', 'customer_key'] },
-  customers: { table: 'customers', columns: ['id', 'customer_name', 'carrier', 'recipient', 'address', 'customer_key', 'search_text', 'created_at', 'updated_at'] },
+  settings: { table: 'app_settings', columns: ['id', 'company_name', 'company_address', 'display_name', 'tagline', 'logo_data_url', 'motorcycle_consumption_liters', 'motorcycle_base_km', 'truck_consumption_liters', 'truck_base_km', 'updated_at'] },
+  misa: { table: 'misa_rows', columns: ['id', 'document_date', 'customer_name', 'address', 'quantity_sold', 'province_city', 'source_key', 'source_file', 'imported_by', 'imported_at', 'product_name', 'document_code', 'customer_key', 'customer_code'] },
+  customers: { table: 'customers', columns: ['id', 'customer_name', 'customer_code', 'carrier', 'recipient', 'address', 'customer_key', 'search_text', 'created_at', 'updated_at'] },
   carriers: { table: 'carriers', columns: ['id', 'name', 'contact', 'phone', 'address', 'is_active', 'carrier_key', 'created_at', 'updated_at', 'schedule', 'note'] },
   carrierCustomers: { table: 'carrier_customers', columns: ['carrier_id', 'customer_id', 'assigned_at'] },
   carrierRates: { table: 'carrier_customer_rates', columns: ['id', 'carrier_id', 'customer_id', 'spec', 'spec_key', 'is_default', 'transport_fee', 'gate_fee', 'note', 'created_at', 'updated_at'] },
   employees: { table: 'employees', columns: ['id', 'full_name', 'user_id', 'is_active', 'search_text', 'created_at', 'updated_at', 'address'] },
-  entries: { table: 'entries', columns: ['id', 'entry_date', 'customer', 'carrier', 'recipient', 'address', 'spec', 'ticket_fee', 'transport_fee', 'gate_fee', 'note', 'created_by', 'created_at', 'updated_at', 'misa_document_date', 'misa_document_code', 'employee_id', 'rate_variance_note'] },
+  entries: { table: 'entries', columns: ['id', 'entry_date', 'customer', 'carrier', 'recipient', 'address', 'spec', 'ticket_fee', 'transport_fee', 'gate_fee', 'note', 'general_note', 'created_by', 'created_at', 'updated_at', 'misa_document_date', 'misa_document_code', 'employee_id', 'rate_variance_note', 'duplicate_reason', 'bill_status'] },
   fuelPrices: { table: 'fuel_prices', columns: ['id', 'effective_date', 'fuel_type', 'region', 'price', 'source', 'created_by', 'created_at', 'updated_at'] },
-  fuelRecords: { table: 'fuel_records', columns: ['id', 'entry_date', 'employee_id', 'distance_km', 'consumption_liters', 'consumption_base_km', 'fuel_type', 'region', 'fuel_price', 'total_fee', 'note', 'created_by', 'created_at', 'period_from', 'period_to', 'updated_at', 'finalized_at', 'finalized_by', 'voided_at', 'voided_by', 'void_reason', 'status'] },
+  fuelRecords: { table: 'fuel_records', columns: ['id', 'entry_date', 'employee_id', 'distance_km', 'consumption_liters', 'consumption_base_km', 'fuel_type', 'region', 'vehicle_type', 'fuel_price', 'total_fee', 'note', 'created_by', 'created_at', 'period_from', 'period_to', 'updated_at', 'finalized_at', 'finalized_by', 'voided_at', 'voided_by', 'void_reason', 'status'] },
   routeDistances: { table: 'route_distances', columns: ['id', 'from_name', 'to_name', 'from_key', 'to_key', 'distance_km', 'source', 'updated_at'] },
   fuelLegs: { table: 'fuel_record_legs', columns: ['id', 'fuel_record_id', 'sequence_no', 'from_name', 'to_name', 'distance_km'] },
 };
@@ -75,6 +75,14 @@ function importRows(db, name, rows, userId, knownUserIds) {
     if (name === 'employees' && value.user_id !== null && !knownUserIds.has(Number(value.user_id))) value.user_id = null;
     // Backup phiên bản 1 trước khi có ghi chú chênh lệch vẫn khôi phục được.
     if (name === 'entries') value.rate_variance_note ??= '';
+    // Backup cũ chưa có ghi chú tự do vẫn khôi phục được.
+    if (name === 'entries') value.general_note ??= '';
+    // Backup cũ chưa có lý do nhập trùng vẫn khôi phục được.
+    if (name === 'entries') value.duplicate_reason ??= '';
+    // Backup cũ chưa có thông tin hóa đơn vẫn khôi phục được.
+    if (name === 'entries') value.bill_status ??= '';
+    // Backup cũ chưa lưu mã khách MISA vẫn khôi phục được.
+    if (name === 'misa') value.customer_code ??= '';
     if (name === 'fuelRecords') {
       value.updated_at ??= value.created_at ?? new Date().toISOString();
       value.status ??= 'active';

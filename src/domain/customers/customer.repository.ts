@@ -1,13 +1,15 @@
 import { api } from "../../shared/api/client";
 import type {
 	Customer,
+	CustomerImportKeys,
+	CustomerImportResult,
 	CustomerInput,
 	CustomerListResult,
 } from "./customer.model";
 
 export const customerRepository = {
-	importKeys(): Promise<string[]> {
-		return api<string[]>("GET", "/api/customers/import-keys");
+	importKeys(): Promise<CustomerImportKeys> {
+		return api<CustomerImportKeys>("GET", "/api/customers/import-keys");
 	},
 	list(search = "", page = 1, limit = 50): Promise<CustomerListResult> {
 		const query = new URLSearchParams();
@@ -25,10 +27,8 @@ export const customerRepository = {
 	remove(id: number): Promise<{ ok: true }> {
 		return api<{ ok: true }>("DELETE", `/api/customers/${id}`);
 	},
-	import(
-		rows: CustomerInput[],
-	): Promise<{ inserted: number; duplicates: number }> {
-		return api<{ inserted: number; duplicates: number }>(
+	import(rows: CustomerInput[]): Promise<CustomerImportResult> {
+		return api<CustomerImportResult>(
 			"POST",
 			"/api/customers/import",
 			{ rows },

@@ -57,21 +57,33 @@ export function CustomersPage() {
 	} | null>(null);
 	const [isReading, setIsReading] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const requestIdRef = useRef(0);
 
 	const load = useCallback(async () => {
+		const requestId = ++requestIdRef.current;
 		try {
 			setError(null);
-			setData(await customerRepository.list(search, page));
+			const result = await customerRepository.list(search, page);
+			if (requestId === requestIdRef.current) setData(result);
 		} catch (cause) {
-			setError(
-				cause instanceof Error ? cause.message : "Không tải được khách hàng.",
-			);
+			if (requestId === requestIdRef.current) {
+				setError(
+					cause instanceof Error ? cause.message : "Không tải được khách hàng.",
+				);
+			}
 		}
 	}, [page, search]);
 
 	useEffect(() => {
 		void load();
 	}, [load]);
+
+	useEffect(
+		() => () => {
+			requestIdRef.current += 1;
+		},
+		[],
+	);
 
 	useEffect(() => {
 		const timer = window.setTimeout(() => {
@@ -221,6 +233,7 @@ export function CustomersPage() {
 									<thead>
 										<tr>
 											<th className="customer-order">STT</th>
+											<th className="customer-code">Mã khách hàng</th>
 											<th>Tên khách hàng</th>
 											<th>Nhà xe</th>
 											<th>Người nhận</th>
@@ -233,6 +246,9 @@ export function CustomersPage() {
 											<tr key={customer.id}>
 												<td className="customer-order">
 													{(data.page - 1) * data.pageSize + index + 1}
+												</td>
+												<td className="customer-code">
+													{customer.customerCode || "—"}
 												</td>
 												<td className="customer-name">
 													<strong>{customer.customerName}</strong>
@@ -319,14 +335,14 @@ export function CustomersPage() {
 					preview={importing.preview}
 					onClose={() => setImporting(null)}
 					onConfirm={async () => {
-						const readyRows = importing.preview.rows.filter(
-							(row) => row.status === "ready",
+						const rows = importing.preview.rows.filter(
+							(row) => row.status === "ready" || row.status === "update",
 						);
-						const result = await customerRepository.import(readyRows);
+						const result = await customerRepository.import(rows);
 						setImporting(null);
 						await load();
 						setNotice(
-							`Đã nhập ${result.inserted} khách hàng; bỏ qua ${result.duplicates} tên trùng.`,
+							`Đã thêm ${result.inserted}, cập nhật ${result.updated} khách hàng theo mã; bỏ qua ${result.duplicates} dòng trùng.`,
 						);
 					}}
 				/>

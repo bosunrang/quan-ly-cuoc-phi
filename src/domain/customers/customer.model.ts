@@ -1,6 +1,7 @@
 export interface Customer {
 	id: number;
 	customerName: string;
+	customerCode: string;
 	carrier: string;
 	recipient: string;
 	address: string;
@@ -10,9 +11,23 @@ export interface Customer {
 
 export interface CustomerInput {
 	customerName: string;
+	customerCode: string;
 	carrier: string;
 	recipient: string;
 	address: string;
+}
+
+export interface CustomerImportKeys {
+	items: Array<{
+		nameKey: string;
+		codeKey: string;
+	}>;
+}
+
+export interface CustomerImportResult {
+	inserted: number;
+	updated: number;
+	duplicates: number;
 }
 
 export interface CustomerListResult {
@@ -29,6 +44,7 @@ export interface CustomerListResult {
 
 export const emptyCustomerInput = (): CustomerInput => ({
 	customerName: "",
+	customerCode: "",
 	carrier: "",
 	recipient: "",
 	address: "",
@@ -37,6 +53,7 @@ export const emptyCustomerInput = (): CustomerInput => ({
 export function toCustomerInput(customer: Customer): CustomerInput {
 	return {
 		customerName: customer.customerName,
+		customerCode: customer.customerCode,
 		carrier: customer.carrier,
 		recipient: customer.recipient,
 		address: customer.address,

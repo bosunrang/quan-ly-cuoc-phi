@@ -24,6 +24,7 @@ describe('tính tiền xăng', () => {
       fuelPrice: 20_000,
       fuelType: 'Xăng E10',
       region: 'region1',
+      vehicleType: 'motorcycle',
       legs: [
         { from: 'A', to: 'B', km: 12.5 },
         { from: 'B', to: 'C', km: 17.5 },
@@ -31,7 +32,31 @@ describe('tính tiền xăng', () => {
     });
 
     assert.equal(input.distanceKm, 30);
+    assert.equal(input.vehicleType, 'motorcycle');
     assert.equal(calculateFuelTotal(input), 72_000);
+  });
+
+  test('chỉ nhận phương tiện đã được hệ thống hỗ trợ', () => {
+    const base = {
+      periodFrom: '2026-09-01', periodTo: '2026-09-01', distanceKm: 1,
+      consumptionLiters: 1, consumptionBaseKm: 40, fuelPrice: 20_000,
+    };
+    assert.equal(fuelRecordInput({ ...base, vehicleType: 'truck' }).vehicleType, 'truck');
+    assert.throws(
+      () => fuelRecordInput({ ...base, vehicleType: 'bus' }),
+      /Phương tiện không hợp lệ/,
+    );
+  });
+
+  test('giữ nguyên địa chỉ lộ trình dài đến 500 ký tự', () => {
+    const address = `CÔNG TY CỔ PHẦN NAVIVA GROUP, ${'Số 89, đường Nguyễn Thị Thập, Khu Him Lam, Phường Tân Hưng, TP Hồ Chí Minh, Việt Nam. '.repeat(3)}`;
+    const input = fuelRecordInput({
+      periodFrom: '2026-09-01', periodTo: '2026-09-01',
+      consumptionLiters: 1, consumptionBaseKm: 100, fuelPrice: 20_000,
+      legs: [{ from: address, to: 'Điểm đến', km: 10 }],
+    });
+
+    assert.equal(input.legs[0].from, address.trim());
   });
 
   test('từ chối định mức bằng 0 và khoảng ngày đảo ngược', () => {

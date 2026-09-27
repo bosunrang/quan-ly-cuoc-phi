@@ -98,7 +98,8 @@ function register(router) {
       .get(username);
     if (taken) throw badRequest('Tên đăng nhập này đã có người dùng.');
 
-    const pages = sanitizePages(c.body.pages);
+    const isAdmin = c.body.isAdmin === true;
+    const pages = isAdmin ? [] : sanitizePages(c.body.pages);
     const { hash, salt } = auth.hashPassword(password);
     const at = new Date().toISOString();
 
@@ -108,12 +109,12 @@ function register(router) {
           `INSERT INTO users
              (username, password_hash, password_salt, full_name,
               is_admin, is_active, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 0, 1, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
         )
-        .run(username, hash, salt, fullName, at, at);
+        .run(username, hash, salt, fullName, isAdmin ? 1 : 0, at, at);
       const id = Number(result.lastInsertRowid);
       replacePages(c.db, id, pages);
-      writeAudit(c.db, c.user, 'user.create', 'user', id, { username, pages });
+      writeAudit(c.db, c.user, 'user.create', 'user', id, { username, isAdmin, pages });
       return toApi(c.db, c.db.prepare('SELECT * FROM users WHERE id = ?').get(id));
     });
   });

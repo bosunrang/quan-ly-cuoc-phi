@@ -22,6 +22,8 @@ export interface CreateUserInput {
 	username: string;
 	fullName: string;
 	password: string;
+	/** Tài khoản toàn quyền, không cần cấp từng thẻ. */
+	isAdmin: boolean;
 	pages: PageId[];
 }
 

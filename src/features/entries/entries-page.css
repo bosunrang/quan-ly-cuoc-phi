@@ -54,6 +54,17 @@
 }
 
 .entry-search-field { min-width: 280px; flex: 0 1 520px; }
+.entry-employee-field { width: 210px; flex: 0 0 210px; }
+.entry-employee-field > select {
+	width: 100%;
+	height: var(--control-height);
+	padding: 0 10px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	background: var(--panel);
+	color: var(--text-body);
+	font: 400 var(--type-body) var(--sans);
+}
 .entry-search-field > div {
 	height: var(--control-height);
 	display: flex;
@@ -81,23 +92,36 @@
 .entry-date-filter .datebox { min-width: 165px; height: var(--control-height); }
 .entry-date-filter .datebox input.date-text { height: calc(var(--control-height) - 2px); }
 
-.entry-list-table { min-width: 1390px; table-layout: fixed; }
+.entry-list-table { min-width: 1490px; table-layout: fixed; }
+.entry-list-table-wrap.large-table {
+	max-height: min(520px, calc(100dvh - 330px));
+	overflow: auto;
+}
+.entry-list-table thead th {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	background: var(--table-head-bg);
+	box-shadow: 0 1px 0 var(--line);
+}
 .entry-list-table th:nth-child(1) { width: 100px; }
 .entry-list-table th:nth-child(2) { width: 245px; }
 .entry-list-table th:nth-child(3) { width: 145px; }
-.entry-list-table th:nth-child(4) { width: 150px; }
-.entry-list-table th:nth-child(5) { width: 140px; }
-.entry-list-table th:nth-child(6) { width: 110px; }
-.entry-list-table th:nth-child(7) { width: 145px; }
-.entry-list-table th:nth-child(8) { width: 155px; }
-.entry-list-table th:nth-child(9) { width: 270px; }
-.entry-list-table th:nth-child(10) { width: 110px; }
+.entry-list-table th:nth-child(4) { width: 120px; }
+.entry-list-table th:nth-child(5) { width: 120px; }
+.entry-list-table th:nth-child(6) { width: 105px; }
+.entry-list-table th:nth-child(7) { width: 100px; }
+.entry-list-table th:nth-child(8) { width: 115px; }
+.entry-list-table th:nth-child(9) { width: 125px; }
+.entry-list-table th:nth-child(10) { width: 270px; }
+.entry-list-table th:nth-child(11) { width: 110px; }
 .entry-list-table th:nth-child(6),
 .entry-list-table th:nth-child(7),
-.entry-list-table th:nth-child(10) { text-align: center; }
-.entry-list-table:not(.is-admin) th:nth-child(8) { width: 360px; }
-.entry-list-table:not(.is-admin) th:nth-child(9),
-.entry-list-table:not(.is-admin) td:nth-child(9) { width: 110px; text-align: center; }
+.entry-list-table th:nth-child(8),
+.entry-list-table th:last-child { text-align: center; }
+.entry-list-table:not(.is-admin) th:nth-child(9) { width: 360px; }
+.entry-list-table:not(.is-admin) th:nth-child(10),
+.entry-list-table:not(.is-admin) td:nth-child(10) { width: 110px; text-align: center; }
 .entry-list-table td { height: 62px; vertical-align: middle; white-space: normal; }
 .entry-list-table td strong { color: var(--text-strong); }
 .entry-list-table .entry-money { color: var(--text-strong); font-weight: 750; font-variant-numeric: tabular-nums; text-align: center; }
@@ -110,3 +134,71 @@
 .entry-pagination button { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--teal); display: grid; place-items: center; cursor: pointer; }
 .entry-pagination button:hover:not(:disabled) { border-color: var(--teal-border); background: var(--surface-accent-faint); }
 .entry-pagination button:disabled { opacity: .4; cursor: not-allowed; }
+
+@media (max-width: 640px) {
+	/* Dành chỗ cho form nhập trên điện thoại; số liệu tổng hợp vẫn có trên desktop. */
+	.entry-overview {
+		display: none;
+	}
+
+	.entry-intro {
+		min-height: 0;
+		align-items: flex-start;
+		flex-wrap: wrap;
+		padding: 13px;
+	}
+
+	.entry-intro-icon {
+		width: 40px;
+		height: 40px;
+	}
+
+	.entry-intro > .button {
+		width: 100%;
+		min-height: 44px;
+		justify-content: center;
+	}
+
+	.entry-employee-field {
+		min-width: 0;
+		width: 100%;
+		flex: initial;
+	}
+
+	.entry-toolbar {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 11px;
+		padding: 13px;
+	}
+
+	.entry-search-field {
+		grid-column: 1 / -1;
+		min-width: 0;
+	}
+
+	.entry-search-field > div,
+	.entry-date-filter .datebox {
+		height: 44px;
+		min-width: 0;
+	}
+
+	.entry-date-filter .datebox input.date-text {
+		height: 42px;
+		font-size: 16px;
+	}
+
+	.entry-list-table-wrap {
+		border-top: 1px solid var(--line);
+	}
+
+	.entry-pagination {
+		justify-content: center;
+		min-height: 56px;
+	}
+
+	.entry-pagination button {
+		width: 36px;
+		height: 36px;
+	}
+}

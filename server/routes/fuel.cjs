@@ -5,15 +5,26 @@ const { writeAudit } = require('../audit.cjs');
 const { badRequest, notFound } = require('../http.cjs');
 const { canSeeEveryone } = require('../permissions.cjs');
 const {
-  FUEL_TYPES, cleanText, fuelPriceInput, fuelRecordInput, toFuelPrice,
+  FUEL_TYPES, cleanText, fuelConsumptionInput, fuelPriceInput, fuelRecordInput, toFuelPrice,
 } = require('../fuel/calculation.cjs');
 const { estimateRoute } = require('../fuel/routes.cjs');
 const { fetchPetrolimexPrices } = require('../fuel/online-prices.cjs');
 const {
-  activeEmployee, listFuelData, saveFuelRecord, editableRecord, deleteFuelRecord,
+  activeEmployee, consumptionProfiles, listFuelData, saveFuelRecord, editableRecord, deleteFuelRecord,
 } = require('../fuel/records.cjs');
 
 const PAGE = 'fuel';
+
+function applyConfiguredConsumption(db, input) {
+  const vehicleType = input.vehicleType === 'truck' ? 'truck' : 'motorcycle';
+  const profile = consumptionProfiles(db)[vehicleType];
+  return {
+    ...input,
+    vehicleType,
+    consumptionLiters: profile.consumptionLiters,
+    consumptionBaseKm: profile.consumptionBaseKm,
+  };
+}
 
 function register(router) {
   router.get('/api/fuel', async (c) => {
@@ -54,6 +65,24 @@ function register(router) {
     return { ok: true };
   });
 
+  router.patch('/api/fuel/consumption', async (c) => {
+    c.requirePage(PAGE);
+    if (!canSeeEveryone(c.user)) {
+      throw badRequest('Chỉ quản trị viên trên máy chủ được thiết lập định mức.');
+    }
+    const input = fuelConsumptionInput(c.body);
+    const columns = input.vehicleType === 'truck'
+      ? ['truck_consumption_liters', 'truck_base_km']
+      : ['motorcycle_consumption_liters', 'motorcycle_base_km'];
+    transaction(c.db, () => {
+      c.db.prepare(
+        `UPDATE app_settings SET ${columns[0]} = ?, ${columns[1]} = ?, updated_at = ? WHERE id = 1`,
+      ).run(input.consumptionLiters, input.consumptionBaseKm, new Date().toISOString());
+      writeAudit(c.db, c.user, 'settings.update', 'fuel_consumption', input.vehicleType, input);
+    });
+    return consumptionProfiles(c.db);
+  });
+
   router.get('/api/fuel/online', async (c) => {
     c.requirePage(PAGE);
     try {
@@ -80,7 +109,8 @@ function register(router) {
   router.post('/api/fuel/records', async (c) => {
     c.requirePage(PAGE);
     const isAdmin = canSeeEveryone(c.user);
-    const input = fuelRecordInput(c.body);
+    const parsed = fuelRecordInput(c.body);
+    const input = isAdmin ? parsed : applyConfiguredConsumption(c.db, parsed);
     const employee = activeEmployee(c.db, c.user, isAdmin, c.body.employeeId);
     return saveFuelRecord(c.db, c.user, input, employee.id);
   });
@@ -90,7 +120,8 @@ function register(router) {
     const id = Number(c.params.id);
     const isAdmin = canSeeEveryone(c.user);
     editableRecord(c.db, id, c.user, isAdmin);
-    const input = fuelRecordInput(c.body);
+    const parsed = fuelRecordInput(c.body);
+    const input = isAdmin ? parsed : applyConfiguredConsumption(c.db, parsed);
     const employee = activeEmployee(c.db, c.user, isAdmin, c.body.employeeId);
     return saveFuelRecord(c.db, c.user, input, employee.id, id);
   });
@@ -102,7 +133,6 @@ function register(router) {
       Number(c.params.id),
       c.user,
       canSeeEveryone(c.user),
-      cleanText(c.body.reason, 300),
     );
   });
 }

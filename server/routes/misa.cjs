@@ -34,6 +34,7 @@ function readRows(value) {
 function normalizeRow(row) {
   const documentDate = text(row?.documentDate, 'Ngày chứng từ', 10);
   const documentCode = text(row?.documentCode, 'Số chứng từ', 100);
+  const customerCode = text(row?.customerCode, 'Mã khách hàng', 100);
   const customerName = text(row?.customerName, 'Tên khách hàng', 300);
   const address = text(row?.address, 'Địa chỉ', 600);
   const productName = text(row?.productName, 'Tên mặt hàng', 500);
@@ -55,6 +56,7 @@ function normalizeRow(row) {
     rowNumber: Number(row?.rowNumber) || 0,
     documentDate,
     documentCode,
+    customerCode,
     customerName,
 		customerKey: normalizeSearchText(customerName),
     address,
@@ -76,9 +78,12 @@ function existingRowsBySourceKey(db, rows) {
     const batch = keys.slice(offset, offset + SQLITE_PARAMETER_CHUNK);
     const placeholders = batch.map(() => '?').join(', ');
     for (const row of db
-      .prepare(`SELECT source_key, product_name FROM misa_rows WHERE source_key IN (${placeholders})`)
+      .prepare(`SELECT source_key, product_name, customer_code FROM misa_rows WHERE source_key IN (${placeholders})`)
       .all(...batch)) {
-      existing.set(row.source_key, row.product_name);
+      existing.set(row.source_key, {
+        productName: row.product_name,
+        customerCode: row.customer_code,
+      });
     }
   }
   return existing;
@@ -95,8 +100,17 @@ function previewRows(db, sourceRows) {
     }
     seen.add(row.sourceKey);
     if (existing.has(row.sourceKey)) {
-      if (!existing.get(row.sourceKey) && row.productName) {
-        return { ...row, reason: 'Bổ sung tên mặt hàng' };
+      const previous = existing.get(row.sourceKey);
+      if (
+        (!previous.productName && row.productName) ||
+        (!previous.customerCode && row.customerCode)
+      ) {
+        return {
+          ...row,
+          reason: !previous.customerCode && row.customerCode
+            ? 'Bổ sung mã khách hàng'
+            : 'Bổ sung tên mặt hàng',
+        };
       }
       return { ...row, status: 'duplicate', reason: 'Dòng đã tồn tại' };
     }
@@ -204,7 +218,7 @@ function register(router) {
     const page = Math.min(requestedPage, pageCount);
     const rows = c.db
       .prepare(
-        `SELECT id, document_date, document_code, customer_name, address, product_name, quantity_sold,
+        `SELECT id, document_date, document_code, customer_code, customer_name, address, product_name, quantity_sold,
                 province_city, source_file, imported_at
            FROM misa_rows WHERE ${clause}
           ORDER BY document_date DESC, id DESC LIMIT ? OFFSET ?`,
@@ -217,6 +231,7 @@ function register(router) {
         id: row.id,
         documentDate: row.document_date,
         documentCode: row.document_code,
+        customerCode: row.customer_code,
         customerName: row.customer_name,
         address: row.address,
         productName: row.product_name,
@@ -257,21 +272,24 @@ function register(router) {
     const result = transaction(c.db, () => {
       const insert = c.db.prepare(
         `INSERT INTO misa_rows
-          (document_date, document_code, customer_name, customer_key, address, product_name, quantity_sold, province_city,
+          (document_date, document_code, customer_code, customer_name, customer_key, address, product_name, quantity_sold, province_city,
             source_key, source_file, imported_by, imported_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(source_key) DO UPDATE SET
            product_name = excluded.product_name,
+           customer_code = excluded.customer_code,
            source_file = excluded.source_file,
            imported_by = excluded.imported_by,
            imported_at = excluded.imported_at
-         WHERE misa_rows.product_name = '' AND excluded.product_name <> ''`,
+         WHERE (misa_rows.product_name = '' AND excluded.product_name <> '')
+            OR (misa_rows.customer_code = '' AND excluded.customer_code <> '')`,
       );
       let inserted = 0;
       for (const row of rows) {
         const result = insert.run(
           row.documentDate,
           row.documentCode,
+          row.customerCode,
           row.customerName,
 		  row.customerKey,
           row.address,

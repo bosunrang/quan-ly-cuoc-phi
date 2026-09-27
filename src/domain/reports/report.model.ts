@@ -17,6 +17,7 @@ export interface CarrierVarianceReport {
 	employees: ReportEmployee[];
 	items: Array<{
 		id: number;
+		entryDate: string;
 		carrier: string;
 		customer: string;
 		provinceCity: string;
@@ -41,6 +42,7 @@ export interface FuelHistoryReport {
 		distanceKm: number;
 		consumptionLiters: number;
 		consumptionBaseKm: number;
+		vehicleType: "motorcycle" | "truck" | "";
 		fuelType: string;
 		region: "region1" | "region2";
 		fuelPrice: number;

@@ -4,11 +4,12 @@ const { normalizeSearchText, transaction } = require('../db.cjs');
 const { ensureCustomerCarrier, refreshCustomerCarrier } = require('../carrier-links.cjs');
 const { writeAudit } = require('../audit.cjs');
 const { canSeeEveryone } = require('../permissions.cjs');
-const { badRequest, notFound, isIsoDate } = require('../http.cjs');
+const { badRequest, conflict, notFound, isIsoDate } = require('../http.cjs');
 
 const PAGE = 'entries';
 const MAX_LIMIT = 500;
 const DEFAULT_SPEC_KEY = '__all__';
+const BILL_STATUSES = new Set(['', 'Có bill', 'Không bill']);
 
 // ---------------------------------------------------------------- kiểm tra
 
@@ -31,6 +32,12 @@ function money(value, field) {
   return result;
 }
 
+function billStatus(value) {
+  const result = text(value, 'Bill', { max: 20, required: true });
+  if (!BILL_STATUSES.has(result)) throw badRequest('Bill chỉ được chọn Có bill hoặc Không bill.');
+  return result;
+}
+
 function readEntryInput(body) {
   const entryDate = String(body.entryDate ?? '').trim();
   if (!isIsoDate(entryDate)) {
@@ -40,21 +47,60 @@ function readEntryInput(body) {
   if (misaDocumentDate && !isIsoDate(misaDocumentDate)) {
     throw badRequest('Ngày chứng từ MISA không hợp lệ.');
   }
+  const transportFee = money(body.transportFee, 'Cước vận chuyển');
+  if (transportFee === 0) {
+    throw badRequest('Vui lòng nhập cước vận chuyển lớn hơn 0.');
+  }
   return {
     entryDate,
     customer: text(body.customer, 'tên khách hàng', { required: true }),
     carrier: text(body.carrier, 'nhà xe', { required: true }),
-    recipient: text(body.recipient, 'người nhận'),
+    recipient: text(body.recipient, 'người nhận', { required: true }),
     address: text(body.address, 'địa chỉ', { max: 400 }),
-    spec: text(body.spec, 'quy cách'),
+    spec: text(body.spec, 'quy cách', { required: true }),
     ticketFee: money(body.ticketFee, 'Phí vé'),
-    transportFee: money(body.transportFee, 'Cước vận chuyển'),
+    transportFee,
     gateFee: money(body.gateFee, 'Phí cổng'),
-    note: text(body.note, 'ghi chú', { max: 1000 }),
+    note: text(body.note, 'sản phẩm', { max: 1000, required: true }),
     rateVarianceNote: text(body.rateVarianceNote, 'lý do chênh lệch cước', { max: 1000 }),
+    duplicateReason: text(body.duplicateReason, 'lý do nhập trùng', { max: 1000 }),
+    billStatus: billStatus(body.billStatus),
     misaDocumentDate,
     misaDocumentCode: text(body.misaDocumentCode, 'Số chứng từ MISA', { max: 100 }),
   };
+}
+
+/**
+ * Nhân viên gửi lại cùng ngày cho cùng khách hàng thường là nhập nhầm hai lần.
+ * Vẫn cho phép lưu khi có giải trình, không xét danh sách mặt hàng.
+ */
+function ensureDuplicateReason(db, input, excludedEntryId = 0) {
+  const duplicate = db.prepare(
+    `SELECT id FROM entries
+      WHERE entry_date = ?
+        AND vn_normalize(customer) = ?
+        AND id <> ?
+      ORDER BY id DESC
+      LIMIT 1`,
+  ).get(
+    input.entryDate,
+    normalizeSearchText(input.customer),
+    excludedEntryId,
+  );
+  if (!duplicate) {
+    input.duplicateReason = '';
+    return;
+  }
+  if (!input.duplicateReason) {
+    throw conflict(
+      'Đã có phiếu cùng ngày gửi và khách hàng. Vui lòng nhập lý do nếu vẫn cần lưu phiếu này.',
+    );
+  }
+}
+
+/** Quản trị viên được quyền chủ động lưu phiếu trùng; nhân viên thì phải giải trình. */
+function ensureStaffDuplicateReason(db, user, input, excludedEntryId = 0) {
+  if (!canSeeEveryone(user)) ensureDuplicateReason(db, input, excludedEntryId);
 }
 
 function readEmployeeId(db, user, value) {
@@ -67,7 +113,9 @@ function readEmployeeId(db, user, value) {
     }
     return employee.id;
   }
-  if (value === null || value === undefined || value === '') return null;
+  if (value === null || value === undefined || value === '') {
+    throw badRequest('Vui lòng chọn nhân viên phụ trách.');
+  }
   const id = Number(value);
   if (!Number.isInteger(id)) throw badRequest('Nhân viên không hợp lệ.');
   const employee = db.prepare('SELECT id FROM employees WHERE id = ? AND is_active = 1').get(id);
@@ -271,6 +319,8 @@ function toApi(row) {
     totalFee: row.total_fee,
     note: row.note,
     rateVarianceNote: row.rate_variance_note,
+    duplicateReason: row.duplicate_reason,
+    billStatus: row.bill_status || '',
     misaDocumentDate: row.misa_document_date,
     misaDocumentCode: row.misa_document_code,
     createdBy: row.created_by,
@@ -389,16 +439,59 @@ function register(router) {
     };
   });
 
+  // Chỉ trả về cờ cảnh báo, không làm lộ phiếu của người khác. Nhân viên cần
+  // thấy ngay ô giải trình khi trùng ngày gửi và khách hàng; Admin được phép
+  // chủ động lưu nên không bị nhắc cảnh báo này.
+  router.get('/api/entries/duplicate-check', async (c) => {
+    c.requirePage(PAGE);
+    const entryDate = String(c.query.entryDate ?? '').trim();
+    const customer = String(c.query.customer ?? '').trim();
+    const excludedEntryId = Number(c.query.excludeId) || 0;
+    if (
+      canSeeEveryone(c.user) ||
+      !isIsoDate(entryDate) ||
+      !customer ||
+      !Number.isInteger(excludedEntryId) ||
+      excludedEntryId < 0
+    ) {
+      return { duplicate: false };
+    }
+    const duplicate = c.db.prepare(
+      `SELECT 1 FROM entries
+        WHERE entry_date = ?
+          AND vn_normalize(customer) = ?
+          AND id <> ?
+        LIMIT 1`,
+    ).get(entryDate, normalizeSearchText(customer), excludedEntryId);
+    return { duplicate: Boolean(duplicate) };
+  });
+
   router.get('/api/entries/form-options', async (c) => {
     c.requirePage(PAGE);
     const customers = c.db.prepare(
       `SELECT customers.id, customers.customer_name,
-              COALESCE((
-                SELECT province_city FROM misa_rows
+              COALESCE(NULLIF(customers.customer_code, ''), (
+                SELECT customer_code FROM misa_rows
                  WHERE misa_rows.customer_key = customers.customer_key
-                   AND province_city <> ''
+                   AND customer_code <> ''
                  ORDER BY document_date DESC, id DESC LIMIT 1
-              ), '') AS province_city
+              ), '') AS customer_code,
+              COALESCE(
+                (
+                  SELECT province_city FROM misa_rows
+                   WHERE customers.customer_code <> ''
+                     AND misa_rows.customer_code = customers.customer_code COLLATE NOCASE
+                     AND province_city <> ''
+                   ORDER BY document_date DESC, id DESC LIMIT 1
+                ),
+                (
+                  SELECT province_city FROM misa_rows
+                   WHERE misa_rows.customer_key = customers.customer_key
+                     AND province_city <> ''
+                   ORDER BY document_date DESC, id DESC LIMIT 1
+                ),
+                ''
+              ) AS province_city
          FROM customers
         ORDER BY customers.customer_name COLLATE NOCASE, customers.id`,
     ).all();
@@ -418,7 +511,10 @@ function register(router) {
       currentUserName: c.user.full_name,
       isAdmin: canSeeEveryone(c.user),
       customers: customers.map((row) => ({
-        id: row.id, name: row.customer_name, provinceCity: row.province_city,
+        id: row.id,
+        name: row.customer_name,
+        customerCode: row.customer_code,
+        provinceCity: row.province_city,
       })),
       carriers: canSeeEveryone(c.user)
         ? carriers.map((row) => ({ id: row.id, name: row.name }))
@@ -459,16 +555,26 @@ function register(router) {
     const customerId = Number(c.query.customerId);
     const endDate = String(c.query.endDate ?? '').trim();
     if (!isIsoDate(endDate)) throw badRequest('Ngày gửi không hợp lệ.');
-    const customer = c.db.prepare('SELECT customer_name FROM customers WHERE id = ?').get(customerId);
+    const customer = c.db.prepare(
+      'SELECT customer_name, customer_code FROM customers WHERE id = ?',
+    ).get(customerId);
     if (!customer) throw notFound('Không tìm thấy khách hàng.');
-    const rows = c.db.prepare(
+    const readRowsBy = (column, value) => c.db.prepare(
       `SELECT document_date, product_name, SUM(quantity_sold) AS quantity
        FROM misa_rows
-       WHERE document_date BETWEEN ? AND ? AND customer_key = ?
+       WHERE document_date BETWEEN ? AND ? AND ${column} = ? COLLATE NOCASE
          AND vn_normalize(product_name) <> 'nhiet ke'
        GROUP BY document_date, product_name
        ORDER BY document_date DESC, product_name COLLATE NOCASE`,
-    ).all(dateOffset(endDate, -19), endDate, normalizeSearchText(customer.customer_name));
+    ).all(dateOffset(endDate, -19), endDate, value);
+    // Mã khách hàng là khóa liên kết ổn định với MISA. Chỉ quay về
+    // so khớp tên cho dữ liệu cũ/chưa có mã, hoặc khi mã chưa tồn tại trong MISA.
+    let rows = customer.customer_code
+      ? readRowsBy('customer_code', customer.customer_code)
+      : [];
+    if (!rows.length) {
+      rows = readRowsBy('customer_key', normalizeSearchText(customer.customer_name));
+    }
     const groups = new Map();
     for (const row of rows) {
       const key = row.document_date;
@@ -516,14 +622,15 @@ function register(router) {
     const at = new Date().toISOString();
 
     return transaction(c.db, () => {
+		ensureStaffDuplicateReason(c.db, c.user, input);
 		const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, at);
       const result = c.db
         .prepare(
           `INSERT INTO entries
              (entry_date, customer, carrier, recipient, address, spec,
-              ticket_fee, transport_fee, gate_fee, note, rate_variance_note, misa_document_date, misa_document_code, employee_id,
+              ticket_fee, transport_fee, gate_fee, note, rate_variance_note, duplicate_reason, bill_status, misa_document_date, misa_document_code, employee_id,
               created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.entryDate,
@@ -537,6 +644,8 @@ function register(router) {
           input.gateFee,
           input.note,
           input.rateVarianceNote,
+          input.duplicateReason,
+          input.billStatus,
           input.misaDocumentDate,
           input.misaDocumentCode,
           employeeId,
@@ -569,13 +678,14 @@ function register(router) {
       : before.employee_id;
     ensureVarianceReason(c.db, c.body, input);
     return transaction(c.db, () => {
+		ensureStaffDuplicateReason(c.db, c.user, input, before.id);
 		const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, new Date().toISOString());
       c.db
         .prepare(
           `UPDATE entries SET
              entry_date = ?, customer = ?, carrier = ?, recipient = ?,
              address = ?, spec = ?, ticket_fee = ?, transport_fee = ?,
-             gate_fee = ?, note = ?, rate_variance_note = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?, updated_at = ?
+             gate_fee = ?, note = ?, rate_variance_note = ?, duplicate_reason = ?, bill_status = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
@@ -590,6 +700,8 @@ function register(router) {
           input.gateFee,
           input.note,
           input.rateVarianceNote,
+          input.duplicateReason,
+          input.billStatus,
           input.misaDocumentDate,
           input.misaDocumentCode,
           employeeId,

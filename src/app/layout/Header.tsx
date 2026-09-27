@@ -1,4 +1,5 @@
 import { AtSign, LogOut, Menu } from "lucide-react";
+import { InstallAppButton } from "../../features/pwa/InstallAppButton";
 import { initials } from "../../shared/lib/format";
 import type { CurrentUser } from "../../types";
 
@@ -7,6 +8,7 @@ interface HeaderProps {
 	subtitle: string;
 	user: CurrentUser;
 	onMenuClick: () => void;
+	menuOpen: boolean;
 	onLogout: () => void;
 }
 
@@ -15,6 +17,7 @@ export function Header({
 	subtitle,
 	user,
 	onMenuClick,
+	menuOpen,
 	onLogout,
 }: HeaderProps) {
 	return (
@@ -24,7 +27,9 @@ export function Header({
 					className="mobile-menu"
 					type="button"
 					onClick={onMenuClick}
-					aria-label="Mở điều hướng"
+					aria-label={menuOpen ? "Đóng điều hướng" : "Mở điều hướng"}
+					aria-expanded={menuOpen}
+					aria-controls="app-navigation"
 				>
 					<Menu size={20} />
 				</button>
@@ -35,6 +40,7 @@ export function Header({
 			</div>
 
 			<div className="topbar-actions">
+				<InstallAppButton />
 				<div className="profile-menu">
 					<div className="avatar">{initials(user.fullName)}</div>
 					<div className="profile-copy">

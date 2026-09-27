@@ -26,6 +26,11 @@
 
 .user-access-field { gap: 7px; }
 .user-access-hint { color: var(--muted); font-size: var(--type-caption); }
+.user-admin-toggle { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border: 1px solid var(--teal-border); border-radius: 8px; background: var(--surface-accent-faint); color: var(--text-body); cursor: pointer; }
+.user-admin-toggle input { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--teal); }
+.user-admin-toggle span { display: grid; gap: 3px; }
+.user-admin-toggle strong { color: var(--ink); }
+.user-admin-toggle small { color: var(--muted); line-height: var(--line-compact); }
 .user-dialog .dialog-body { gap: 10px; }
 .user-dialog .field-grid { gap: 10px; }
 .user-dialog .field { gap: 4px; }

@@ -181,7 +181,7 @@ export function CarriersPage() {
 		if (!keyword) return assignedCustomers;
 		return assignedCustomers.filter((customer) =>
 			normalizeText(
-				`${customer.customerName} ${customer.recipient} ${customer.address}`,
+				`${customer.customerName} ${customer.customerCode} ${customer.recipient} ${customer.address}`,
 			).includes(keyword),
 		);
 	}, [assignedCustomers, assignedQuery]);
@@ -511,7 +511,7 @@ export function CarriersPage() {
 								setQuery(event.target.value);
 								setCustomerPage(1);
 							}}
-							placeholder="Tìm tên khách hàng hoặc địa chỉ..."
+							placeholder="Tìm tên, mã khách hàng hoặc địa chỉ..."
 							disabled={!selectedCarrier}
 						/>
 					</label>
@@ -594,7 +594,7 @@ export function CarriersPage() {
 						<input
 							value={assignedQuery}
 							onChange={(event) => setAssignedQuery(event.target.value)}
-							placeholder="Tìm khách hàng đã gán..."
+							placeholder="Tìm tên hoặc mã khách hàng đã gán..."
 							disabled={!selectedCarrier || !assignedCustomers.length}
 						/>
 					</label>

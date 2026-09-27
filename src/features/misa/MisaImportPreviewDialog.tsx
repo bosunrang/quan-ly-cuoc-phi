@@ -139,6 +139,7 @@ export function MisaImportPreviewDialog({
 							<th>Dòng</th>
 							<th>Ngày chứng từ</th>
 							<th>Số chứng từ</th>
+							<th>Mã khách hàng</th>
 							<th>Tên khách hàng</th>
 							<th>Địa chỉ</th>
 							<th>Tên mặt hàng</th>
@@ -158,6 +159,7 @@ export function MisaImportPreviewDialog({
 										{row.documentDate ? formatDate(row.documentDate) : "—"}
 									</td>
 									<td>{row.documentCode || "—"}</td>
+									<td>{row.customerCode || "—"}</td>
 									<td className="misa-preview-customer">
 										<strong>{row.customerName || "—"}</strong>
 										{row.reason && <span>{row.reason}</span>}

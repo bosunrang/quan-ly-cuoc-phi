@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 24;
+const SCHEMA_VERSION = 34;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -15,6 +15,34 @@ function normalizeSearchText(value) {
     .toLocaleLowerCase('vi-VN')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+
+/** Khôi phục chặng từng bị cắt ở giới hạn 100 ký tự từ danh mục địa điểm. */
+function restoreTruncatedFuelLocations(db) {
+  const locations = db.prepare(`
+    SELECT customer_name AS name, address FROM customers
+    UNION ALL SELECT name, address FROM carriers
+    UNION ALL SELECT full_name AS name, address FROM employees
+  `).all();
+  const updateFrom = db.prepare(
+    'UPDATE fuel_record_legs SET from_name = ? WHERE from_name = ?',
+  );
+  const updateTo = db.prepare(
+    'UPDATE fuel_record_legs SET to_name = ? WHERE to_name = ?',
+  );
+
+  for (const location of locations) {
+    const name = String(location.name || '').trim();
+    const address = String(location.address || '').trim();
+    if (!name || !address) continue;
+    const full = normalizeSearchText(address).includes(normalizeSearchText(name))
+      ? address
+      : `${name}, ${address}`;
+    if (full.length <= 100) continue;
+    const truncated = full.slice(0, 100);
+    updateFrom.run(full, truncated);
+    updateTo.run(full, truncated);
+  }
 }
 
 /**
@@ -491,12 +519,119 @@ function migrate(db) {
     `);
   }
 
+  if (current < 25) {
+    db.exec(`
+      -- Mã khách hàng từ file MISA được lưu riêng để xem và đối soát.
+      -- Các dòng đã nhập trước đây không có mã vẫn giữ nguyên giá trị rỗng.
+      ALTER TABLE misa_rows ADD COLUMN customer_code TEXT NOT NULL DEFAULT '';
+      CREATE INDEX misa_customer_code_idx ON misa_rows(customer_code);
+    `);
+  }
+
+  if (current < 26) {
+    db.exec(`
+      -- Trạng thái hóa đơn được lưu riêng để ghép rõ ràng vào ghi chú báo cáo.
+      ALTER TABLE entries ADD COLUMN bill_status TEXT NOT NULL DEFAULT ''
+        CHECK (bill_status IN ('', 'Có bill', 'Không bill'));
+    `);
+  }
+
+  if (current < 27) {
+    restoreTruncatedFuelLocations(db);
+  }
+
+  if (current < 28) {
+    db.exec(`
+      -- Mã khách hàng dùng chung cho danh mục, nhập Excel và chọn phiếu cước.
+      ALTER TABLE customers ADD COLUMN customer_code TEXT NOT NULL DEFAULT '';
+      CREATE INDEX customers_customer_code_idx ON customers(customer_code);
+      UPDATE customers
+      SET customer_code = COALESCE((
+        SELECT customer_code FROM misa_rows
+         WHERE misa_rows.customer_key = customers.customer_key
+           AND customer_code <> ''
+         ORDER BY document_date DESC, id DESC LIMIT 1
+      ), '')
+      WHERE customer_code = '';
+      UPDATE customers
+      SET search_text = vn_normalize(
+        customer_name || ' ' || customer_code || ' ' || carrier || ' ' || recipient || ' ' || address
+      );
+    `);
+  }
+
+  if (current < 29) {
+    db.exec(`
+      -- Lý do giữ lại phiếu có cùng ngày, khách hàng và danh sách mặt hàng.
+      ALTER TABLE entries ADD COLUMN duplicate_reason TEXT NOT NULL DEFAULT '';
+    `);
+  }
+
+  if (current < 30) {
+    db.exec(`
+      -- Phương tiện được chốt theo từng lần tính, độc lập với định mức đang
+      -- được chọn trên giao diện ở thời điểm xem lại lịch sử.
+      ALTER TABLE fuel_records ADD COLUMN vehicle_type TEXT NOT NULL DEFAULT ''
+        CHECK (vehicle_type IN ('', 'motorcycle', 'truck'));
+    `);
+  }
+
+  if (current < 31) {
+    db.exec(`
+      -- Định mức là cấu hình chung trên máy chủ; máy trạm chỉ đọc để tính.
+      ALTER TABLE app_settings ADD COLUMN motorcycle_consumption_liters REAL NOT NULL DEFAULT 1;
+      ALTER TABLE app_settings ADD COLUMN motorcycle_base_km REAL NOT NULL DEFAULT 40;
+      ALTER TABLE app_settings ADD COLUMN truck_consumption_liters REAL NOT NULL DEFAULT 7.5;
+      ALTER TABLE app_settings ADD COLUMN truck_base_km REAL NOT NULL DEFAULT 100;
+    `);
+  }
+
+  if (current < 32) {
+    db.exec(`
+      -- Ghi chú tự do của phiếu, tách riêng với danh sách sản phẩm MISA.
+      ALTER TABLE entries ADD COLUMN general_note TEXT NOT NULL DEFAULT '';
+    `);
+  }
+
+  if (current < 33) {
+    // Quy tắc duy nhất được bật sau migration. Không tự động sửa,
+    // gộp hay xóa dữ liệu khách hàng hiện có.
+  }
+
+  if (current < 34) {
+    db.exec(`
+      -- Form nhập phiếu đối chiếu mã khách hàng không phân biệt hoa/thường.
+      -- Chỉ mục phải dùng cùng COLLATE NOCASE với truy vấn; nếu không SQLite
+      -- sẽ quét toàn bộ dữ liệu MISA cho từng khách hàng trong danh mục.
+      CREATE INDEX misa_customer_code_nocase_order_idx
+        ON misa_rows(customer_code COLLATE NOCASE, document_date DESC, id DESC);
+    `);
+  }
+
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
   }
+}
+
+function ensureCustomerCodeUniqueIndex(db) {
+  const duplicate = db.prepare(
+    `SELECT 1
+       FROM customers
+      WHERE trim(customer_code) <> ''
+      GROUP BY trim(customer_code) COLLATE NOCASE
+     HAVING COUNT(*) > 1
+      LIMIT 1`,
+  ).get();
+  if (duplicate) return false;
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS customers_customer_code_unique_idx
+      ON customers(customer_code COLLATE NOCASE)
+      WHERE customer_code <> '';
+  `);
+  return true;
 }
 
 function openDatabase(file) {
@@ -508,6 +643,7 @@ function openDatabase(file) {
     'PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;',
   );
   migrate(db);
+  ensureCustomerCodeUniqueIndex(db);
   return db;
 }
 

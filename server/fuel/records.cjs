@@ -6,6 +6,24 @@ const { badRequest, notFound } = require('../http.cjs');
 const { calculateFuelTotal, toFuelPrice } = require('./calculation.cjs');
 const { saveRouteLegs } = require('./routes.cjs');
 
+function consumptionProfiles(db) {
+  const row = db.prepare(`
+    SELECT motorcycle_consumption_liters, motorcycle_base_km,
+      truck_consumption_liters, truck_base_km
+    FROM app_settings WHERE id = 1
+  `).get();
+  return {
+    motorcycle: {
+      consumptionLiters: Number(row?.motorcycle_consumption_liters) || 1,
+      consumptionBaseKm: Number(row?.motorcycle_base_km) || 40,
+    },
+    truck: {
+      consumptionLiters: Number(row?.truck_consumption_liters) || 7.5,
+      consumptionBaseKm: Number(row?.truck_base_km) || 100,
+    },
+  };
+}
+
 function activeEmployee(db, user, isAdmin, requestedEmployeeId) {
   const employee = isAdmin
     ? db
@@ -65,10 +83,21 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
        LIMIT ? OFFSET ?`,
     )
     .all(...params, limit, offset);
-  const legsForRecord = db.prepare(
-    `SELECT sequence_no, from_name, to_name, distance_km
-     FROM fuel_record_legs WHERE fuel_record_id = ? ORDER BY sequence_no`,
-  );
+  const recordIds = records.map((item) => item.id);
+  const legsByRecord = new Map();
+  if (recordIds.length) {
+    const placeholders = recordIds.map(() => '?').join(', ');
+    for (const leg of db.prepare(
+      `SELECT fuel_record_id, sequence_no, from_name, to_name, distance_km
+       FROM fuel_record_legs
+       WHERE fuel_record_id IN (${placeholders})
+       ORDER BY fuel_record_id, sequence_no`,
+    ).all(...recordIds)) {
+      const legs = legsByRecord.get(leg.fuel_record_id) ?? [];
+      legs.push({ from: leg.from_name, to: leg.to_name, km: leg.distance_km });
+      legsByRecord.set(leg.fuel_record_id, legs);
+    }
+  }
   const prices = db
     .prepare('SELECT * FROM fuel_prices ORDER BY effective_date DESC, fuel_type, region')
     .all();
@@ -108,6 +137,7 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
       distanceKm: item.distance_km,
       consumptionLiters: item.consumption_liters,
       consumptionBaseKm: item.consumption_base_km,
+      vehicleType: item.vehicle_type,
       fuelType: item.fuel_type,
       region: item.region,
       fuelPrice: item.fuel_price,
@@ -115,17 +145,13 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
       status: item.status,
       voidReason: item.void_reason,
       finalizedAt: item.finalized_at,
-      legs: legsForRecord.all(item.id).map((leg) => ({
-        from: leg.from_name,
-        to: leg.to_name,
-        km: leg.distance_km,
-      })),
-      canEdit: item.status === 'active' && !item.finalized_at && (isAdmin || item.created_by === user.id),
-      canDelete: item.status === 'active' && !item.finalized_at && (isAdmin || item.created_by === user.id),
-      canVoid: isAdmin && item.status === 'active' && Boolean(item.finalized_at),
+      legs: legsByRecord.get(item.id) ?? [],
+      canEdit: item.status === 'active' && (isAdmin || item.created_by === user.id),
+      canDelete: item.status === 'active' && (isAdmin || item.created_by === user.id),
     })),
     recordsTotal,
     fuelTypes,
+    consumptionProfiles: consumptionProfiles(db),
     isAdmin,
   };
 }
@@ -141,8 +167,8 @@ function saveFuelRecord(db, user, input, employeeId, id = null) {
           `INSERT INTO fuel_records
            (entry_date, period_from, period_to, employee_id, distance_km,
             consumption_liters, consumption_base_km, fuel_type, region,
-            fuel_price, total_fee, created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            vehicle_type, fuel_price, total_fee, created_by, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.periodTo,
@@ -154,6 +180,7 @@ function saveFuelRecord(db, user, input, employeeId, id = null) {
           input.consumptionBaseKm,
           input.fuelType,
           input.region,
+          input.vehicleType,
           input.fuelPrice,
           totalFee,
           user.id,
@@ -167,7 +194,7 @@ function saveFuelRecord(db, user, input, employeeId, id = null) {
           `UPDATE fuel_records SET
            entry_date = ?, period_from = ?, period_to = ?, employee_id = ?,
            distance_km = ?, consumption_liters = ?, consumption_base_km = ?,
-           fuel_type = ?, region = ?, fuel_price = ?, total_fee = ?, updated_at = ?
+           fuel_type = ?, region = ?, vehicle_type = ?, fuel_price = ?, total_fee = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
@@ -180,6 +207,7 @@ function saveFuelRecord(db, user, input, employeeId, id = null) {
           input.consumptionBaseKm,
           input.fuelType,
           input.region,
+          input.vehicleType,
           input.fuelPrice,
           totalFee,
           at,
@@ -203,32 +231,18 @@ function saveFuelRecord(db, user, input, employeeId, id = null) {
 function editableRecord(db, id, user, isAdmin) {
   const record = db.prepare('SELECT * FROM fuel_records WHERE id = ?').get(id);
   if (!record) throw notFound('Không tìm thấy lần tính xăng.');
-  if (record.status !== 'active' || record.finalized_at) {
-    throw badRequest('Lần tính đã chốt; chỉ quản trị viên có thể hủy kèm lý do.');
-  }
+  if (record.status !== 'active') throw badRequest('Lần tính này đã được hủy.');
   if (!isAdmin && record.created_by !== user.id) {
     throw badRequest('Bạn chỉ được sửa lần tính do mình tạo.');
   }
   return record;
 }
 
-function deleteFuelRecord(db, id, user, isAdmin, reason) {
+function deleteFuelRecord(db, id, user, isAdmin) {
   const record = db.prepare('SELECT * FROM fuel_records WHERE id = ?').get(id);
   if (!record) throw notFound('Không tìm thấy lần tính xăng.');
   if (record.status !== 'active') throw badRequest('Lần tính này đã được hủy.');
 
-  if (record.finalized_at) {
-    if (!isAdmin) throw badRequest('Lần tính đã chốt; vui lòng liên hệ quản trị viên để hủy.');
-    if (!reason) throw badRequest('Vui lòng nhập lý do hủy lần tính đã chốt.');
-    const at = new Date().toISOString();
-    db
-      .prepare(
-        "UPDATE fuel_records SET status = 'voided', voided_at = ?, voided_by = ?, void_reason = ?, updated_at = ? WHERE id = ?",
-      )
-      .run(at, user.id, reason, at, id);
-    writeAudit(db, user, 'fuel.record.void', 'fuel_record', id, { reason });
-    return { ok: true, voided: true };
-  }
   if (!isAdmin && record.created_by !== user.id) {
     throw badRequest('Bạn chỉ được xóa lần tính do mình tạo.');
   }
@@ -240,11 +254,12 @@ function deleteFuelRecord(db, id, user, isAdmin, reason) {
       totalFee: record.total_fee,
     });
   });
-  return { ok: true, voided: false };
+  return { ok: true };
 }
 
 module.exports = {
   activeEmployee,
+  consumptionProfiles,
   listFuelData,
   saveFuelRecord,
   editableRecord,

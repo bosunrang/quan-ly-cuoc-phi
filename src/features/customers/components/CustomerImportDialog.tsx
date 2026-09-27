@@ -3,6 +3,7 @@ import {
 	CircleSlash2,
 	CopyCheck,
 	FileSpreadsheet,
+	RefreshCw,
 } from "lucide-react";
 import { Dialog } from "../../../shared/ui/Dialog";
 import type {
@@ -27,8 +28,8 @@ export function CustomerImportDialog({
 		<Dialog
 			title="Kiểm tra dữ liệu trước khi nhập"
 			subtitle={fileName}
-			confirmLabel={`Nhập ${preview.readyCount} khách hàng`}
-			confirmDisabled={preview.readyCount === 0}
+			confirmLabel={`Xử lý ${preview.readyCount + preview.updateCount} khách hàng`}
+			confirmDisabled={preview.readyCount + preview.updateCount === 0}
 			onConfirm={onConfirm}
 			onClose={onClose}
 			className="customer-import-dialog"
@@ -51,6 +52,11 @@ export function CustomerImportDialog({
 					tone="ready"
 				/>
 				<ImportStat
+					label="Cập nhật theo mã"
+					count={preview.updateCount}
+					tone="update"
+				/>
+				<ImportStat
 					label="Dòng trùng"
 					count={preview.duplicateCount}
 					tone="duplicate"
@@ -66,6 +72,7 @@ export function CustomerImportDialog({
 					<thead>
 						<tr>
 							<th>Dòng</th>
+							<th>Mã khách hàng</th>
 							<th>Tên khách hàng</th>
 							<th>Nhà xe liên kết</th>
 							<th>Người nhận</th>
@@ -77,6 +84,7 @@ export function CustomerImportDialog({
 						{preview.rows.slice(0, 100).map((row) => (
 							<tr key={`${row.rowNumber}-${row.customerName}`}>
 								<td>{row.rowNumber}</td>
+								<td>{row.customerCode || "—"}</td>
 								<td>
 									<strong>{row.customerName || "—"}</strong>
 									{row.reason && <small>{row.reason}</small>}
@@ -96,8 +104,8 @@ export function CustomerImportDialog({
 			</div>
 			<p className="customer-import-limit">
 				Hiển thị 100 dòng đầu để xem nhanh. Khi xác nhận, toàn bộ{" "}
-				{preview.readyCount.toLocaleString("vi-VN")} dòng sẵn sàng sẽ được nhập;
-				dòng trùng hoặc thiếu tên sẽ bỏ qua.
+				{(preview.readyCount + preview.updateCount).toLocaleString("vi-VN")}{" "}
+				dòng sẽ được xử lý; dòng trùng hoặc thiếu tên sẽ bỏ qua.
 			</p>
 		</Dialog>
 	);
@@ -105,6 +113,7 @@ export function CustomerImportDialog({
 
 function statusLabel(status: CustomerImportStatus): string {
 	if (status === "ready") return "Sẵn sàng";
+	if (status === "update") return "Cập nhật";
 	if (status === "duplicate") return "Trùng";
 	return "Bỏ qua";
 }
@@ -121,6 +130,8 @@ function ImportStat({
 	const icon =
 		tone === "ready" ? (
 			<CheckCircle2 size={17} />
+		) : tone === "update" ? (
+			<RefreshCw size={17} />
 		) : tone === "duplicate" ? (
 			<CopyCheck size={17} />
 		) : tone === "skipped" ? (

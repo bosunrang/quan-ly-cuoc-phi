@@ -1,5 +1,12 @@
 .entry-dialog {
 	width: min(900px, 100%);
+	scrollbar-gutter: stable;
+}
+
+.entry-dialog .field textarea.entry-product-textarea {
+	min-height: 36px;
+	overflow-y: hidden;
+	resize: none;
 }
 
 .entry-date-field .datebox input.date-text {
@@ -152,4 +159,107 @@
 .entry-rate-warning svg {
 	flex: none;
 	margin-top: 1px;
+}
+
+/* Nhân viên thường tạo phiếu trên điện thoại. Ưu tiên thao tác một tay khi
+   màn hình ở chế độ dọc, nhưng không thay đổi bố cục màn hình lớn. */
+@media (max-width: 640px) {
+	.entry-dialog {
+		width: 100%;
+		max-height: calc(100dvh - 40px);
+		border-radius: 12px;
+	}
+
+	.entry-dialog .dialog-header {
+		padding: 12px 14px;
+	}
+
+	.entry-dialog .dialog-header h3 {
+		font-size: var(--type-subhead);
+	}
+
+	.entry-dialog .dialog-body {
+		gap: 12px;
+		padding: 14px;
+	}
+
+	.entry-dialog .field-grid {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 12px;
+	}
+
+	.entry-dialog .field input,
+	.entry-dialog .field select,
+	.entry-dialog .entry-customer-picker > input {
+		height: 44px;
+		font-size: 16px;
+	}
+
+	.entry-dialog .field textarea {
+		min-height: 88px;
+		font-size: 16px;
+	}
+
+	.entry-misa-orders header {
+		align-items: flex-start;
+		gap: 8px;
+		padding: 10px;
+	}
+
+	.entry-misa-orders button {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 3px;
+		min-height: 48px;
+		padding: 10px;
+	}
+
+	.entry-misa-orders button span {
+		overflow: visible;
+		white-space: normal;
+		text-overflow: clip;
+		line-height: 1.4;
+	}
+
+	.entry-rate-standard,
+	.entry-rate-warning {
+		padding: 10px;
+		font-size: var(--type-body-sm);
+		line-height: 1.45;
+	}
+
+	.entry-save-rate-toggle {
+		min-height: 44px;
+		padding: 5px 0;
+	}
+
+	.entry-save-rate-toggle input {
+		width: 20px;
+		height: 20px;
+	}
+
+	.entry-dialog .dialog-footer {
+		position: sticky;
+		bottom: 0;
+		z-index: 2;
+		flex-wrap: wrap;
+		align-items: stretch;
+		padding: 10px 14px;
+		box-shadow: 0 -6px 12px rgb(17 45 67 / 6%);
+	}
+
+	.entry-dialog .dialog-footer-start,
+	.entry-dialog .dialog-footer-actions {
+		width: 100%;
+		margin: 0;
+	}
+
+	.entry-dialog .dialog-footer-actions {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.entry-dialog .dialog-footer .button {
+		min-height: 44px;
+		justify-content: center;
+	}
 }

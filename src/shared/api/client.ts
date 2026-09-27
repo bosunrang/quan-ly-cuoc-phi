@@ -16,6 +16,38 @@ export interface ApiRequestOptions {
 let token: string | null = sessionStorage.getItem(TOKEN_KEY);
 let onUnauthorized: () => void = () => {};
 
+export type ServerConnectionStatus =
+	| "online"
+	| "offline"
+	| "checking"
+	| "unreachable";
+
+let connectionStatus: ServerConnectionStatus =
+	typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "online";
+const connectionListeners = new Set<(status: ServerConnectionStatus) => void>();
+
+function setConnectionStatus(status: ServerConnectionStatus): void {
+	if (connectionStatus === status) return;
+	connectionStatus = status;
+	for (const listener of connectionListeners) listener(status);
+}
+
+if (typeof window !== "undefined") {
+	window.addEventListener("offline", () => setConnectionStatus("offline"));
+	window.addEventListener("online", () => void checkServerConnection());
+}
+
+export function getServerConnectionStatus(): ServerConnectionStatus {
+	return connectionStatus;
+}
+
+export function subscribeServerConnection(
+	listener: (status: ServerConnectionStatus) => void,
+): () => void {
+	connectionListeners.add(listener);
+	return () => connectionListeners.delete(listener);
+}
+
 export class ApiError extends Error {
 	constructor(
 		message: string,
@@ -62,7 +94,13 @@ export async function api<T>(
 			},
 			body: body ? JSON.stringify(body) : undefined,
 		});
+		setConnectionStatus("online");
 	} catch {
+		setConnectionStatus(
+			typeof navigator !== "undefined" && !navigator.onLine
+				? "offline"
+				: "unreachable",
+		);
 		if (controller.signal.aborted) {
 			throw new ApiError(
 				"Máy chủ đang xử lý lâu hơn dự kiến. Yêu cầu có thể vẫn đang hoàn tất; hãy tải lại trang trước khi thử lại.",
@@ -92,4 +130,19 @@ export async function api<T>(
 		);
 	}
 	return data as T;
+}
+
+/** Chỉ kiểm tra kết nối; không tự gửi lại thao tác ghi để tránh tạo dữ liệu trùng. */
+export async function checkServerConnection(): Promise<boolean> {
+	if (typeof navigator !== "undefined" && !navigator.onLine) {
+		setConnectionStatus("offline");
+		return false;
+	}
+	setConnectionStatus("checking");
+	try {
+		await api("GET", "/api/health", undefined, { timeoutMs: 5_000 });
+		return true;
+	} catch {
+		return false;
+	}
 }

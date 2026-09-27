@@ -9,6 +9,7 @@ const FUEL_TYPES = [
   'Dầu Diesel 0.05S',
 ];
 const FUEL_REGIONS = new Set(['region1', 'region2']);
+const VEHICLE_TYPES = new Set(['motorcycle', 'truck']);
 const MAX_ROUTE_LEGS = 50;
 
 const cleanText = (value, max = 100) => String(value ?? '').trim().slice(0, max);
@@ -40,6 +41,18 @@ function fuelPriceInput(body) {
   };
 }
 
+function fuelConsumptionInput(body) {
+  const vehicleType = cleanText(body.vehicleType, 20);
+  if (!VEHICLE_TYPES.has(vehicleType)) throw badRequest('Phương tiện không hợp lệ.');
+
+  const consumptionLiters = nonNegativeNumber(body.consumptionLiters, 'Mức tiêu hao');
+  const consumptionBaseKm = nonNegativeNumber(body.consumptionBaseKm, 'Định mức km');
+  if (!consumptionLiters || !consumptionBaseKm) {
+    throw badRequest('Mức tiêu hao và định mức km phải lớn hơn 0.');
+  }
+  return { vehicleType, consumptionLiters, consumptionBaseKm };
+}
+
 function fuelRecordInput(body) {
   const periodFrom = cleanText(body.periodFrom ?? body.entryDate, 10);
   const periodTo = cleanText(body.periodTo ?? body.entryDate, 10);
@@ -57,8 +70,8 @@ function fuelRecordInput(body) {
   }
   const legs = rawLegs
       .map((leg) => ({
-        from: cleanText(leg?.from),
-        to: cleanText(leg?.to),
+        from: cleanText(leg?.from, 500),
+        to: cleanText(leg?.to, 500),
         km: nonNegativeNumber(leg?.km, 'Quãng đường'),
       }));
   if (legs.some((leg) => !leg.from || !leg.to || leg.km <= 0)) {
@@ -70,6 +83,10 @@ function fuelRecordInput(body) {
   if (!distanceKm) throw badRequest('Vui lòng nhập quãng đường.');
 
   const region = cleanText(body.region);
+  const vehicleType = cleanText(body.vehicleType, 20);
+  if (vehicleType && !VEHICLE_TYPES.has(vehicleType)) {
+    throw badRequest('Phương tiện không hợp lệ.');
+  }
   return {
     periodFrom,
     periodTo,
@@ -80,6 +97,7 @@ function fuelRecordInput(body) {
     fuelPrice: nonNegativeNumber(body.fuelPrice, 'Giá xăng', true),
     fuelType: cleanText(body.fuelType) || FUEL_TYPES[0],
     region: FUEL_REGIONS.has(region) ? region : 'region1',
+    vehicleType,
   };
 }
 
@@ -105,6 +123,7 @@ module.exports = {
   FUEL_TYPES,
   cleanText,
   fuelPriceInput,
+  fuelConsumptionInput,
   fuelRecordInput,
   calculateFuelTotal,
   toFuelPrice,

@@ -23,6 +23,7 @@ const forbidden = (message = 'Bạn không có quyền thực hiện việc này
   new HttpError(403, message);
 const notFound = (message = 'Không tìm thấy dữ liệu.') =>
   new HttpError(404, message);
+const conflict = (message) => new HttpError(409, message, 'CONFLICT');
 
 /** Kiểm tra ngày lịch thực, không chỉ đúng hình thức YYYY-MM-DD. */
 function isIsoDate(value) {
@@ -138,6 +139,7 @@ const MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+	'.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -167,10 +169,12 @@ function serveStatic(root, pathname, res) {
 
   const type = MIME[extname(file).toLowerCase()] ?? 'application/octet-stream';
   const isHtml = type.startsWith('text/html');
+	const isPwaMetadata = file.endsWith('sw.js') || file.endsWith('manifest.webmanifest');
   res.writeHead(200, {
     'content-type': type,
     'x-content-type-options': 'nosniff',
-    'cache-control': isHtml ? 'no-cache' : 'public, max-age=3600',
+		'cache-control': isHtml || isPwaMetadata ? 'no-cache' : 'public, max-age=3600',
+		...(file.endsWith('sw.js') ? { 'service-worker-allowed': '/' } : {}),
   });
   createReadStream(file).pipe(res);
   return true;
@@ -182,6 +186,7 @@ module.exports = {
   unauthorized,
   forbidden,
   notFound,
+  conflict,
   isIsoDate,
   localIsoDate,
   sendJson,

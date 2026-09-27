@@ -56,6 +56,7 @@ const detailLabels: Record<string, string> = {
 	gateFee: "Phí vào cổng",
 	standardTransportFee: "Cước thiết lập",
 	rateVarianceNote: "Ghi chú chênh lệch cước",
+	duplicateReason: "Lý do nhập trùng",
 	note: "Ghi chú",
 	misaDocumentDate: "Ngày chứng từ MISA",
 	misaDocumentCode: "Mã đơn MISA",

@@ -49,3 +49,7 @@
 .page-content{flex:1;min-height:0;overflow:auto;padding:22px 24px 30px}
 .page-stack{display:flex;flex-direction:column;gap:var(--space-4);max-width:1600px;margin:0 auto}
 .app-shell.sidebar-collapsed .page-stack{max-width:none}
+
+.connection-banner{display:flex;align-items:center;gap:9px;min-height:42px;padding:7px 24px;border-bottom:1px solid var(--status-warning-border);background:var(--status-warning-bg);color:var(--status-warning-text);font-size:var(--type-body-sm);font-weight:650}
+.connection-banner>svg{flex:none}.connection-banner span{flex:1}.connection-banner button{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}.connection-banner button:disabled{opacity:.6;cursor:wait}.connection-banner button:disabled svg{animation:connection-spin .9s linear infinite}
+@keyframes connection-spin{to{transform:rotate(360deg)}}

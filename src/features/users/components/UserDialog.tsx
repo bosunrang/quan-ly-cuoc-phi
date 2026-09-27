@@ -5,6 +5,7 @@ import type {
 	ManagedUser,
 } from "../../../domain/users/user.model";
 import { validateNewUser } from "../../../domain/users/user.model";
+import { Alert } from "../../../shared/ui/Alert";
 import { Dialog } from "../../../shared/ui/Dialog";
 import { Field, FieldGrid } from "../../../shared/ui/Field";
 import type { PageId } from "../../../types";
@@ -17,6 +18,7 @@ interface UserDialogProps {
 		username: string;
 		fullName: string;
 		password: string;
+		isAdmin: boolean;
 		pages: PageId[];
 	}) => Promise<void>;
 	onClose: () => void;
@@ -32,6 +34,7 @@ export function UserDialog({
 	const [username, setUsername] = useState(user?.username ?? "");
 	const [fullName, setFullName] = useState(user?.fullName ?? "");
 	const [password, setPassword] = useState("");
+	const [isAdmin, setIsAdmin] = useState(user?.isAdmin ?? false);
 	const [pages, setPages] = useState<PageId[]>(user?.pages ?? []);
 	const pageIcons: Partial<Record<PageId, typeof LayoutGrid>> = {
 		dashboard: LayoutGrid,
@@ -48,12 +51,18 @@ export function UserDialog({
 
 	const confirm = async () => {
 		if (!isEdit) {
-			const problem = validateNewUser({ username, fullName, password, pages });
+			const problem = validateNewUser({
+				username,
+				fullName,
+				password,
+				isAdmin,
+				pages,
+			});
 			if (problem) throw new Error(problem);
 		} else if (!fullName.trim()) {
 			throw new Error("Vui lòng nhập họ tên.");
 		}
-		await onSave({ username, fullName, password, pages });
+		await onSave({ username, fullName, password, isAdmin, pages });
 	};
 
 	return (
@@ -110,38 +119,60 @@ export function UserDialog({
 				</Field>
 			)}
 
-			<div className="field user-access-field">
-				{/* biome-ignore lint/a11y/noLabelWithoutControl: nhãn cho cả nhóm ô tick bên dưới */}
-				<label>Thẻ được truy cập</label>
-				<span className="user-access-hint">
-					Chọn các màn hình nhân viên được phép sử dụng.
-				</span>
-				<div className="page-picker user-page-picker">
-					{grantable.map((page) => {
-						const Icon = pageIcons[page.key];
-						const isSelected = pages.includes(page.key);
-						return (
-							<label
-								className={`page-option user-page-option${isSelected ? " is-selected" : ""}`}
-								key={page.key}
-							>
-								<input
-									type="checkbox"
-									checked={isSelected}
-									onChange={() => toggle(page.key)}
-								/>
-								<span className="user-page-icon">
-									{Icon && <Icon size={18} />}
-								</span>
-								<div>
-									<strong>{page.label}</strong>
-									<span>{page.description}</span>
-								</div>
-							</label>
-						);
-					})}
+			{!isEdit && (
+				<label className="user-admin-toggle">
+					<input
+						type="checkbox"
+						checked={isAdmin}
+						onChange={(event) => setIsAdmin(event.target.checked)}
+					/>
+					<span>
+						<strong>Tài khoản toàn quyền</strong>
+						<small>
+							Dành cho sếp hoặc quản trị viên: xem và quản lý toàn bộ dữ liệu.
+						</small>
+					</span>
+				</label>
+			)}
+
+			{isAdmin ? (
+				<Alert tone="info">
+					Tài khoản này có toàn bộ quyền quản trị; không cần chọn từng thẻ.
+				</Alert>
+			) : (
+				<div className="field user-access-field">
+					{/* biome-ignore lint/a11y/noLabelWithoutControl: nhãn cho cả nhóm ô tick bên dưới */}
+					<label>Thẻ được truy cập</label>
+					<span className="user-access-hint">
+						Chọn các màn hình nhân viên được phép sử dụng.
+					</span>
+					<div className="page-picker user-page-picker">
+						{grantable.map((page) => {
+							const Icon = pageIcons[page.key];
+							const isSelected = pages.includes(page.key);
+							return (
+								<label
+									className={`page-option user-page-option${isSelected ? " is-selected" : ""}`}
+									key={page.key}
+								>
+									<input
+										type="checkbox"
+										checked={isSelected}
+										onChange={() => toggle(page.key)}
+									/>
+									<span className="user-page-icon">
+										{Icon && <Icon size={18} />}
+									</span>
+									<div>
+										<strong>{page.label}</strong>
+										<span>{page.description}</span>
+									</div>
+								</label>
+							);
+						})}
+					</div>
 				</div>
-			</div>
+			)}
 		</Dialog>
 	);
 }

@@ -11,3 +11,12 @@ createRoot(container).render(
 		<App />
 	</StrictMode>,
 );
+
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+	window.addEventListener("load", () => {
+		void navigator.serviceWorker.register("/sw.js").catch(() => {
+			// Trình duyệt hoặc HTTP nội bộ có thể không cho đăng ký service worker.
+			// Ứng dụng web vẫn hoạt động bình thường trong trường hợp này.
+		});
+	});
+}

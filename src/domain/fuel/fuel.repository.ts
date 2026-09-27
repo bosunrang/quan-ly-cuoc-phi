@@ -28,6 +28,7 @@ export interface FuelData {
 		distanceKm: number;
 		consumptionLiters: number;
 		consumptionBaseKm: number;
+		vehicleType: "motorcycle" | "truck" | "";
 		fuelType: string;
 		region: string;
 		fuelPrice: number;
@@ -38,10 +39,13 @@ export interface FuelData {
 		legs: Array<{ from: string; to: string; km: number }>;
 		canEdit: boolean;
 		canDelete: boolean;
-		canVoid: boolean;
 	}>;
 	recordsTotal: number;
 	fuelTypes: string[];
+	consumptionProfiles: Record<
+		"motorcycle" | "truck",
+		{ consumptionLiters: number; consumptionBaseKm: number }
+	>;
 	isAdmin: boolean;
 }
 export const fuelRepository = {
@@ -73,6 +77,12 @@ export const fuelRepository = {
 		),
 	savePrice: (input: Omit<FuelPrice, "id">): Promise<FuelPrice> =>
 		api("POST", "/api/fuel/prices", input),
+	saveConsumption: (input: {
+		vehicleType: "motorcycle" | "truck";
+		consumptionLiters: number;
+		consumptionBaseKm: number;
+	}): Promise<FuelData["consumptionProfiles"]> =>
+		api("PATCH", "/api/fuel/consumption", input),
 	saveRecord: (
 		input: Record<string, unknown>,
 	): Promise<{ id: number; totalFee: number }> =>
@@ -82,9 +92,6 @@ export const fuelRepository = {
 		input: Record<string, unknown>,
 	): Promise<{ id: number; totalFee: number }> =>
 		api("PATCH", `/api/fuel/records/${id}`, input),
-	deleteRecord: (
-		id: number,
-		reason?: string,
-	): Promise<{ ok: true; voided: boolean }> =>
-		api("DELETE", `/api/fuel/records/${id}`, reason ? { reason } : undefined),
+	deleteRecord: (id: number): Promise<{ ok: true }> =>
+		api("DELETE", `/api/fuel/records/${id}`),
 };

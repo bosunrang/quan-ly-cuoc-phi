@@ -25,6 +25,7 @@ export function Sidebar({
 
 	return (
 		<aside
+			id="app-navigation"
 			className={`sidebar ${collapsed ? "is-collapsed" : ""}`}
 			aria-label="Điều hướng ứng dụng"
 		>

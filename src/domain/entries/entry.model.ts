@@ -18,6 +18,8 @@ export interface Entry {
 	totalFee: number;
 	note: string;
 	rateVarianceNote: string;
+	duplicateReason: string;
+	billStatus: BillStatus;
 	misaDocumentDate?: string;
 	misaDocumentCode?: string;
 	createdBy: number;
@@ -43,6 +45,9 @@ export interface EntryInput {
 	gateFee: number;
 	note: string;
 	rateVarianceNote: string;
+	/** Chỉ bắt buộc khi trùng ngày gửi và khách hàng. */
+	duplicateReason: string;
+	billStatus: BillStatus;
 	misaDocumentDate?: string;
 	misaDocumentCode?: string;
 	/** Admin chọn nhân viên phụ trách; máy chủ vẫn xác minh nhân viên đang hoạt động. */
@@ -64,7 +69,12 @@ export interface EntryFormOptions {
 	currentUserId: number;
 	currentUserName: string;
 	isAdmin: boolean;
-	customers: Array<{ id: number; name: string; provinceCity: string }>;
+	customers: Array<{
+		id: number;
+		name: string;
+		customerCode: string;
+		provinceCity: string;
+	}>;
 	carriers: EntryCarrierOption[];
 	employees: Array<{ id: number; name: string; userId: number | null }>;
 }
@@ -129,6 +139,8 @@ export interface EntryRate {
 	note: string;
 }
 
+export type BillStatus = "" | "Có bill" | "Không bill";
+
 /** Một quy cách có sẵn trong bảng cước hoặc là gợi ý để tạo mức mới. */
 export interface EntryRateChoice extends EntryRate {
 	isAssigned: boolean;
@@ -183,6 +195,8 @@ export function emptyEntryInput(entryDate: string): EntryInput {
 		gateFee: 0,
 		note: "",
 		rateVarianceNote: "",
+		duplicateReason: "",
+		billStatus: "",
 		misaDocumentDate: "",
 		misaDocumentCode: "",
 		employeeId: undefined,
@@ -204,6 +218,8 @@ export function toEntryInput(entry: Entry): EntryInput {
 		gateFee: entry.gateFee,
 		note: entry.note,
 		rateVarianceNote: entry.rateVarianceNote,
+		duplicateReason: entry.duplicateReason,
+		billStatus: entry.billStatus,
 		misaDocumentDate: entry.misaDocumentDate ?? "",
 		misaDocumentCode: entry.misaDocumentCode ?? "",
 		employeeId: entry.employeeId ?? undefined,
@@ -215,11 +231,20 @@ export function toEntryInput(entry: Entry): EntryInput {
  * Kiểm tra trước khi gửi để báo lỗi ngay tại biểu mẫu.
  * Máy chủ vẫn kiểm tra lại — đây chỉ là lớp tiện lợi cho người dùng.
  */
-export function validateEntry(input: EntryInput): string | null {
+export function validateEntry(
+	input: EntryInput,
+	{ requireEmployee = false }: { requireEmployee?: boolean } = {},
+): string | null {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(input.entryDate))
 		return "Vui lòng chọn ngày.";
+	if (requireEmployee && !input.employeeId)
+		return "Vui lòng chọn nhân viên phụ trách.";
 	if (!input.customer.trim()) return "Vui lòng nhập tên khách hàng.";
 	if (!input.carrier.trim()) return "Vui lòng nhập nhà xe.";
+	if (!input.recipient.trim()) return "Vui lòng nhập người nhận.";
+	if (!input.spec.trim()) return "Vui lòng nhập quy cách.";
+	if (!input.billStatus) return "Vui lòng chọn bill.";
+	if (!input.note.trim()) return "Vui lòng nhập sản phẩm.";
 	for (const [value, label] of [
 		[input.ticketFee, "Phí vé"],
 		[input.transportFee, "Cước vận chuyển"],
@@ -228,5 +253,7 @@ export function validateEntry(input: EntryInput): string | null {
 		if (!Number.isInteger(value)) return `${label} phải là số nguyên.`;
 		if (value < 0) return `${label} không được âm.`;
 	}
+	if (input.transportFee === 0)
+		return "Vui lòng nhập cước vận chuyển lớn hơn 0.";
 	return null;
 }

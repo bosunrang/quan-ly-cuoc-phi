@@ -46,6 +46,7 @@ export function SettingsPage({
 	const [logoDataUrl, setLogoDataUrl] = useState<string | null>(
 		settings.logoDataUrl,
 	);
+	const noticeTimer = useRef<number | null>(null);
 
 	useEffect(() => {
 		setCompanyName(settings.companyName);
@@ -56,9 +57,21 @@ export function SettingsPage({
 	}, [settings]);
 
 	const showNotice = (message: string) => {
+		if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
 		setNotice(message);
-		window.setTimeout(() => setNotice(""), 2200);
+		noticeTimer.current = window.setTimeout(() => {
+			setNotice("");
+			noticeTimer.current = null;
+		}, 2200);
 	};
+
+	useEffect(
+		() => () => {
+			if (noticeTimer.current !== null)
+				window.clearTimeout(noticeTimer.current);
+		},
+		[],
+	);
 
 	const save = async (next: AppSettings, successMessage: string) => {
 		if (await onSave(next)) showNotice(successMessage);
