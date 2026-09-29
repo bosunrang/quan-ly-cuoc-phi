@@ -23,6 +23,7 @@ function readInput(body) {
     contact: text(body.contact, 'người liên hệ'),
     phone: text(body.phone, 'số điện thoại', { max: 60 }),
     address: text(body.address, 'địa chỉ', { max: 500 }),
+    deliveryPoint: text(body.deliveryPoint, 'điểm giao / bến xe', { max: 500 }),
     schedule: text(body.schedule, 'giờ xe chạy', { max: 300 }),
     note: text(body.note, 'ghi chú', { max: 1000 }),
     isActive: body.isActive !== false,
@@ -63,6 +64,7 @@ function readExcelCarrier(row) {
   return readInput({
     name: row?.name,
     address: row?.address,
+    deliveryPoint: row?.deliveryPoint,
     phone: row?.phone,
     schedule: row?.schedule,
     note: row?.note,
@@ -176,6 +178,7 @@ function toApi(row, assignedCustomerIds = []) {
     contact: row.contact,
     phone: row.phone,
     address: row.address,
+    deliveryPoint: row.delivery_point,
     schedule: row.schedule,
     note: row.note,
     isActive: Boolean(row.is_active),
@@ -250,7 +253,7 @@ function register(router) {
   router.get('/api/carriers/excel-export', async (c) => {
     c.requirePage(PAGE);
     const carriers = c.db.prepare(
-      `SELECT name, address, phone, schedule, note, is_active
+      `SELECT name, address, delivery_point, phone, schedule, note, is_active
          FROM carriers ORDER BY name COLLATE NOCASE, id`,
     ).all();
     const rates = c.db.prepare(
@@ -266,6 +269,7 @@ function register(router) {
       carriers: carriers.map((row) => ({
         name: row.name,
         address: row.address,
+        deliveryPoint: row.delivery_point,
         phone: row.phone,
         schedule: row.schedule,
         note: row.note,
@@ -298,14 +302,14 @@ function register(router) {
       );
       const createCarrier = c.db.prepare(
         `INSERT INTO carriers
-           (name, contact, phone, address, schedule, note, is_active, carrier_key, created_at, updated_at)
-         VALUES (?, '', ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (name, contact, phone, address, delivery_point, schedule, note, is_active, carrier_key, created_at, updated_at)
+         VALUES (?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const carrier of preview.carriers) {
         if (carrier.status !== 'ready') continue;
         const existingId = carrierIds.get(carrier.key);
         if (!existingId) {
-          const result = createCarrier.run(carrier.name, carrier.phone, carrier.address, carrier.schedule, carrier.note, Number(carrier.isActive), carrier.key, at, at);
+          const result = createCarrier.run(carrier.name, carrier.phone, carrier.address, carrier.deliveryPoint, carrier.schedule, carrier.note, Number(carrier.isActive), carrier.key, at, at);
           carrierIds.set(carrier.key, Number(result.lastInsertRowid));
         }
       }
@@ -462,8 +466,8 @@ function register(router) {
     const at = new Date().toISOString();
     return transaction(c.db, () => {
       ensureAvailable(c.db, input.key);
-      const result = c.db.prepare(`INSERT INTO carriers (name, contact, phone, address, schedule, note, is_active, carrier_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(input.name, input.contact, input.phone, input.address, input.schedule, input.note, Number(input.isActive), input.key, at, at);
+      const result = c.db.prepare(`INSERT INTO carriers (name, contact, phone, address, delivery_point, schedule, note, is_active, carrier_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(input.name, input.contact, input.phone, input.address, input.deliveryPoint, input.schedule, input.note, Number(input.isActive), input.key, at, at);
       const row = load(c.db, Number(result.lastInsertRowid));
       writeAudit(c.db, c.user, 'carrier.create', 'carrier', row.id, toApi(row));
       return toApi(row);
@@ -477,8 +481,8 @@ function register(router) {
     return transaction(c.db, () => {
       ensureAvailable(c.db, input.key, before.id);
       const at = new Date().toISOString();
-      c.db.prepare('UPDATE carriers SET name = ?, contact = ?, phone = ?, address = ?, schedule = ?, note = ?, is_active = ?, carrier_key = ?, updated_at = ? WHERE id = ?')
-        .run(input.name, input.contact, input.phone, input.address, input.schedule, input.note, Number(input.isActive), input.key, at, before.id);
+      c.db.prepare('UPDATE carriers SET name = ?, contact = ?, phone = ?, address = ?, delivery_point = ?, schedule = ?, note = ?, is_active = ?, carrier_key = ?, updated_at = ? WHERE id = ?')
+        .run(input.name, input.contact, input.phone, input.address, input.deliveryPoint, input.schedule, input.note, Number(input.isActive), input.key, at, before.id);
       const customerIds = c.db.prepare(
         'SELECT customer_id FROM carrier_customers WHERE carrier_id = ?',
       ).all(before.id).map((row) => row.customer_id);

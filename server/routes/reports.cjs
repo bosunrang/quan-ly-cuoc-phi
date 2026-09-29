@@ -3,6 +3,7 @@
 const XLSX = require('xlsx-js-style');
 const { strFromU8, strToU8, unzipSync, zipSync } = require('fflate');
 const { writeAudit } = require('../audit.cjs');
+const { normalizeSearchText } = require('../db.cjs');
 const { canSeeEveryone } = require('../permissions.cjs');
 const { badRequest, isIsoDate } = require('../http.cjs');
 
@@ -192,6 +193,11 @@ function reportData(db, input) {
                  AND province_city <> ''
                ORDER BY document_date DESC, id DESC LIMIT 1
             ), '') AS province_city,
+            COALESCE((
+              SELECT delivery_point FROM carriers
+               WHERE carrier_key = vn_normalize(e.carrier)
+               LIMIT 1
+            ), '') AS carrier_delivery_point,
             (
               SELECT r.transport_fee
                 FROM carrier_customer_rates r
@@ -285,16 +291,17 @@ const centered = { ...baseStyle, alignment: { horizontal: 'center', vertical: 'c
 const money = { ...baseStyle, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '#,##0' };
 const heading = { ...centered, font: { name: 'Times New Roman', sz: 11, bold: true } };
 const DAILY_REPORT_HEADERS = [
-  'STT', 'Ngày gửi', 'Nhà xe', 'Khách hàng', 'Tỉnh/TP', 'Sản phẩm', 'Quy cách',
-  'Giá cước', 'Phí cổng', 'Chênh lệch', 'Bill', 'Km', 'Giá xăng', 'Tiền xăng', 'Ghi chú',
+  'STT', 'Ngày gửi', 'Điểm đi', 'Điểm đến', 'Nhà xe', 'Khách hàng', 'Tỉnh/TP', 'Sản phẩm',
+  'Quy cách', 'Giá cước', 'Phí cổng', 'Chênh lệch', 'Bill', 'Km', 'Giá xăng', 'Tiền xăng', 'Ghi chú',
 ];
 const DAILY_REPORT_COLUMN_WIDTHS = [
-  5.42578125, 13.42578125, 14.140625, 34.7109375, 12.5703125,
-  28.42578125, 11.42578125, 11, 11, 12.7109375, 4.42578125,
-  7.42578125, 10.7109375, 10.7109375, 25.7109375,
+  5.42578125, 13.42578125, 28.42578125, 28.42578125, 20,
+  34.7109375, 12.5703125, 28.42578125, 11.42578125, 11, 11,
+  12.7109375, 4.42578125, 7.42578125, 10.7109375, 10.7109375, 25.7109375,
 ];
 const DAILY_REPORT_TEXT_WIDTHS = [
-  4.71, 12.71, 13.43, 34, 11.86, 27.71, 10.71, 10.29, 10.29, 12, 3.71, 6.71, 10, 10, 25,
+  4.71, 12.71, 27.71, 27.71, 19.29, 34, 11.86, 27.71, 10.71,
+  10.29, 10.29, 12, 3.71, 6.71, 10, 10, 25,
 ];
 function set(ws, cell, value, style) {
   const type = typeof value === 'number' ? 'n' : typeof value === 'boolean' ? 'b' : 's';
@@ -308,8 +315,15 @@ function wrappedTextLineCount(value, columnWidth) {
     .reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0);
 }
 function wrappedRowHeight(cells) {
-  const lines = Math.max(...cells.map(([value, width]) => wrappedTextLineCount(value, width)));
-  return Math.min(150, Math.max(30, lines * 15));
+  const height = cells.reduce((maximum, [value, width, rowSpan = 1]) => {
+    const lines = wrappedTextLineCount(value, width);
+    // Nội dung của ô gộp được trải trên tổng chiều cao các dòng trong vùng gộp.
+    // Với ô thường, cộng khoảng đệm để ký tự có dấu không sát viền trên/dưới.
+    const required = Math.ceil((lines * 15 + 4) / Math.max(1, rowSpan));
+    return Math.max(maximum, required);
+  }, 30);
+  // 409 pt là giới hạn chiều cao một dòng của Excel.
+  return Math.min(409, height);
 }
 
 function normalizeEmptyFills(archive) {
@@ -437,14 +451,29 @@ function fuelSummaryRows(data, employeeId) {
     distanceKm: number(record.distance_km),
     fuelPrice: number(record.fuel_price),
     totalFee: number(record.total_fee),
+    legs: data.fuelLegsByRecordId.get(record.id) || [],
   }));
+}
+
+function routeDestinationCarrierKey(value) {
+  return normalizeSearchText(String(value || '').split(',', 1)[0]);
+}
+
+function deliveryRouteKey(delivery) {
+  return routeDestinationCarrierKey(
+    delivery.entry.carrier_delivery_point || delivery.entry.carrier,
+  );
 }
 
 function dailyDetailRows(deliveries, fuels) {
   const remainingFuels = [...fuels];
-  const rows = deliveries.map((delivery) => {
-    if (!delivery.isGroupStart) return { delivery, fuelRow: null, fuelSpan: 1 };
-    const date = delivery.entryDateIso;
+  const rows = [];
+  for (let offset = 0; offset < deliveries.length;) {
+    const firstDelivery = deliveries[offset];
+    const groupSize = firstDelivery.isGroupStart ? firstDelivery.groupSize : 1;
+    const group = deliveries.slice(offset, offset + groupSize);
+    offset += group.length;
+    const date = firstDelivery.entryDateIso;
     let fuelIndex = remainingFuels.findIndex(
       (fuelRow) => fuelRow.periodFrom === date && fuelRow.periodTo === date,
     );
@@ -454,9 +483,59 @@ function dailyDetailRows(deliveries, fuels) {
       );
     }
     const fuelRow = fuelIndex < 0 ? null : remainingFuels.splice(fuelIndex, 1)[0];
-    return { delivery, fuelRow, fuelSpan: fuelRow ? delivery.groupSize : 1 };
+    const legs = fuelRow?.legs?.length
+      ? fuelRow.legs
+      : fuelRow
+        ? [{ from: 'Chưa lưu chi tiết lộ trình', to: '', km: fuelRow.distanceKm }]
+        : [];
+    const unmatchedDeliveries = new Set(group);
+    const dayRows = [];
+    legs.forEach((fuelLeg) => {
+      const carrierKey = routeDestinationCarrierKey(fuelLeg.to);
+      const matches = carrierKey
+        ? group.filter(
+          (delivery) => unmatchedDeliveries.has(delivery)
+            && deliveryRouteKey(delivery) === carrierKey,
+        )
+        : [];
+      const matchedDeliveries = matches.length ? matches : [null];
+      matchedDeliveries.forEach((delivery, matchIndex) => {
+        if (delivery) unmatchedDeliveries.delete(delivery);
+        dayRows.push({
+          delivery,
+          fuelLeg: matchIndex === 0 ? fuelLeg : null,
+          fuelLegSpan: matchedDeliveries.length,
+        });
+      });
+    });
+    group.forEach((delivery) => {
+      if (unmatchedDeliveries.has(delivery)) {
+        dayRows.push({ delivery, fuelLeg: null, fuelLegSpan: 1 });
+      }
+    });
+    if (!dayRows.length) dayRows.push({ delivery: null, fuelLeg: null, fuelLegSpan: 1 });
+    dayRows.forEach((row, index) => rows.push({
+      ...row,
+      fuelRow: index === 0 ? fuelRow : null,
+      fuelSpan: fuelRow ? dayRows.length : 1,
+      dayNumber: index === 0 ? firstDelivery.dayNumber : null,
+      entryDate: index === 0 ? firstDelivery.entryDate : null,
+      daySpan: index === 0 ? dayRows.length : null,
+    }));
+  }
+  remainingFuels.forEach((fuelRow) => {
+    const legs = fuelRow.legs?.length
+      ? fuelRow.legs
+      : [{ from: 'Chưa lưu chi tiết lộ trình', to: '', km: fuelRow.distanceKm }];
+    legs.forEach((fuelLeg, index) => rows.push({
+      delivery: null,
+      fuelLeg,
+      fuelLegSpan: 1,
+      fuelRow: index === 0 ? fuelRow : null,
+      fuelSpan: legs.length,
+      daySpan: null,
+    }));
   });
-  remainingFuels.forEach((fuelRow) => rows.push({ delivery: null, fuelRow, fuelSpan: 1 }));
   return rows.length ? rows : [{ delivery: null, fuelRow: null, fuelSpan: 1 }];
 }
 
@@ -485,17 +564,21 @@ function dailySheet(data, input, employee, extras) {
     ...dailyMoney,
     font: { name: 'Times New Roman', sz: 12, bold: true, color: { rgb: 'FF0000' } },
   };
+  const dailyDecreasedPrice = {
+    ...dailyMoney,
+    font: { name: 'Times New Roman', sz: 12, bold: true, color: { rgb: '00682F' } },
+  };
   const dailyHeading = { ...dailyCentered, font: { name: 'Times New Roman', sz: 12, bold: true } };
   ws['!cols'] = DAILY_REPORT_COLUMN_WIDTHS.map((width) => ({ width }));
   set(ws, 'A1', companyName, { font: { name: 'Times New Roman', sz: 12, bold: true }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } }); merge(ws, 'A1:D2');
-  set(ws, 'L1', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', { font: { name: 'Times New Roman', sz: 12, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'L1:O1');
-  set(ws, 'L2', 'Độc lập - Tự do - Hạnh phúc', { font: { name: 'Times New Roman', sz: 12, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'L2:O2');
-  set(ws, 'A4', 'BẢNG CHI TIẾT CƯỚC NHÂN VIÊN', { font: { name: 'Times New Roman', sz: 18, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A4:O4');
-  set(ws, 'A5', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, { font: { name: 'Times New Roman', sz: 12, italic: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A5:O5');
+  set(ws, 'N1', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', { font: { name: 'Times New Roman', sz: 12, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'N1:Q1');
+  set(ws, 'N2', 'Độc lập - Tự do - Hạnh phúc', { font: { name: 'Times New Roman', sz: 12, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'N2:Q2');
+  set(ws, 'A4', 'BẢNG CHI TIẾT CƯỚC NHÂN VIÊN', { font: { name: 'Times New Roman', sz: 18, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A4:Q4');
+  set(ws, 'A5', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, { font: { name: 'Times New Roman', sz: 12, italic: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A5:Q5');
   const companyInfo = { font: { name: 'Times New Roman', sz: 12 } };
-  set(ws, 'A7', `Đơn vị: ${companyName}`, companyInfo); merge(ws, 'A7:O7');
-  set(ws, 'A8', `Địa chỉ: ${companyAddress}`, companyInfo); merge(ws, 'A8:O8');
-  set(ws, 'A9', `Nhân viên phụ trách: ${employee.full_name}`, companyInfo); merge(ws, 'A9:O9');
+  set(ws, 'A7', `Đơn vị: ${companyName}`, companyInfo); merge(ws, 'A7:Q7');
+  set(ws, 'A8', `Địa chỉ: ${companyAddress}`, companyInfo); merge(ws, 'A8:Q8');
+  set(ws, 'A9', `Nhân viên phụ trách: ${employee.full_name}`, companyInfo); merge(ws, 'A9:Q9');
   DAILY_REPORT_HEADERS.forEach((value, index) => set(
     ws,
     XLSX.utils.encode_cell({ r: 10, c: index }),
@@ -508,9 +591,18 @@ function dailySheet(data, input, employee, extras) {
   const fuelDistance = { ...dailyCentered, numFmt: '#,##0.0' };
   for (let index = 0; index < detailRows; index += 1) {
     const excelRow = detailStartRow + index;
-    const { delivery, fuelRow, fuelSpan } = details[index];
+    const {
+      delivery, fuelLeg, fuelLegSpan, fuelRow, fuelSpan, dayNumber, entryDate, daySpan,
+    } = details[index];
     for (let column = 0; column < DAILY_REPORT_HEADERS.length; column += 1) {
       set(ws, XLSX.utils.encode_cell({ r: excelRow - 1, c: column }), '', dailyBaseStyle);
+    }
+    if (dayNumber != null) set(ws, `A${excelRow}`, dayNumber, dailyCentered);
+    if (entryDate != null) set(ws, `B${excelRow}`, entryDate, dailyCentered);
+    if (daySpan > 1) {
+      const lastExcelRow = excelRow + daySpan - 1;
+      merge(ws, `A${excelRow}:A${lastExcelRow}`);
+      merge(ws, `B${excelRow}:B${lastExcelRow}`);
     }
     if (delivery) {
       const { entry } = delivery;
@@ -518,62 +610,82 @@ function dailySheet(data, input, employee, extras) {
         ? null
         : number(entry.transport_fee) - number(entry.standard_transport_fee);
       const bill = billStatusValue(delivery.billStatus);
-      const values = [delivery.dayNumber, delivery.entryDate, delivery.carrier, entry.customer, entry.province_city || '', entry.note || '', entry.spec, number(entry.transport_fee), number(entry.gate_fee), priceDifference, bill];
+      const gateFee = number(entry.gate_fee);
+      const displayDifference = priceDifference == null || priceDifference === 0
+        ? '-'
+        : priceDifference;
+      const values = [delivery.carrier || '', entry.customer, entry.province_city || '', entry.note || '', entry.spec, number(entry.transport_fee), gateFee === 0 ? '-' : gateFee, displayDifference, bill];
       values.forEach((value, column) => {
         if (value === null) return;
-        const style = column === 9 && value > 0
+        const targetColumn = column + 4;
+        const style = targetColumn === 11 && value > 0
           ? dailyIncreasedPrice
-          : [7, 8, 9].includes(column)
-            ? dailyMoney
-            : column === 10
-              ? dailyBillCheckbox
-              : [0, 1, 2, 4, 6].includes(column)
-              ? dailyCentered
-              : dailyBaseStyle;
-        set(ws, XLSX.utils.encode_cell({ r: excelRow - 1, c: column }), value, style);
+          : targetColumn === 11 && value < 0
+            ? dailyDecreasedPrice
+            : [9, 10, 11].includes(targetColumn)
+              ? dailyMoney
+              : targetColumn === 12
+                ? dailyBillCheckbox
+                : [0, 1, 4, 6, 8].includes(targetColumn)
+                  ? dailyCentered
+                  : dailyBaseStyle;
+        set(ws, XLSX.utils.encode_cell({ r: excelRow - 1, c: targetColumn }), value, style);
       });
-      if (delivery.isGroupStart && delivery.groupSize > 1) {
-        const lastExcelRow = excelRow + delivery.groupSize - 1;
-        merge(ws, `A${excelRow}:A${lastExcelRow}`);
-        merge(ws, `B${excelRow}:B${lastExcelRow}`);
-      }
-      if (delivery.isCarrierGroupStart && delivery.carrierGroupSize > 1) {
-        const lastExcelRow = excelRow + delivery.carrierGroupSize - 1;
-        merge(ws, `C${excelRow}:C${lastExcelRow}`);
-      }
       if (delivery.mergeCarrierBill) {
         const lastExcelRow = excelRow + delivery.carrierGroupSize - 1;
-        merge(ws, `K${excelRow}:K${lastExcelRow}`);
+        merge(ws, `E${excelRow}:E${lastExcelRow}`);
+        merge(ws, `M${excelRow}:M${lastExcelRow}`);
+      }
+    }
+    if (fuelLeg) {
+      set(ws, `C${excelRow}`, fuelLeg.from || '—', dailyBaseStyle);
+      set(ws, `D${excelRow}`, fuelLeg.to || '—', dailyBaseStyle);
+      set(ws, `N${excelRow}`, number(fuelLeg.km), fuelDistance);
+      if (fuelLegSpan > 1) {
+        const lastExcelRow = excelRow + fuelLegSpan - 1;
+        for (const column of ['C', 'D', 'N']) {
+          merge(ws, `${column}${excelRow}:${column}${lastExcelRow}`);
+        }
+      }
+      if (!delivery) {
+        for (const column of ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M']) {
+          set(ws, `${column}${excelRow}`, '-', dailyCentered);
+        }
       }
     }
     if (fuelRow) {
-      set(ws, `L${excelRow}`, fuelRow.distanceKm, fuelDistance);
-      set(ws, `M${excelRow}`, fuelRow.fuelPrice, dailyMoney);
-      set(ws, `N${excelRow}`, fuelRow.totalFee, dailyMoney);
+      set(ws, `O${excelRow}`, fuelRow.fuelPrice, dailyMoney);
+      set(ws, `P${excelRow}`, fuelRow.totalFee, dailyMoney);
       if (fuelSpan > 1) {
         const lastExcelRow = excelRow + fuelSpan - 1;
-        for (const column of ['L', 'M', 'N']) {
+        for (const column of ['O', 'P']) {
           merge(ws, `${column}${excelRow}:${column}${lastExcelRow}`);
         }
       }
     }
     const finalNote = delivery?.noteValue ?? '';
     if (delivery?.noteSpan) {
-      set(ws, `O${excelRow}`, finalNote || ' ', dailyCentered);
+      set(ws, `Q${excelRow}`, finalNote || ' ', dailyCentered);
       if (delivery.noteSpan > 1) {
         const lastExcelRow = excelRow + delivery.noteSpan - 1;
-        merge(ws, `O${excelRow}:O${lastExcelRow}`);
+        merge(ws, `Q${excelRow}:Q${lastExcelRow}`);
       }
     }
     ws['!rows'] ??= [];
     ws['!rows'][excelRow - 1] = {
       hpt: wrappedRowHeight([
-        [delivery?.entry.carrier, DAILY_REPORT_TEXT_WIDTHS[2]],
-        [delivery?.entry.customer, DAILY_REPORT_TEXT_WIDTHS[3]],
-        [delivery?.entry.province_city, DAILY_REPORT_TEXT_WIDTHS[4]],
-        [delivery?.entry.note, DAILY_REPORT_TEXT_WIDTHS[5]],
-        [delivery?.entry.spec, DAILY_REPORT_TEXT_WIDTHS[6]],
-        [finalNote, DAILY_REPORT_TEXT_WIDTHS[14]],
+        [fuelLeg?.from, DAILY_REPORT_TEXT_WIDTHS[2], fuelLegSpan],
+        [fuelLeg?.to, DAILY_REPORT_TEXT_WIDTHS[3], fuelLegSpan],
+        [
+          delivery?.entry.carrier,
+          DAILY_REPORT_TEXT_WIDTHS[4],
+          delivery?.mergeCarrierBill ? delivery.carrierGroupSize : 1,
+        ],
+        [delivery?.entry.customer, DAILY_REPORT_TEXT_WIDTHS[5]],
+        [delivery?.entry.province_city, DAILY_REPORT_TEXT_WIDTHS[6]],
+        [delivery?.entry.note, DAILY_REPORT_TEXT_WIDTHS[7]],
+        [delivery?.entry.spec, DAILY_REPORT_TEXT_WIDTHS[8]],
+        [finalNote, DAILY_REPORT_TEXT_WIDTHS[16], delivery?.noteSpan || 1],
       ]),
     };
   }
@@ -602,15 +714,15 @@ function dailySheet(data, input, employee, extras) {
   const signDateRow = grandTotalRow + 2;
   const signRow = grandTotalRow + 3;
   const signature = { font: { name: 'Times New Roman', sz: 12, bold: true }, alignment: { horizontal: 'center', vertical: 'center' } };
-  set(ws, `O${signDateRow}`, 'Ngày… tháng…năm….', { font: { name: 'Times New Roman', sz: 12, italic: true }, alignment: { horizontal: 'center', vertical: 'center' } });
+  set(ws, `Q${signDateRow}`, 'Ngày… tháng…năm….', { font: { name: 'Times New Roman', sz: 12, italic: true }, alignment: { horizontal: 'center', vertical: 'center' } });
   set(ws, `A${signRow}`, 'Giám Đốc Duyệt', signature); set(ws, `B${signRow}`, '', signature); merge(ws, `A${signRow}:B${signRow}`);
   set(ws, `F${signRow}`, 'Kế Toán Trưởng', signature); set(ws, `G${signRow}`, '', signature); set(ws, `H${signRow}`, '', signature); set(ws, `I${signRow}`, '', signature); merge(ws, `F${signRow}:I${signRow}`);
-  set(ws, `O${signRow}`, 'Người lập', signature);
+  set(ws, `Q${signRow}`, 'Người lập', signature);
   ws['!rows'] ??= [];
   ws['!rows'][0] = { hpt: 18 };
   ws['!rows'][1] = { hpt: 18 };
   ws['!rows'][3] = { hpt: 25.5 };
-  ws['!ref'] = `A1:O${signRow}`;
+  ws['!ref'] = `A1:Q${signRow}`;
   return ws;
 }
 
@@ -980,16 +1092,6 @@ function register(router) {
       validateExtraCostAssignments(extras, selected, input.employeeId);
       if (input.employeeId) {
         XLSX.utils.book_append_sheet(workbook, dailySheet(data, input, selected[0], extras), 'Bảng kê cước');
-        XLSX.utils.book_append_sheet(
-          workbook,
-          fuelHistorySheet(
-            fuelDetailItems(data, selected[0].id),
-            input,
-            selected[0].full_name,
-            data.company,
-          ),
-          'Chi tiết tiền xăng',
-        );
       } else {
         XLSX.utils.book_append_sheet(workbook, dailySummarySheet(data, input, selected, extras), 'Tổng hợp');
         const usedNames = new Set(workbook.SheetNames);
@@ -998,16 +1100,6 @@ function register(router) {
             workbook,
             dailySheet(data, input, employee, extras.filter((item) => item.employeeId === employee.id)),
             uniqueSheetName(employee.full_name, usedNames),
-          );
-          XLSX.utils.book_append_sheet(
-            workbook,
-            fuelHistorySheet(
-              fuelDetailItems(data, employee.id),
-              input,
-              employee.full_name,
-              data.company,
-            ),
-            uniqueSheetName(`Chi tiết xăng - ${employee.full_name}`, usedNames),
           );
         }
       }

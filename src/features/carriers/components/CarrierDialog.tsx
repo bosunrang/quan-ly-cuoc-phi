@@ -7,6 +7,7 @@ import { Field, FieldGrid } from "../../../shared/ui/Field";
 interface CarrierDialogProps {
 	initial: CarrierInput;
 	editingId: number | null;
+	deliveryPointOptions: string[];
 	onSave: (input: CarrierInput) => Promise<void>;
 	onClose: () => void;
 }
@@ -14,6 +15,7 @@ interface CarrierDialogProps {
 export function CarrierDialog({
 	initial,
 	editingId,
+	deliveryPointOptions,
 	onSave,
 	onClose,
 }: CarrierDialogProps) {
@@ -75,6 +77,24 @@ export function CarrierDialog({
 						onChange={setText("address")}
 						placeholder="Địa chỉ nhận hàng hoặc văn phòng"
 					/>
+				)}
+			</Field>
+			<Field label="Điểm giao / Bến xe">
+				{(id) => (
+					<>
+						<input
+							id={id}
+							list="carrier-delivery-point-options"
+							value={form.deliveryPoint}
+							onChange={setText("deliveryPoint")}
+							placeholder="Ví dụ: Bến xe Miền Tây, 395 Kinh Dương Vương"
+						/>
+						<datalist id="carrier-delivery-point-options">
+							{deliveryPointOptions.map((value) => (
+								<option key={value} value={value} />
+							))}
+						</datalist>
+					</>
 				)}
 			</Field>
 			<Field label="Giờ xe chạy / nhận hàng">

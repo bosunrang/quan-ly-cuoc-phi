@@ -76,6 +76,13 @@ export function CarrierDetailDialog({
 					<span>Địa chỉ</span>
 					<strong>{carrier.address || "Chưa cập nhật"}</strong>
 				</div>
+				<div>
+					<MapPin size={16} />
+					<span>Điểm giao / Bến xe</span>
+					<strong>
+						{carrier.deliveryPoint || "Giao trực tiếp tại nhà xe"}
+					</strong>
+				</div>
 			</section>
 			<section className="carrier-detail-note">
 				<span>Ghi chú</span>

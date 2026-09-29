@@ -113,6 +113,7 @@ export function CarrierExcelImportDialog({
 							{kind === "rates" && <th>Khách hàng</th>}
 							{kind === "rates" && <th>Quy cách</th>}
 							{kind === "carriers" && <th>Địa chỉ</th>}
+							{kind === "carriers" && <th>Điểm giao / Bến xe</th>}
 							{kind === "carriers" && <th>Số điện thoại</th>}
 							{kind === "rates" && <th>Cước vận chuyển</th>}
 							{kind === "rates" && <th>Phí vào cổng</th>}
@@ -151,6 +152,7 @@ function PreviewRow({
 			{kind === "rates" && <td>{row.customerName ?? "—"}</td>}
 			{kind === "rates" && <td>{row.spec ?? "—"}</td>}
 			{kind === "carriers" && <td>{row.address ?? "—"}</td>}
+			{kind === "carriers" && <td>{row.deliveryPoint ?? "—"}</td>}
 			{kind === "carriers" && <td>{row.phone ?? "—"}</td>}
 			{kind === "rates" && <td>{formatPreviewMoney(row.transportFee)}</td>}
 			{kind === "rates" && <td>{formatPreviewMoney(row.gateFee)}</td>}

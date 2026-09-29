@@ -191,10 +191,20 @@ export function CarriersPage() {
 		if (!keyword) return items;
 		return items.filter((carrier) =>
 			normalizeText(
-				`${carrier.name} ${carrier.contact} ${carrier.phone}`,
+				`${carrier.name} ${carrier.contact} ${carrier.phone} ${carrier.deliveryPoint}`,
 			).includes(keyword),
 		);
 	}, [carrierData, carrierQuery]);
+	const deliveryPointOptions = useMemo(() => {
+		const values = new Map<string, string>();
+		for (const carrier of carrierData?.items ?? []) {
+			const value = carrier.deliveryPoint.trim();
+			if (value) values.set(normalizeText(value), value);
+		}
+		return [...values.values()].sort((left, right) =>
+			left.localeCompare(right, "vi"),
+		);
+	}, [carrierData]);
 	const carrierPageCount = Math.max(
 		1,
 		Math.ceil(visibleCarriers.length / CARRIERS_PER_PAGE),
@@ -283,13 +293,14 @@ export function CarriersPage() {
 			downloadXlsx("Bang-cuoc-nha-xe.xlsx", [
 				{
 					name: "Nhà xe",
-					headers: ["Nhà xe", "Địa chỉ", "Điện thoại"],
+					headers: ["Nhà xe", "Địa chỉ", "Điểm giao / Bến xe", "Điện thoại"],
 					rows: data.carriers.map((carrier) => [
 						carrier.name,
 						carrier.address,
+						carrier.deliveryPoint,
 						carrier.phone,
 					]),
-					widths: [28, 46, 24],
+					widths: [28, 46, 42, 24],
 					yellowHeader: true,
 				},
 				{
@@ -648,6 +659,7 @@ export function CarriersPage() {
 				<CarrierDialog
 					initial={editor.initial}
 					editingId={editor.editingId}
+					deliveryPointOptions={deliveryPointOptions}
 					onSave={save}
 					onClose={() => setEditor(null)}
 				/>

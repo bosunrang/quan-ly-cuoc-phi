@@ -15,6 +15,7 @@ export interface FuelData {
 		id: number;
 		name: string;
 		address: string;
+		deliveryPoint: string;
 		type: "customer" | "carrier" | "employee";
 	}>;
 	distances: Array<{ id: number; from: string; to: string; km: number }>;

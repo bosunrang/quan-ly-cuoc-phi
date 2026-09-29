@@ -55,6 +55,11 @@ function parseCarrierRows(rows: Row[]): CarrierExcelCarrierInput[] {
 	const header = rows[headerAt];
 	const name = indexOf(header, CARRIER_HEADERS);
 	const address = indexOf(header, ["dia chi"]);
+	const deliveryPoint = indexOf(header, [
+		"diem giao",
+		"ben xe",
+		"diem giao ben xe",
+	]);
 	const phone = indexOf(header, ["dien thoai", "so dien thoai"]);
 	const schedule = indexOf(header, ["gio xe chay", "gio nhan hang"]);
 	const note = indexOf(header, ["ghi chu"]);
@@ -64,6 +69,7 @@ function parseCarrierRows(rows: Row[]): CarrierExcelCarrierInput[] {
 		name: clean(row[name]),
 		contact: "",
 		address: address < 0 ? "" : clean(row[address]),
+		deliveryPoint: deliveryPoint < 0 ? "" : clean(row[deliveryPoint]),
 		phone: phone < 0 ? "" : clean(row[phone]),
 		schedule: schedule < 0 ? "" : clean(row[schedule]),
 		note: note < 0 ? "" : clean(row[note]),

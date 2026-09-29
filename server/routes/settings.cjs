@@ -14,7 +14,7 @@ const BACKUP_TABLES = {
   settings: { table: 'app_settings', columns: ['id', 'company_name', 'company_address', 'display_name', 'tagline', 'logo_data_url', 'motorcycle_consumption_liters', 'motorcycle_base_km', 'truck_consumption_liters', 'truck_base_km', 'updated_at'] },
   misa: { table: 'misa_rows', columns: ['id', 'document_date', 'customer_name', 'address', 'quantity_sold', 'province_city', 'source_key', 'source_file', 'imported_by', 'imported_at', 'product_name', 'document_code', 'customer_key', 'customer_code'] },
   customers: { table: 'customers', columns: ['id', 'customer_name', 'customer_code', 'carrier', 'recipient', 'address', 'customer_key', 'search_text', 'created_at', 'updated_at'] },
-  carriers: { table: 'carriers', columns: ['id', 'name', 'contact', 'phone', 'address', 'is_active', 'carrier_key', 'created_at', 'updated_at', 'schedule', 'note'] },
+  carriers: { table: 'carriers', columns: ['id', 'name', 'contact', 'phone', 'address', 'delivery_point', 'is_active', 'carrier_key', 'created_at', 'updated_at', 'schedule', 'note'] },
   carrierCustomers: { table: 'carrier_customers', columns: ['carrier_id', 'customer_id', 'assigned_at'] },
   carrierRates: { table: 'carrier_customer_rates', columns: ['id', 'carrier_id', 'customer_id', 'spec', 'spec_key', 'is_default', 'transport_fee', 'gate_fee', 'note', 'created_at', 'updated_at'] },
   employees: { table: 'employees', columns: ['id', 'full_name', 'user_id', 'is_active', 'search_text', 'created_at', 'updated_at', 'address'] },
@@ -83,10 +83,22 @@ function importRows(db, name, rows, userId, knownUserIds) {
     if (name === 'entries') value.bill_status ??= '';
     // Backup cũ chưa lưu mã khách MISA vẫn khôi phục được.
     if (name === 'misa') value.customer_code ??= '';
+    // Backup trước khi bổ sung mã khách vẫn giữ được các bản ghi khách hàng.
+    if (name === 'customers') value.customer_code ??= '';
+    // Backup trước khi có điểm giao dùng địa chỉ riêng của nhà xe như trước.
+    if (name === 'carriers') value.delivery_point ??= '';
+    // Backup trước khi có định mức phương tiện vẫn dùng cấu hình mặc định.
+    if (name === 'settings') {
+      value.motorcycle_consumption_liters ??= 1;
+      value.motorcycle_base_km ??= 40;
+      value.truck_consumption_liters ??= 7.5;
+      value.truck_base_km ??= 100;
+    }
     if (name === 'fuelRecords') {
       value.updated_at ??= value.created_at ?? new Date().toISOString();
       value.status ??= 'active';
       value.void_reason ??= '';
+      value.vehicle_type ??= '';
     }
     // Backup trước v2.0.5 chưa lưu nguồn km vẫn dùng bình thường để tái sử
     // dụng lộ trình; chỉ gắn nhãn phục vụ truy vết.

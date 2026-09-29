@@ -4,6 +4,7 @@ export interface Carrier {
 	contact: string;
 	phone: string;
 	address: string;
+	deliveryPoint: string;
 	schedule: string;
 	note: string;
 	isActive: boolean;
@@ -17,6 +18,7 @@ export interface CarrierInput {
 	contact: string;
 	phone: string;
 	address: string;
+	deliveryPoint: string;
 	schedule: string;
 	note: string;
 	isActive: boolean;
@@ -68,6 +70,7 @@ export interface CarrierExcelPreviewRow {
 	reason?: string;
 	name?: string;
 	address?: string;
+	deliveryPoint?: string;
 	phone?: string;
 	carrierName?: string;
 	customerName?: string;
@@ -101,6 +104,7 @@ export const emptyCarrierInput = (): CarrierInput => ({
 	contact: "",
 	phone: "",
 	address: "",
+	deliveryPoint: "",
 	schedule: "",
 	note: "",
 	isActive: true,
@@ -110,6 +114,7 @@ export const toCarrierInput = (carrier: Carrier): CarrierInput => ({
 	contact: carrier.contact,
 	phone: carrier.phone,
 	address: carrier.address,
+	deliveryPoint: carrier.deliveryPoint,
 	schedule: carrier.schedule,
 	note: carrier.note,
 	isActive: carrier.isActive,

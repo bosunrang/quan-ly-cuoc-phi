@@ -109,7 +109,7 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
       .prepare("SELECT id, customer_name AS name, address, 'customer' AS type FROM customers WHERE trim(customer_name) <> ''")
       .all(),
     ...db
-      .prepare("SELECT id, name, address, 'carrier' AS type FROM carriers WHERE is_active = 1 AND trim(name) <> ''")
+      .prepare("SELECT id, name, address, delivery_point, 'carrier' AS type FROM carriers WHERE is_active = 1 AND trim(name) <> ''")
       .all(),
     ...db
       .prepare("SELECT id, full_name AS name, address, 'employee' AS type FROM employees WHERE is_active = 1 AND trim(full_name) <> ''")
@@ -120,7 +120,13 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
     prices: prices.map(toFuelPrice),
     employees: employees.map((item) => ({ id: item.id, name: item.full_name })),
     currentEmployee: employee ? { id: employee.id, name: employee.full_name } : null,
-    locations,
+    locations: locations.map((item) => ({
+      id: item.id,
+      name: item.name,
+      address: item.address,
+      type: item.type,
+      deliveryPoint: item.delivery_point || '',
+    })),
     distances: distances.map((item) => ({
       id: item.id,
       from: item.from_name,

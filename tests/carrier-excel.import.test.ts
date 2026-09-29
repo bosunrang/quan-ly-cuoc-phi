@@ -31,8 +31,13 @@ describe("nhập Excel nhà xe và bảng cước", () => {
 	it("đọc mẫu nhà xe độc lập", async () => {
 		const rows = await parseCarrierWorkbook(
 			workbookFile("Nhà xe.xlsx", [
-				["Nhà xe", "Địa chỉ", "Điện thoại"],
-				["6 Quang", "1B Bắc Hải, TP Hồ Chí Minh", "0913.743.300"],
+				["Nhà xe", "Địa chỉ", "Điểm giao / Bến xe", "Điện thoại"],
+				[
+					"6 Quang",
+					"1B Bắc Hải, TP Hồ Chí Minh",
+					"Bến xe Miền Tây, 395 Kinh Dương Vương",
+					"0913.743.300",
+				],
 			]),
 		);
 
@@ -41,6 +46,7 @@ describe("nhập Excel nhà xe và bảng cước", () => {
 				rowNumber: 2,
 				name: "6 Quang",
 				address: "1B Bắc Hải, TP Hồ Chí Minh",
+				deliveryPoint: "Bến xe Miền Tây, 395 Kinh Dương Vương",
 				phone: "0913.743.300",
 				contact: "",
 				schedule: "",

@@ -100,6 +100,8 @@ const locationType = {
  * địa chỉ. Không được rút gọn về mỗi địa chỉ sau khi người dùng chọn danh mục.
  */
 const locationRouteText = (item: FuelData["locations"][number]) => {
+	if (item.type === "carrier" && item.deliveryPoint.trim())
+		return item.deliveryPoint.trim();
 	const name = item.name.trim();
 	const address = item.address.trim();
 	if (!name) return address;
@@ -129,7 +131,10 @@ function LocationInput({
 		return locations
 			.filter(
 				(item) =>
-					!query || locationKey(`${item.name} ${item.address}`).includes(query),
+					!query ||
+					locationKey(
+						`${item.name} ${item.address} ${item.deliveryPoint}`,
+					).includes(query),
 			)
 			.slice(0, 8);
 	}, [locations, value]);
@@ -174,7 +179,7 @@ function LocationInput({
 								<strong>{item.name}</strong>
 								<span>
 									{locationType[item.type]} ·{" "}
-									{item.address || "Chưa có địa chỉ"}
+									{item.deliveryPoint || item.address || "Chưa có địa chỉ"}
 								</span>
 							</button>
 						))

@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 34;
+const SCHEMA_VERSION = 35;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -605,6 +605,14 @@ function migrate(db) {
       -- sẽ quét toàn bộ dữ liệu MISA cho từng khách hàng trong danh mục.
       CREATE INDEX misa_customer_code_nocase_order_idx
         ON misa_rows(customer_code COLLATE NOCASE, document_date DESC, id DESC);
+    `);
+  }
+
+  if (current < 35) {
+    db.exec(`
+      -- Nhiều nhà xe có thể nhận hàng tại cùng một bến/điểm giao. Giá trị này
+      -- được dùng để gộp chặng xăng, còn địa chỉ nhà xe vẫn phục vụ liên hệ.
+      ALTER TABLE carriers ADD COLUMN delivery_point TEXT NOT NULL DEFAULT '';
     `);
   }
 

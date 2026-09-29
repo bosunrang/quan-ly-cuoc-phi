@@ -795,7 +795,8 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     const body = {
       carriers: [{
         rowNumber: 2, name: 'Nhà xe Excel', contact: '', phone: '0909000000',
-        address: '10 Đường Excel', schedule: '17h', note: '', isActive: true,
+        address: '10 Đường Excel', deliveryPoint: 'Bến xe Excel, 1 Đường chung',
+        schedule: '17h', note: '', isActive: true,
       }],
       rates: [{
         rowNumber: 2, carrierName: 'Nhà xe Excel', customerName: 'Khách hàng Excel bảng cước',
@@ -832,6 +833,12 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
       token: adminToken,
     });
     assert.equal(exported.status, 200);
+    assert.equal(
+      exported.data.carriers.some((row) =>
+        row.name === 'Nhà xe Excel' && row.deliveryPoint === 'Bến xe Excel, 1 Đường chung',
+      ),
+      true,
+    );
     assert.equal(
       exported.data.rates.some((row) =>
         row.carrierName === 'Nhà xe Excel' && row.customerName === 'Khách hàng Excel bảng cước' && row.transportFee === 50000,
