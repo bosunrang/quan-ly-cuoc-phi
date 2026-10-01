@@ -298,7 +298,7 @@
 .carrier-rate-list > header strong,.carrier-rate-form > header strong { color: var(--ink); font-size: var(--type-body-sm); }
 .carrier-rate-list > header span { color: var(--muted); font-size: var(--type-caption); }
 .carrier-rate-list > header svg { color: var(--teal); }
-.carrier-rate-list table { min-width: 760px; }
+.carrier-rate-list table { min-width: 650px; }
 .carrier-rate-list td { height: 46px; }
 .carrier-rate-list .rate-center { text-align: center; }
 .carrier-rate-list .inline-actions { justify-content: flex-end; }
@@ -309,11 +309,10 @@
 .carrier-rate-default { display: flex; align-items: center; gap: 7px; padding: 10px 11px 0; color: var(--text-body); font-size: var(--type-body); }
 .carrier-rate-default input { accent-color: var(--teal); }
 .carrier-rate-inputs { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(130px, 1fr)); gap: 9px; padding: 10px 11px; }
-.carrier-rate-inputs label,.carrier-rate-note { display: grid; gap: 4px; color: var(--muted); font-size: var(--type-caption); font-weight: 650; }
-.carrier-rate-inputs input,.carrier-rate-note input { height: 38px; min-width: 0; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink); font: inherit; font-size: var(--type-body); outline: 0; }
-.carrier-rate-inputs input:focus,.carrier-rate-note input:focus { border-color: var(--focus-border); }
+.carrier-rate-inputs label { display: grid; gap: 4px; color: var(--muted); font-size: var(--type-caption); font-weight: 650; }
+.carrier-rate-inputs input { height: 38px; min-width: 0; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink); font: inherit; font-size: var(--type-body); outline: 0; }
+.carrier-rate-inputs input:focus { border-color: var(--focus-border); }
 .carrier-rate-inputs input:disabled { background: var(--surface-muted); color: var(--muted); }
-.carrier-rate-note { padding: 0 11px 11px; }
 @media (max-width: 760px) { .carrier-rate-inputs { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 500px) { .carrier-rate-inputs { grid-template-columns: 1fr; } }
 

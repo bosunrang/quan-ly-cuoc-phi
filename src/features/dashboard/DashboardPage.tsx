@@ -20,6 +20,7 @@ import "./dashboard.css";
 const parts = [
 	["transport", "Cước vận chuyển", "transport"],
 	["gate", "Phí vào cổng", "gate"],
+	["other", "Chi phí khác", "other"],
 	["fuel", "Tiền xăng", "fuel"],
 ] as const;
 const DASHBOARD_FROM_DRAFT_KEY = "cuocphi.dashboard-from-draft";
@@ -39,13 +40,17 @@ function defaults(): DashboardFilters {
 function Bar({
 	transport,
 	gate,
+	other,
 	fuel,
-}: Pick<DashboardData["daily"][number], "transport" | "gate" | "fuel">) {
-	const total = transport + gate + fuel;
+}: Pick<
+	DashboardData["daily"][number],
+	"transport" | "gate" | "other" | "fuel"
+>) {
+	const total = transport + gate + other + fuel;
 	return (
 		<span className="dash-bar">
 			{parts.map(([key, , tone]) => {
-				const value = { transport, gate, fuel }[key];
+				const value = { transport, gate, other, fuel }[key];
 				return value ? (
 					<i key={key} className={tone} style={{ flex: value / total }} />
 				) : null;
@@ -96,7 +101,10 @@ export function DashboardPage() {
 		1,
 	);
 	const costTotal = Math.max(
-		data.summary.transport + data.summary.gate + data.summary.fuel,
+		data.summary.transport +
+			data.summary.gate +
+			data.summary.other +
+			data.summary.fuel,
 		1,
 	);
 	const costShares = parts.map(([key, label, tone]) => ({
@@ -106,7 +114,7 @@ export function DashboardPage() {
 		amount: data.summary[key],
 		share: (data.summary[key] / costTotal) * 100,
 	}));
-	const costGradient = `conic-gradient(var(--chart-transport) 0 ${costShares[0].share}%, var(--chart-gate) ${costShares[0].share}% ${costShares[0].share + costShares[1].share}%, var(--chart-fuel) ${costShares[0].share + costShares[1].share}% 100%)`;
+	const costGradient = `conic-gradient(var(--chart-transport) 0 ${costShares[0].share}%, var(--chart-gate) ${costShares[0].share}% ${costShares[0].share + costShares[1].share}%, var(--chart-other) ${costShares[0].share + costShares[1].share}% ${costShares[0].share + costShares[1].share + costShares[2].share}%, var(--chart-fuel) ${costShares[0].share + costShares[1].share + costShares[2].share}% 100%)`;
 	return (
 		<div className="dashboard-page">
 			<section className="panel dashboard-intro">
@@ -165,7 +173,7 @@ export function DashboardPage() {
 					icon={<Truck size={18} />}
 					label="Tổng thanh toán"
 					value={`${formatMoney(data.summary.total)} đ`}
-					note="Cước, phí cổng và tiền xăng"
+					note="Cước, phí cổng, chi phí khác và tiền xăng"
 				/>
 				<Stat
 					icon={<ReceiptText size={18} />}
@@ -237,7 +245,7 @@ export function DashboardPage() {
 				<section className="panel dashboard-panel">
 					<PanelHeader
 						title="Chi phí theo ngày"
-						description="Cước vận chuyển, phí vào cổng và tiền xăng."
+						description="Cước vận chuyển, phí vào cổng, chi phí khác và tiền xăng."
 					/>
 					{data.daily.length ? (
 						<div className="dash-daily">
@@ -264,7 +272,7 @@ export function DashboardPage() {
 				<section className="panel dashboard-panel dash-cost-panel">
 					<PanelHeader
 						title="Cơ cấu tổng chi phí"
-						description="Tỷ trọng cước vận chuyển, phí cổng và tiền xăng."
+						description="Tỷ trọng cước vận chuyển, phí cổng, chi phí khác và tiền xăng."
 					/>
 					<div className="dash-cost-overview">
 						<div className="dash-donut" style={{ background: costGradient }}>

@@ -5,10 +5,13 @@ type DashboardResponse = Omit<DashboardData, "monthlyVariance" | "summary"> & {
 	monthlyVariance?: DashboardData["monthlyVariance"];
 	summary: Omit<
 		DashboardData["summary"],
-		"varianceEntries" | "varianceAmount"
+		"varianceEntries" | "varianceAmount" | "other"
 	> &
 		Partial<
-			Pick<DashboardData["summary"], "varianceEntries" | "varianceAmount">
+			Pick<
+				DashboardData["summary"],
+				"varianceEntries" | "varianceAmount" | "other"
+			>
 		>;
 };
 
@@ -18,6 +21,7 @@ export function normalizeDashboardData(data: DashboardResponse): DashboardData {
 		...data,
 		summary: {
 			...data.summary,
+			other: data.summary.other ?? 0,
 			varianceEntries: data.summary.varianceEntries ?? 0,
 			varianceAmount: data.summary.varianceAmount ?? 0,
 		},

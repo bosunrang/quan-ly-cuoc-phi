@@ -9,7 +9,7 @@ const XLSX = require('xlsx-js-style');
 const { strFromU8, unzipSync } = require('fflate');
 const { createApp } = require('../../server/index.cjs');
 const {
-  _test: { deliveryRows, uniqueSheetName, validateExtraCostAssignments },
+  _test: { deliveryRows, dailyDetailRows, uniqueSheetName, validateExtraCostAssignments },
 } = require('../../server/routes/reports.cjs');
 
 let app;
@@ -68,6 +68,38 @@ test('gộp ghi chú trống theo từng ngày và tách riêng nhà xe có lý 
       { noteValue: undefined, noteSpan: undefined },
     ],
   );
+});
+
+test('năm nhà xe cùng bến chỉ tính một chặng xăng', () => {
+  const terminal = 'Bến xe Miền Tây, 395 Kinh Dương Vương';
+  const deliveries = deliveryRows(
+    Array.from({ length: 5 }, (_, index) => ({
+      entry_date: '2026-09-01',
+      carrier: `Nhà xe ${index + 1}`,
+      carrier_delivery_point: terminal,
+      rate_variance_note: '',
+      duplicate_reason: '',
+      bill_status: 'Có bill',
+    })),
+  );
+
+  const details = dailyDetailRows(deliveries, [{
+    periodFrom: '2026-09-01',
+    periodTo: '2026-09-01',
+    distanceKm: 25,
+    fuelPrice: 20_000,
+    totalFee: 60_000,
+    legs: [{ from: 'Kho', to: terminal, km: 25 }],
+  }]);
+
+  assert.equal(details.length, 5);
+  assert.equal(details.filter((row) => row.fuelRow).length, 1);
+  assert.equal(details.filter((row) => row.fuelLeg).length, 1);
+  assert.equal(details[0].fuelLegSpan, 5);
+  assert.equal(details[0].fuelSpan, 5);
+  assert.deepEqual(details.map((row) => row.delivery.entry.carrier), [
+    'Nhà xe 1', 'Nhà xe 2', 'Nhà xe 3', 'Nhà xe 4', 'Nhà xe 5',
+  ]);
 });
 
 test('tên sheet báo cáo được làm sạch và không trùng nhau', () => {
@@ -305,6 +337,8 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
     transportFee: 50_000,
     gateFee: 10_000,
     ticketFee: 0,
+    otherFeeName: 'Phí giao ngoài giờ',
+    otherFee: 2_500,
     note: '300 TT + 100 Gene-HBVax',
     rateVarianceNote: 'Khách yêu cầu giao gấp',
     billStatus: 'Không bill',
@@ -312,9 +346,9 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   });
   assert.equal(entry.status, 200);
 
-  for (const [recipient, product, duplicateReason, billStatus] of [
-    ['Điểm giao thứ hai', '200 sản phẩm B', 'Cùng ngày có nhiều điểm giao', 'Có bill'],
-    ['Điểm giao thứ ba', '300 sản phẩm C', 'Cùng ngày có nhiều điểm giao', 'Không bill'],
+  for (const [recipient, product, duplicateReason, billStatus, otherFeeName, otherFee] of [
+    ['Điểm giao thứ hai', '200 sản phẩm B', 'Cùng ngày có nhiều điểm giao', 'Có bill', 'Phí chờ bốc', 1_000],
+    ['Điểm giao thứ ba', '300 sản phẩm C', 'Cùng ngày có nhiều điểm giao', 'Không bill', '', 0],
   ]) {
     const extraEntry = await call('POST', '/api/entries', {
       entryDate: '2026-10-03',
@@ -327,6 +361,8 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
       transportFee: 45_000,
       gateFee: 0,
       ticketFee: 0,
+      otherFeeName,
+      otherFee,
       note: product,
       rateVarianceNote: '',
       duplicateReason,
@@ -351,8 +387,13 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
       { from: 'Kho', to: sharedDeliveryPoint, km: 30 },
       { from: sharedDeliveryPoint, to: 'Điểm không phải nhà xe, Địa chỉ C', km: 10 },
     ],
+    extraCosts: [
+      { name: 'Gửi xe', amount: 7_000, legIndex: 0 },
+      { name: 'Tiền ăn', amount: 3_000, legIndex: 1 },
+    ],
   });
   assert.equal(fuel.status, 200);
+  assert.equal(fuel.data.totalFee, 106_000);
 
   const exported = await call(
     'GET',
@@ -382,11 +423,17 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   assert.equal(sheet.N11.v, 'Km');
   assert.equal(sheet.O11.v, 'Giá xăng');
   assert.equal(sheet.P11.v, 'Tiền xăng');
-  assert.equal(sheet.Q11.v, 'Ghi chú');
-  assert.equal(sheet['!cols'].length, 17);
-  assert.equal(sheet['!cols'][4].width, 20);
-  assert.equal(sheet['!cols'][12].width, 4.42578125);
-  for (const range of ['A1:D2', 'N1:Q1', 'N2:Q2', 'A4:Q4', 'A7:Q7']) {
+  assert.equal(sheet.Q11.v, 'Chi phí khác');
+  assert.equal(sheet.R11.v, 'Ghi chú');
+  assert.equal(sheet['!cols'].length, 18);
+  assert.deepEqual(sheet['!cols'].map((column) => column.width), [
+    5.42578125, 13.57, 27.7109375, 27.7109375, 14.42578125,
+    32.5703125, 10.85546875, 28.42578125, 10.28515625, 10.140625,
+    9.42578125, 11.85546875, 4.42578125, 7.42578125, 9.5703125,
+    10.7109375, 11.7109375, 17.7109375,
+  ]);
+  assert.equal(sheet['!rows'][10].hpt, 34);
+  for (const range of ['A1:D2', 'N1:R1', 'N2:R2', 'A4:R4', 'A7:R7']) {
     const expected = XLSX.utils.decode_range(range);
     assert.equal(
       sheet['!merges'].some(
@@ -420,10 +467,12 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   assert.equal(sheet.H14.v, '300 sản phẩm C');
   assert.equal(sheet.O12.v, 20_000);
   assert.equal(sheet.P12.v, 96_000);
-  assert.equal(sheet.Q12.v, 'Khách yêu cầu giao gấp');
-  assert.equal(sheet.Q13.v, 'Cùng ngày có nhiều điểm giao');
-  assert.doesNotMatch(sheet.Q12.v, /bill/i);
-  assert.doesNotMatch(sheet.Q13.v, /bill/i);
+  assert.equal(sheet.Q12.v, 9_500);
+  assert.equal(sheet.R12.v, 'Khách yêu cầu giao gấp / Phí giao ngoài giờ / Gửi xe');
+  assert.equal(sheet.Q13.v, 1_000);
+  assert.equal(sheet.R13.v, 'Cùng ngày có nhiều điểm giao / Phí chờ bốc');
+  assert.doesNotMatch(sheet.R12.v, /bill/i);
+  assert.doesNotMatch(sheet.R13.v, /bill/i);
   for (const column of [14, 15]) {
     assert.equal(
       sheet['!merges'].some(
@@ -440,7 +489,7 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
     ),
     true,
   );
-  for (const column of [4, 12]) {
+  for (const column of [4]) {
     assert.equal(
       sheet['!merges'].some(
         (item) => item.s.c === column && item.s.r === 12
@@ -456,9 +505,23 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
     ),
     true,
   );
+  assert.equal(
+    sheet['!merges'].some(
+      (item) => item.s.c === 17 && item.s.r === 12
+        && item.e.c === 17 && item.e.r === 13,
+    ),
+    true,
+  );
   assert.equal(sheet.M13.v, '☑');
-  assert.equal(sheet.M14.v, '');
-  assert.equal(sheet.Q14.v, '');
+  assert.equal(sheet.M14.v, '☐');
+  assert.equal(
+    sheet['!merges'].some(
+      (item) => item.s.c === 12 && item.s.r === 12
+        && item.e.c === 12 && item.e.r === 13,
+    ),
+    false,
+  );
+  assert.equal(sheet.R14.v, '-');
   assert.equal(sheet.P14.v, '');
   for (const column of [2, 3, 13]) {
     assert.equal(
@@ -475,10 +538,27 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
     assert.equal(sheet[`${column}15`].v, '-');
   }
   assert.equal(sheet.N15.v, 10);
+  assert.equal(sheet.Q15.v, 3_000);
+  assert.equal(sheet.R15.v, 'Tiền ăn');
   assert.equal(sheet.C17.v, 140_000);
   assert.equal(sheet.C18.v, 10_000);
   assert.equal(sheet.C19.v, 96_000);
-  assert.equal(sheet.C20.v, 246_000);
+  assert.equal(sheet.C20.v, 13_500);
+  assert.equal(sheet.C21.v, 259_500);
+  assert.equal(sheet.P23.v, 'Ngày… tháng…năm….');
+  assert.equal(sheet.A24.v, 'Giám Đốc Duyệt');
+  assert.equal(sheet.F24.v, 'Kế Toán Trưởng');
+  assert.equal(sheet.P24.v, 'Người lập');
+  for (const range of ['P23:R23', 'A24:C24', 'F24:I24', 'P24:R24']) {
+    const expected = XLSX.utils.decode_range(range);
+    assert.equal(
+      sheet['!merges'].some(
+        (item) => item.s.c === expected.s.c && item.s.r === expected.s.r
+          && item.e.c === expected.e.c && item.e.r === expected.e.r,
+      ),
+      true,
+    );
+  }
   for (const row of [17, 18, 19, 20]) {
     assert.equal(sheet[`D${row}`], undefined);
     assert.equal(

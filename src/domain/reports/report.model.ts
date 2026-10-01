@@ -18,6 +18,7 @@ export interface CarrierVarianceReport {
 	items: Array<{
 		id: number;
 		entryDate: string;
+		employeeName: string;
 		carrier: string;
 		customer: string;
 		provinceCity: string;

@@ -49,7 +49,8 @@ function register(router) {
     const fuelWhere = whereFor('f', period, filter);
     const entrySummary = c.db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(e.transport_fee), 0) AS transport,
-       COALESCE(SUM(e.gate_fee), 0) AS gate, COUNT(DISTINCT e.customer) AS customers
+       COALESCE(SUM(e.gate_fee), 0) AS gate, COALESCE(SUM(e.other_fee), 0) AS other,
+       COUNT(DISTINCT e.customer) AS customers
        FROM entries e WHERE ${entryWhere.sql}`,
     ).get(...entryWhere.params);
     const fuelSummary = c.db.prepare(
@@ -98,28 +99,30 @@ function register(router) {
       : [];
     const daily = new Map();
     for (const row of c.db.prepare(
-      `SELECT e.entry_date AS day, COALESCE(SUM(e.transport_fee), 0) AS transport, COALESCE(SUM(e.gate_fee), 0) AS gate
+      `SELECT e.entry_date AS day, COALESCE(SUM(e.transport_fee), 0) AS transport,
+       COALESCE(SUM(e.gate_fee), 0) AS gate, COALESCE(SUM(e.other_fee), 0) AS other
        FROM entries e WHERE ${entryWhere.sql} GROUP BY e.entry_date`,
     ).all(...entryWhere.params)) {
-      daily.set(row.day, { day: row.day, transport: Number(row.transport), gate: Number(row.gate), fuel: 0 });
+      daily.set(row.day, { day: row.day, transport: Number(row.transport), gate: Number(row.gate), other: Number(row.other), fuel: 0 });
     }
     for (const row of c.db.prepare(
       `SELECT f.entry_date AS day, COALESCE(SUM(f.total_fee), 0) AS fuel
        FROM fuel_records f WHERE ${fuelWhere.sql} GROUP BY f.entry_date`,
     ).all(...fuelWhere.params)) {
-      const current = daily.get(row.day) ?? { day: row.day, transport: 0, gate: 0, fuel: 0 };
+      const current = daily.get(row.day) ?? { day: row.day, transport: 0, gate: 0, other: 0, fuel: 0 };
       current.fuel = Number(row.fuel);
       daily.set(row.day, current);
     }
     const transport = Number(entrySummary.transport);
     const gate = Number(entrySummary.gate);
+    const other = Number(entrySummary.other);
     const fuel = Number(fuelSummary.fuel);
     return {
       scope: canSeeEveryone(c.user) ? 'all' : 'own', period,
       employees: employees.map((row) => ({ id: row.id, name: row.full_name })),
-      summary: { entries: Number(entrySummary.entries), customers: Number(entrySummary.customers), transport, gate, fuel, total: transport + gate + fuel, varianceEntries: Number(variance.entries), varianceAmount: Number(variance.amount) },
+      summary: { entries: Number(entrySummary.entries), customers: Number(entrySummary.customers), transport, gate, other, fuel, total: transport + gate + other + fuel, varianceEntries: Number(variance.entries), varianceAmount: Number(variance.amount) },
       monthlyVariance,
-      daily: [...daily.values()].sort((a, b) => a.day.localeCompare(b.day)).map((row) => ({ ...row, total: row.transport + row.gate + row.fuel })),
+      daily: [...daily.values()].sort((a, b) => a.day.localeCompare(b.day)).map((row) => ({ ...row, total: row.transport + row.gate + row.other + row.fuel })),
     };
   });
 }

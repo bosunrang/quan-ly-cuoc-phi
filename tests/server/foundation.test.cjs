@@ -13,8 +13,10 @@ const assert = require('node:assert/strict');
 const { mkdtempSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
+const XLSX = require('xlsx-js-style');
 
 const { createApp } = require('../../server/index.cjs');
+const { companyFromArgs, databaseFileName } = require('../../server/company-profiles.cjs');
 
 let app;
 let baseUrl;
@@ -23,6 +25,22 @@ let adminToken;
 let staffAToken;
 let staffBToken;
 let staffAEmployeeId;
+
+test('bốn hồ sơ công ty dùng đúng cổng và tệp dữ liệu riêng', () => {
+  const namHungViet = companyFromArgs(['node', 'start.cjs', '--company=nam-hung-viet']);
+  const naviva = companyFromArgs(['node', 'start.cjs', '--company=naviva-group']);
+  const tuongKhue = companyFromArgs(['node', 'start.cjs', '--company=tuong-khue']);
+  const winbio = companyFromArgs(['node', 'start.cjs', '--company=winbio']);
+
+  assert.equal(namHungViet.port, 3100);
+  assert.equal(naviva.port, 3101);
+  assert.equal(tuongKhue.port, 3100);
+  assert.equal(winbio.port, 3100);
+  assert.equal(databaseFileName(namHungViet), 'cost-app.sqlite');
+  assert.equal(databaseFileName(naviva), 'cost-app-naviva-group.sqlite');
+  assert.equal(databaseFileName(tuongKhue), 'cost-app-tuong-khue.sqlite');
+  assert.equal(databaseFileName(winbio), 'cost-app-winbio.sqlite');
+});
 
 /** Gọi API như một máy trạm thật: qua HTTP, kèm token. */
 async function call(method, path, { token, body } = {}) {
@@ -60,6 +78,7 @@ function newEntry(overrides = {}) {
     ticketFee: 10000,
     transportFee: 200000,
     gateFee: 5000,
+		otherFee: 0,
 		note: 'Sản phẩm A',
 		billStatus: 'Có bill',
 		employeeId: staffAEmployeeId,
@@ -568,7 +587,6 @@ describe('danh mục khách hàng', () => {
         customerName: 'Khách hàng tên cũ',
         customerCode,
         carrier: 'Nhà xe giữ nguyên khi import',
-        recipient: 'Người nhận cũ',
       },
     });
     assert.equal(customer.status, 200);
@@ -599,7 +617,6 @@ describe('danh mục khách hàng', () => {
           customerName: 'Khách hàng đã đổi tên',
           customerCode: customerCode.toLowerCase(),
           carrier: '',
-          recipient: 'Người nhận mới',
           address: '30 Đường mới',
         }],
       },
@@ -614,7 +631,7 @@ describe('danh mục khách hàng', () => {
     assert.equal(listed.data.items[0].id, customer.data.id);
     assert.equal(listed.data.items[0].customerName, 'Khách hàng đã đổi tên');
     assert.equal(listed.data.items[0].carrier, carrier.name);
-    assert.equal(listed.data.items[0].recipient, 'Người nhận mới');
+	assert.equal(Object.hasOwn(listed.data.items[0], 'recipient'), false);
 
     const rates = await call(
       'GET',
@@ -657,7 +674,6 @@ describe('danh mục khách hàng', () => {
         customerName: 'Công ty Đầu tư Ánh Dương',
         customerCode: 'KH-ANH-DUONG',
         carrier: 'Nhà xe Minh Phát',
-        recipient: 'Nguyễn Văn An',
         address: 'Quận 7, TP. Hồ Chí Minh',
       },
     });
@@ -679,10 +695,11 @@ describe('danh mục khách hàng', () => {
 
     const updated = await call('PATCH', `/api/customers/${created.data.id}`, {
       token: adminToken,
-      body: { ...created.data, recipient: 'Trần Thị Bình' },
+	  body: { ...created.data, address: 'Quận 1, TP. Hồ Chí Minh' },
     });
     assert.equal(updated.status, 200);
-    assert.equal(updated.data.recipient, 'Trần Thị Bình');
+	assert.equal(updated.data.address, 'Quận 1, TP. Hồ Chí Minh');
+	assert.equal(Object.hasOwn(updated.data, 'recipient'), false);
 
     const duplicate = await call('POST', '/api/customers', {
       token: adminToken,
@@ -1031,6 +1048,7 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
         (item) => item.customer === customer.data.customerName
           && item.carrier === carrier.data.name
           && item.entryDate === '2026-08-01'
+          && item.employeeName === 'Nhân viên A'
           && item.difference === 1
           && item.varianceNote.includes('Điều chỉnh giá giao thực tế'),
       ),
@@ -1043,7 +1061,11 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
       { token: adminToken },
     );
     assert.equal(varianceExport.status, 200);
-    assert.match(varianceExport.data.fileName, /Bao cao chenh lech cuoc nha xe/);
+    assert.match(varianceExport.data.fileName, /Báo cáo chênh lệch cước nhà xe/);
+    const workbook = XLSX.read(Buffer.from(varianceExport.data.contentBase64, 'base64'), { type: 'buffer' });
+    const worksheet = workbook.Sheets['Chênh lệch cước'];
+    assert.equal(worksheet.C4.v, 'Nhân viên');
+    assert.equal(worksheet.C5.v, 'Nhân viên A');
 
     const atStandard = await call('POST', '/api/entries', {
       token: adminToken,
@@ -1263,6 +1285,38 @@ describe('mỗi người chỉ thấy phiếu của mình', () => {
 });
 
 describe('kiểm tra dữ liệu đầu vào', () => {
+	test('lưu và sửa chi phí khác trong tổng tiền phiếu', async () => {
+		const delivery = await configureStaffRate('Đơn vị có chi phí phát sinh');
+		const created = await call('POST', '/api/entries', {
+			token: staffAToken,
+			body: newEntry({
+				entryDate: '2026-09-30',
+				customer: delivery.customer.customerName,
+				carrier: delivery.carrier.name,
+				spec: 'Tất cả',
+				recipient: '',
+				otherFeeName: 'Tiền bốc xếp',
+				otherFee: 12_345,
+			}),
+		});
+		assert.equal(created.status, 200);
+		assert.equal(created.data.otherFeeName, 'Tiền bốc xếp');
+		assert.equal(created.data.otherFee, 12_345);
+		assert.equal(created.data.totalFee, 227_345);
+
+		const updated = await call('PATCH', `/api/entries/${created.data.id}`, {
+			token: staffAToken,
+			body: { ...newEntry({
+				entryDate: '2026-09-30',
+				customer: delivery.customer.customerName,
+				carrier: delivery.carrier.name,
+				spec: 'Tất cả',
+			}), otherFeeName: 'Phí chờ hàng', otherFee: 2_000 },
+		});
+		assert.equal(updated.status, 200);
+		assert.equal(updated.data.totalFee, 217_000);
+	});
+
   test('nhân viên phải giải trình phiếu trùng ngày và khách hàng khi tạo hoặc sửa', async () => {
     const delivery = await configureStaffRate('Đơn vị kiểm tra trùng phiếu');
     const firstInput = newEntry({

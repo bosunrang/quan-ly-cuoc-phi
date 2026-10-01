@@ -55,6 +55,22 @@ const download = ({
 	URL.revokeObjectURL(url);
 };
 
+function summarizeCarrierVariance(items: CarrierVarianceReport["items"]) {
+	return items.reduce(
+		(summary, item) => {
+			if (item.difference > 0) {
+				summary.overEntries += 1;
+				summary.overAmount += item.difference;
+			} else {
+				summary.underEntries += 1;
+				summary.underAmount += Math.abs(item.difference);
+			}
+			return summary;
+		},
+		{ overEntries: 0, overAmount: 0, underEntries: 0, underAmount: 0 },
+	);
+}
+
 export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	const today = todayIso();
 	const [from, setFrom] = useState(() =>
@@ -190,19 +206,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 		b.localeCompare(a),
 	);
 	const carrierSummary = variance
-		? variance.items.reduce(
-				(summary, item) => {
-					if (item.difference > 0) {
-						summary.overEntries += 1;
-						summary.overAmount += item.difference;
-					} else {
-						summary.underEntries += 1;
-						summary.underAmount += Math.abs(item.difference);
-					}
-					return summary;
-				},
-				{ overEntries: 0, overAmount: 0, underEntries: 0, underAmount: 0 },
-			)
+		? summarizeCarrierVariance(variance.items)
 		: null;
 	return (
 		<>
@@ -494,8 +498,8 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 						<div className="table-scroll report-variance-table">
 							<table>
 								<colgroup>
-									<col className="variance-col-index" />
 									<col className="variance-col-date" />
+									<col className="variance-col-employee" />
 									<col className="variance-col-carrier" />
 									<col className="variance-col-customer" />
 									<col className="variance-col-province" />
@@ -507,8 +511,8 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 								</colgroup>
 								<thead>
 									<tr>
-										<th>STT</th>
 										<th>Ngày</th>
+										<th>Nhân viên</th>
 										<th>Nhà xe</th>
 										<th>Khách hàng</th>
 										<th>Tỉnh/TP</th>
@@ -520,12 +524,12 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 									</tr>
 								</thead>
 								<tbody>
-									{variance.items.map((item, index) => (
+									{variance.items.map((item) => (
 										<tr key={item.id}>
-											<td>{index + 1}</td>
 											<td>{formatDate(item.entryDate)}</td>
+											<td>{item.employeeName || "—"}</td>
 											<td>{item.carrier}</td>
-											<td>{item.customer}</td>
+											<td title={item.customer}>{item.customer}</td>
 											<td>{item.provinceCity || "—"}</td>
 											<td>{item.spec}</td>
 											<td>{formatMoney(item.standardFee)} đ</td>

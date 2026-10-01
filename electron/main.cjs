@@ -6,8 +6,8 @@ const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { createApp } = require('../server/index.cjs');
+const { COMPANY_PROFILES } = require('../server/company-profiles.cjs');
 
-const DEFAULT_PORT = 3100;
 const ICON = path.join(__dirname, '..', 'build', 'icon.png');
 const MACHINE_CONFIG_FILE = 'machine-mode.json';
 const USER_DATA_DIRECTORY = 'Quản lý cước phí';
@@ -16,12 +16,36 @@ let mainWindow;
 let tray;
 let origin = '';
 let machine;
+let company;
 let quitting = false;
 let updateCheckStarted = false;
 
-// Cố định tên thư mục dữ liệu theo tên sản phẩm, không phụ thuộc tên package npm.
+// Hồ sơ Nam Hưng Việt giữ nguyên thư mục cũ. Các hồ sơ khác được tách thành
+// thư mục con trước khi khởi động backend, để dữ liệu và cấu hình máy chủ
+// không thể lẫn nhau.
 app.setPath('userData', path.join(app.getPath('appData'), USER_DATA_DIRECTORY));
 app.enableSandbox();
+
+function companyDataDirectory(profile) {
+  const base = path.join(app.getPath('appData'), USER_DATA_DIRECTORY);
+  return profile.usesLegacyDataDirectory
+    ? base
+    : path.join(base, 'profiles', profile.id);
+}
+
+async function chooseCompany() {
+  const selected = await dialog.showMessageBox({
+    type: 'question',
+    title: 'Chọn công ty',
+    message: 'Bạn muốn mở dữ liệu của công ty nào?',
+    detail: 'Mỗi công ty có máy chủ, tài khoản và dữ liệu hoàn toàn riêng.',
+    buttons: [...COMPANY_PROFILES.map((profile) => profile.name), 'Thoát'],
+    defaultId: 0,
+    cancelId: COMPANY_PROFILES.length,
+    noLink: true,
+  });
+  return COMPANY_PROFILES[selected.response] ?? null;
+}
 
 function lanAddresses(port) {
   const addresses = [];
@@ -119,7 +143,7 @@ async function startBackend() {
     dbFile: path.join(app.getPath('userData'), 'data', 'cost-app.sqlite'),
     staticRoot: path.join(__dirname, '..', 'dist'),
   });
-  const address = await backend.listen(DEFAULT_PORT, '0.0.0.0');
+  const address = await backend.listen(company.port, '0.0.0.0');
   origin = `http://127.0.0.1:${address.port}`;
   return address.port;
 }
@@ -221,7 +245,7 @@ function createTray(port) {
   const image = nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 });
   tray = new Tray(image);
   const isHost = machine.role === 'host';
-  tray.setToolTip(`Quản lý cước phí — ${isHost ? 'máy chủ đang chạy' : 'máy trạm đang kết nối'}`);
+  tray.setToolTip(`${company.name} — ${isHost ? 'máy chủ đang chạy' : 'máy trạm đang kết nối'}`);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Mở ứng dụng', click: showWindow },
     ...(isHost ? [{
@@ -248,6 +272,12 @@ function announceFirstRun(port) {
 
 app.whenReady().then(async () => {
   try {
+    company = await chooseCompany();
+    if (!company) return app.quit();
+    const companyDataDirectoryPath = companyDataDirectory(company);
+    mkdirSync(companyDataDirectoryPath, { recursive: true });
+    app.setPath('userData', companyDataDirectoryPath);
+    if (!app.requestSingleInstanceLock()) return app.quit();
     machine = readMachineConfig() ?? await chooseMachine();
     if (!machine) return app.quit();
     saveMachineConfig(machine);
@@ -262,7 +292,7 @@ app.whenReady().then(async () => {
     ipcMain.handle('app:addresses', () => machine.role === 'host' ? lanAddresses(port) : []);
   } catch (error) {
     const busy = error?.code === 'EADDRINUSE';
-    dialog.showErrorBox('Không khởi động được', busy ? `Cổng ${DEFAULT_PORT} đang bị chương trình khác chiếm. Hãy đóng chương trình đó rồi mở lại.` : String(error?.message ?? error));
+    dialog.showErrorBox('Không khởi động được', busy ? `Cổng ${company?.port ?? ''} đang bị chương trình khác chiếm. Hãy đóng chương trình đó rồi mở lại.` : String(error?.message ?? error));
     app.exit(1);
   }
 });
@@ -278,5 +308,3 @@ app.on('will-quit', async (event) => {
   app.exit(0);
 });
 app.on('web-contents-created', (_event, contents) => contents.on('will-attach-webview', (event) => event.preventDefault()));
-
-if (!app.requestSingleInstanceLock()) app.exit(0);

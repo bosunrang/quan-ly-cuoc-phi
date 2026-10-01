@@ -23,14 +23,15 @@ npm install
 Mở hai terminal:
 
 ```bash
-npm run server
+npm run server:dev
 ```
 
-Lệnh phát triển này tự đăng nhập bằng tài khoản Admin để làm giao diện nhanh.
-Muốn kiểm tra đầy đủ màn đăng nhập và phân quyền, chạy chế độ bảo mật:
+Lệnh phát triển này chỉ lắng nghe trên máy cục bộ và tự đăng nhập bằng tài khoản
+Admin để làm giao diện nhanh. Muốn kiểm tra đầy đủ màn đăng nhập và phân quyền,
+chạy server mặc định ở chế độ bảo mật:
 
 ```bash
-npm run server:secure
+npm run server
 ```
 
 ```bash
@@ -60,7 +61,7 @@ Khi phát triển, chạy PowerShell ở thư mục dự án:
 
 ```powershell
 $env:VIETMAP_API_KEY = "key-cua-ban"
-npm run server
+npm run server:dev
 ```
 
 Với bản Electron đã cài, đặt biến môi trường Windows một lần trên máy chủ,
@@ -137,5 +138,18 @@ Lưu ý vận hành:
 - **Sao lưu**: copy file `cost-app.sqlite` trong thư mục dữ liệu của ứng dụng.
   Copy cả file `-wal` nếu có.
 - Chỉ dùng trong mạng nội bộ. Không mở cổng này ra Internet.
+
+### Nhiều công ty trên cùng hệ thống
+
+Khi mở app desktop, chọn đúng công ty trước khi đăng nhập. Mỗi lựa chọn dùng
+database và cấu hình máy chủ riêng:
+
+- **Nam Hưng Việt**: giữ dữ liệu hiện có, cổng 3100.
+- **NAVIVA GROUP**: cổng 3101 khi chạy cùng máy với Nam Hưng Việt.
+- **Tường Khuê** và **Winbio**: cổng 3100 trên máy chủ riêng của từng miền.
+
+Các máy trạm chỉ cần chọn công ty tương ứng rồi nhập địa chỉ máy chủ của công
+ty đó ở lần kết nối đầu tiên. Cập nhật ứng dụng chỉ đổi mã chương trình; không
+trộn các database công ty.
 
 Xem [ARCHITECTURE.md](ARCHITECTURE.md) trước khi thêm màn hình mới.

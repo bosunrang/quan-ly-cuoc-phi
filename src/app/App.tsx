@@ -154,11 +154,7 @@ export function App() {
 				/>
 				<ConnectionBanner />
 				<div className="page-content">
-					<div
-						className={`page-stack${page === "fuel" ? " fuel-page-stack" : ""}`}
-					>
-						{content}
-					</div>
+					<div className="page-stack">{content}</div>
 				</div>
 			</div>
 		</div>

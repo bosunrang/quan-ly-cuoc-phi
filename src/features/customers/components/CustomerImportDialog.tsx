@@ -75,7 +75,6 @@ export function CustomerImportDialog({
 							<th>Mã khách hàng</th>
 							<th>Tên khách hàng</th>
 							<th>Nhà xe liên kết</th>
-							<th>Người nhận</th>
 							<th>Địa chỉ</th>
 							<th>Trạng thái</th>
 						</tr>
@@ -90,7 +89,6 @@ export function CustomerImportDialog({
 									{row.reason && <small>{row.reason}</small>}
 								</td>
 								<td>{row.carrier || "—"}</td>
-								<td>{row.recipient || "—"}</td>
 								<td>{row.address || "—"}</td>
 								<td>
 									<span className={`customer-import-status is-${row.status}`}>

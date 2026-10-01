@@ -191,11 +191,10 @@ function toApi(row, assignedCustomerIds = []) {
 function toCustomerApi(row) {
   return {
     id: row.id,
-    customerName: row.customer_name,
-    customerCode: row.customer_code,
-    carrier: row.carrier,
-    recipient: row.recipient,
-    address: row.address,
+		customerName: row.customer_name,
+		customerCode: row.customer_code,
+		carrier: row.carrier,
+		address: row.address,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

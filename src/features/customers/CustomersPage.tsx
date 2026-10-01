@@ -3,7 +3,6 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	MapPinned,
-	PackageCheck,
 	Pencil,
 	Plus,
 	Search,
@@ -171,7 +170,10 @@ export function CustomersPage() {
 				<LoadingState />
 			) : (
 				<>
-					<section className="stat-overview" aria-label="Tổng quan khách hàng">
+					<section
+						className="stat-overview customer-stat-overview"
+						aria-label="Tổng quan khách hàng"
+					>
 						<article>
 							<div className="stat-icon neutral">
 								<Building2 size={18} />
@@ -185,13 +187,6 @@ export function CustomersPage() {
 							</div>
 							<span>Nhà xe liên kết</span>
 							<strong>{data.carrierCount}</strong>
-						</article>
-						<article>
-							<div className="stat-icon info">
-								<PackageCheck size={18} />
-							</div>
-							<span>Người nhận</span>
-							<strong>{data.recipientCount}</strong>
 						</article>
 						<article>
 							<div className="stat-icon warning">
@@ -210,7 +205,7 @@ export function CustomersPage() {
 									<Search size={16} />
 									<input
 										value={searchInput}
-										placeholder="Nhập tên, nhà xe, người nhận..."
+										placeholder="Nhập tên, mã khách hàng, nhà xe..."
 										onChange={(event) => setSearchInput(event.target.value)}
 									/>
 								</div>
@@ -236,7 +231,6 @@ export function CustomersPage() {
 											<th className="customer-code">Mã khách hàng</th>
 											<th>Tên khách hàng</th>
 											<th>Nhà xe</th>
-											<th>Người nhận</th>
 											<th>Địa chỉ giao hàng</th>
 											<th className="customer-actions">Thao tác</th>
 										</tr>
@@ -254,7 +248,6 @@ export function CustomersPage() {
 													<strong>{customer.customerName}</strong>
 												</td>
 												<td>{customer.carrier || "—"}</td>
-												<td>{customer.recipient || "—"}</td>
 												<td className="customer-address">
 													{customer.address || "—"}
 												</td>

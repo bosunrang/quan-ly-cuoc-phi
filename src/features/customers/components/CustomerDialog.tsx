@@ -73,17 +73,6 @@ export function CustomerDialog({
 						/>
 					)}
 				</Field>
-				<Field label="Người nhận">
-					{(id) => (
-						<input
-							id={id}
-							type="text"
-							value={form.recipient}
-							onChange={setText("recipient")}
-							placeholder="Họ và tên người nhận"
-						/>
-					)}
-				</Field>
 			</FieldGrid>
 			<Field label="Địa chỉ giao hàng">
 				{(id) => (

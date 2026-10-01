@@ -10,7 +10,6 @@ import type {
 	MisaOrder,
 } from "../../../domain/entries/entry.model";
 import {
-	defaultEntryRecipient,
 	entryCarrierOptions,
 	entryRateOptions,
 	validateEntry,
@@ -140,7 +139,6 @@ export function EntryDialog({
 	const productTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const [carrierId, setCarrierId] = useState<number | null>(null);
 	const [carrierPickerOpen, setCarrierPickerOpen] = useState(false);
-	const [recipientOptionsOpen, setRecipientOptionsOpen] = useState(false);
 	const [rateOptionsOpen, setRateOptionsOpen] = useState(false);
 	const [context, setContext] = useState<EntryCustomerContext | null>(null);
 	const [orders, setOrders] = useState<MisaOrder[]>([]);
@@ -148,6 +146,9 @@ export function EntryDialog({
 	const [rate, setRate] = useState<EntryRate | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [showFieldErrors, setShowFieldErrors] = useState(false);
+	const [otherFeeActive, setOtherFeeActive] = useState(
+		Boolean(initial.otherFee || initial.otherFeeName),
+	);
 	const [duplicateDetected, setDuplicateDetected] = useState(
 		Boolean(initial.duplicateReason),
 	);
@@ -247,8 +248,6 @@ export function EntryDialog({
 	}, [carrierOptions, deferredCarrierSearch]);
 	const linkedCarriers = matchingCarriers.filter((carrier) => carrier.isLinked);
 	const otherCarriers = matchingCarriers.filter((carrier) => !carrier.isLinked);
-	const recipientOptions =
-		(context?.recipients.length ?? 0) >= 2 ? (context?.recipients ?? []) : [];
 	const rateOptions = useMemo(() => entryRateOptions(rates), [rates]);
 	const matchingRateOptions = useMemo(() => {
 		const query = normalizeCustomerSearch(deferredRateSearch.trim());
@@ -358,7 +357,7 @@ export function EntryDialog({
 			setForm((current) => ({
 				...current,
 				customer: next.customer.name,
-				recipient: defaultEntryRecipient(next.recipients),
+				recipient: "",
 				address: next.customer.address,
 			}));
 			if (next.defaultCarrierId)
@@ -796,51 +795,6 @@ export function EntryDialog({
 					}
 				</Field>
 				<Field
-					label="Người nhận *"
-					error={fieldError(
-						!form.recipient.trim(),
-						"Vui lòng nhập người nhận.",
-					)}
-				>
-					{(id) => (
-						<div className="entry-delivery-picker">
-							<input
-								id={id}
-								value={form.recipient}
-								placeholder="Nhập hoặc chọn người nhận"
-								onFocus={() => setRecipientOptionsOpen(true)}
-								onBlur={() =>
-									window.setTimeout(() => setRecipientOptionsOpen(false), 120)
-								}
-								onChange={(event) =>
-									setForm((current) => ({
-										...current,
-										recipient: event.target.value,
-									}))
-								}
-							/>
-							{recipientOptionsOpen && recipientOptions.length ? (
-								<div className="entry-delivery-options" role="listbox">
-									{recipientOptions.map((recipient) => (
-										<button
-											key={recipient}
-											type="button"
-											role="option"
-											onMouseDown={(event) => event.preventDefault()}
-											onClick={() => {
-												setForm((current) => ({ ...current, recipient }));
-												setRecipientOptionsOpen(false);
-											}}
-										>
-											{recipient}
-										</button>
-									))}
-								</div>
-							) : null}
-						</div>
-					)}
-				</Field>
-				<Field
 					label="Quy cách *"
 					error={fieldError(!form.spec.trim(), "Vui lòng chọn quy cách.")}
 				>
@@ -987,7 +941,49 @@ export function EntryDialog({
 						/>
 					)}
 				</Field>
+				<Field
+					label="Chi phí khác"
+					error={fieldError(
+						Boolean(form.otherFeeName.trim()) && form.otherFee === 0,
+						"Vui lòng nhập số tiền chi phí khác.",
+					)}
+				>
+					{(id) => (
+						<MoneyInput
+							id={id}
+							value={form.otherFee}
+							placeholder="Để trống nếu không có chi phí"
+							onFocus={() => setOtherFeeActive(true)}
+							onValueChange={(otherFee) =>
+								setForm((current) => ({ ...current, otherFee }))
+							}
+						/>
+					)}
+				</Field>
 			</FieldGrid>
+			{otherFeeActive && (
+				<Field
+					label="Tên chi phí khác"
+					error={fieldError(
+						form.otherFee > 0 && !form.otherFeeName.trim(),
+						"Vui lòng nhập tên chi phí khác.",
+					)}
+				>
+					{(id) => (
+						<input
+							id={id}
+							value={form.otherFeeName}
+							placeholder="Ví dụ: Tiền ăn, gửi xe, Grab..."
+							onChange={(event) =>
+								setForm((current) => ({
+									...current,
+									otherFeeName: event.target.value,
+								}))
+							}
+						/>
+					)}
+				</Field>
+			)}
 			{transportOverRate && (
 				<div className="entry-rate-warning">
 					<AlertCircle size={17} />

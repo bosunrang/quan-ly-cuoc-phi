@@ -181,7 +181,7 @@ export function CarriersPage() {
 		if (!keyword) return assignedCustomers;
 		return assignedCustomers.filter((customer) =>
 			normalizeText(
-				`${customer.customerName} ${customer.customerCode} ${customer.recipient} ${customer.address}`,
+				`${customer.customerName} ${customer.customerCode} ${customer.address}`,
 			).includes(keyword),
 		);
 	}, [assignedCustomers, assignedQuery]);

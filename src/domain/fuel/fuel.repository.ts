@@ -34,6 +34,7 @@ export interface FuelData {
 		region: string;
 		fuelPrice: number;
 		totalFee: number;
+		extraCosts: Array<{ name: string; amount: number; legIndex?: number }>;
 		status: "active" | "voided";
 		voidReason: string;
 		finalizedAt: string | null;

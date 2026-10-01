@@ -149,7 +149,6 @@ export function CarrierCustomerRatesDialog({
 										<th className="rate-center">Cước vận chuyển</th>
 										<th className="rate-center">Phí vào cổng</th>
 										<th className="numeric">Tổng chuẩn</th>
-										<th className="rate-center">Ghi chú</th>
 										<th aria-label="Thao tác" />
 									</tr>
 								</thead>
@@ -168,7 +167,6 @@ export function CarrierCustomerRatesDialog({
 											<td className="numeric strong-number">
 												{formatMoney(rate.transportFee + rate.gateFee)} đ
 											</td>
-											<td className="rate-center">{rate.note || "—"}</td>
 											<td>
 												<div className="inline-actions">
 													<button
@@ -280,16 +278,6 @@ export function CarrierCustomerRatesDialog({
 							<input value={`${formatMoney(total)} đ`} disabled />
 						</label>
 					</div>
-					<label className="carrier-rate-note">
-						Ghi chú
-						<input
-							value={form.note}
-							onChange={(event) =>
-								setForm((current) => ({ ...current, note: event.target.value }))
-							}
-							placeholder="Ví dụ: Ra nhận"
-						/>
-					</label>
 				</section>
 			</Dialog>
 			{removing && (

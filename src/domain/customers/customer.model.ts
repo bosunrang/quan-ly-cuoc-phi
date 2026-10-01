@@ -3,7 +3,6 @@ export interface Customer {
 	customerName: string;
 	customerCode: string;
 	carrier: string;
-	recipient: string;
 	address: string;
 	createdAt: string;
 	updatedAt: string;
@@ -13,7 +12,6 @@ export interface CustomerInput {
 	customerName: string;
 	customerCode: string;
 	carrier: string;
-	recipient: string;
 	address: string;
 }
 
@@ -35,7 +33,6 @@ export interface CustomerListResult {
 	count: number;
 	resultCount: number;
 	carrierCount: number;
-	recipientCount: number;
 	addressCount: number;
 	page: number;
 	pageSize: number;
@@ -46,7 +43,6 @@ export const emptyCustomerInput = (): CustomerInput => ({
 	customerName: "",
 	customerCode: "",
 	carrier: "",
-	recipient: "",
 	address: "",
 });
 
@@ -55,7 +51,6 @@ export function toCustomerInput(customer: Customer): CustomerInput {
 		customerName: customer.customerName,
 		customerCode: customer.customerCode,
 		carrier: customer.carrier,
-		recipient: customer.recipient,
 		address: customer.address,
 	};
 }

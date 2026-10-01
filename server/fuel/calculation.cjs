@@ -11,6 +11,7 @@ const FUEL_TYPES = [
 const FUEL_REGIONS = new Set(['region1', 'region2']);
 const VEHICLE_TYPES = new Set(['motorcycle', 'truck']);
 const MAX_ROUTE_LEGS = 50;
+const MAX_EXTRA_COSTS = 20;
 
 const cleanText = (value, max = 100) => String(value ?? '').trim().slice(0, max);
 
@@ -82,6 +83,23 @@ function fuelRecordInput(body) {
     : nonNegativeNumber(body.distanceKm, 'Quãng đường');
   if (!distanceKm) throw badRequest('Vui lòng nhập quãng đường.');
 
+  const rawExtraCosts = Array.isArray(body.extraCosts) ? body.extraCosts : [];
+  if (rawExtraCosts.length > MAX_EXTRA_COSTS) {
+    throw badRequest(`Chỉ hỗ trợ tối đa ${MAX_EXTRA_COSTS} chi phí khác.`);
+  }
+  const extraCosts = rawExtraCosts.map((item) => {
+    const name = cleanText(item?.name, 200);
+    const amount = nonNegativeNumber(item?.amount, 'Số tiền chi phí khác', true);
+    const legIndex = Number(item?.legIndex);
+    if (!name || amount <= 0) {
+      throw badRequest('Mỗi chi phí khác cần có tên và số tiền lớn hơn 0.');
+    }
+    if (item?.legIndex !== undefined && (!Number.isInteger(legIndex) || legIndex < 0 || legIndex >= legs.length)) {
+      throw badRequest('Chặng của chi phí khác không hợp lệ.');
+    }
+    return item?.legIndex === undefined ? { name, amount } : { name, amount, legIndex };
+  });
+
   const region = cleanText(body.region);
   const vehicleType = cleanText(body.vehicleType, 20);
   if (vehicleType && !VEHICLE_TYPES.has(vehicleType)) {
@@ -94,6 +112,7 @@ function fuelRecordInput(body) {
     consumptionBaseKm,
     legs,
     distanceKm,
+	  extraCosts,
     fuelPrice: nonNegativeNumber(body.fuelPrice, 'Giá xăng', true),
     fuelType: cleanText(body.fuelType) || FUEL_TYPES[0],
     region: FUEL_REGIONS.has(region) ? region : 'region1',
@@ -102,10 +121,11 @@ function fuelRecordInput(body) {
 }
 
 function calculateFuelTotal(input) {
-  return Math.round(
+  const fuelFee = Math.round(
     (input.distanceKm * input.consumptionLiters * input.fuelPrice) /
       input.consumptionBaseKm,
   );
+  return fuelFee + (input.extraCosts ?? []).reduce((sum, item) => sum + item.amount, 0);
 }
 
 function toFuelPrice(row) {

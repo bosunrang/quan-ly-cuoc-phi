@@ -1,12 +1,4 @@
-import {
-	Clock3,
-	MapPin,
-	Pencil,
-	Phone,
-	Trash2,
-	Truck,
-	UserRound,
-} from "lucide-react";
+import { MapPin, Pencil, Phone, Trash2, Truck, UserRound } from "lucide-react";
 import type { Carrier } from "../../../domain/carriers/carrier.model";
 import { Dialog } from "../../../shared/ui/Dialog";
 import { StatusPill } from "../../../shared/ui/StatusPill";
@@ -65,11 +57,6 @@ export function CarrierDetailDialog({
 					<Phone size={16} />
 					<span>Điện thoại</span>
 					<strong>{carrier.phone || "Chưa cập nhật"}</strong>
-				</div>
-				<div>
-					<Clock3 size={16} />
-					<span>Giờ xe chạy</span>
-					<strong>{carrier.schedule || "Chưa cập nhật"}</strong>
 				</div>
 				<div>
 					<MapPin size={16} />

@@ -13,6 +13,7 @@ export interface DashboardData {
 		customers: number;
 		transport: number;
 		gate: number;
+		other: number;
 		fuel: number;
 		total: number;
 		varianceEntries: number;
@@ -22,6 +23,7 @@ export interface DashboardData {
 		day: string;
 		transport: number;
 		gate: number;
+		other: number;
 		fuel: number;
 		total: number;
 	}>;

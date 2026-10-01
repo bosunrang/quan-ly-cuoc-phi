@@ -43,6 +43,15 @@ function currentEmployee(db, user, isAdmin) {
     .get(user.id);
 }
 
+function extraCosts(value) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function listFuelData(db, user, isAdmin, query, fuelTypes) {
   const employee = currentEmployee(db, user, isAdmin);
   const employees = isAdmin
@@ -148,6 +157,7 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
       region: item.region,
       fuelPrice: item.fuel_price,
       totalFee: item.total_fee,
+	  extraCosts: extraCosts(item.extra_costs),
       status: item.status,
       voidReason: item.void_reason,
       finalizedAt: item.finalized_at,
@@ -173,8 +183,8 @@ function saveFuelRecord(db, user, input, employeeId, id = null) {
           `INSERT INTO fuel_records
            (entry_date, period_from, period_to, employee_id, distance_km,
             consumption_liters, consumption_base_km, fuel_type, region,
-            vehicle_type, fuel_price, total_fee, created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            vehicle_type, fuel_price, total_fee, extra_costs, created_by, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.periodTo,
@@ -189,6 +199,7 @@ function saveFuelRecord(db, user, input, employeeId, id = null) {
           input.vehicleType,
           input.fuelPrice,
           totalFee,
+		  JSON.stringify(input.extraCosts),
           user.id,
           at,
           at,
@@ -200,7 +211,7 @@ function saveFuelRecord(db, user, input, employeeId, id = null) {
           `UPDATE fuel_records SET
            entry_date = ?, period_from = ?, period_to = ?, employee_id = ?,
            distance_km = ?, consumption_liters = ?, consumption_base_km = ?,
-           fuel_type = ?, region = ?, vehicle_type = ?, fuel_price = ?, total_fee = ?, updated_at = ?
+           fuel_type = ?, region = ?, vehicle_type = ?, fuel_price = ?, total_fee = ?, extra_costs = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
@@ -216,6 +227,7 @@ function saveFuelRecord(db, user, input, employeeId, id = null) {
           input.vehicleType,
           input.fuelPrice,
           totalFee,
+		  JSON.stringify(input.extraCosts),
           at,
           recordId,
         );

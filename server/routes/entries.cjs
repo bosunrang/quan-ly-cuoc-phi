@@ -48,19 +48,29 @@ function readEntryInput(body) {
     throw badRequest('Ngày chứng từ MISA không hợp lệ.');
   }
   const transportFee = money(body.transportFee, 'Cước vận chuyển');
+  const otherFee = money(body.otherFee, 'Chi phí khác');
+  const otherFeeName = text(body.otherFeeName, 'tên chi phí khác', { max: 200 });
   if (transportFee === 0) {
     throw badRequest('Vui lòng nhập cước vận chuyển lớn hơn 0.');
+  }
+  if (otherFee > 0 && !otherFeeName) {
+    throw badRequest('Vui lòng nhập tên chi phí khác.');
+  }
+  if (otherFeeName && otherFee === 0) {
+    throw badRequest('Vui lòng nhập số tiền chi phí khác.');
   }
   return {
     entryDate,
     customer: text(body.customer, 'tên khách hàng', { required: true }),
     carrier: text(body.carrier, 'nhà xe', { required: true }),
-    recipient: text(body.recipient, 'người nhận', { required: true }),
+    recipient: text(body.recipient, 'người nhận'),
     address: text(body.address, 'địa chỉ', { max: 400 }),
     spec: text(body.spec, 'quy cách', { required: true }),
     ticketFee: money(body.ticketFee, 'Phí vé'),
     transportFee,
     gateFee: money(body.gateFee, 'Phí cổng'),
+    otherFeeName,
+    otherFee,
     note: text(body.note, 'sản phẩm', { max: 1000, required: true }),
     rateVarianceNote: text(body.rateVarianceNote, 'lý do chênh lệch cước', { max: 1000 }),
     duplicateReason: text(body.duplicateReason, 'lý do nhập trùng', { max: 1000 }),
@@ -316,7 +326,9 @@ function toApi(row) {
       ? null
       : Number(row.standard_transport_fee),
     gateFee: row.gate_fee,
-    totalFee: row.total_fee,
+    otherFeeName: row.other_fee_name,
+    otherFee: row.other_fee,
+    totalFee: Number(row.total_fee) + Number(row.other_fee),
     note: row.note,
     rateVarianceNote: row.rate_variance_note,
     duplicateReason: row.duplicate_reason,
@@ -426,7 +438,7 @@ function register(router) {
 
     const summary = c.db
       .prepare(
-        `SELECT COUNT(*) AS count, COALESCE(SUM(e.total_fee), 0) AS total
+        `SELECT COUNT(*) AS count, COALESCE(SUM(e.total_fee + e.other_fee), 0) AS total
            FROM entries e WHERE ${clause}`,
       )
       .get(...params);
@@ -628,9 +640,9 @@ function register(router) {
         .prepare(
           `INSERT INTO entries
              (entry_date, customer, carrier, recipient, address, spec,
-              ticket_fee, transport_fee, gate_fee, note, rate_variance_note, duplicate_reason, bill_status, misa_document_date, misa_document_code, employee_id,
+              ticket_fee, transport_fee, gate_fee, other_fee_name, other_fee, note, rate_variance_note, duplicate_reason, bill_status, misa_document_date, misa_document_code, employee_id,
               created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.entryDate,
@@ -642,6 +654,8 @@ function register(router) {
           input.ticketFee,
           input.transportFee,
           input.gateFee,
+          input.otherFeeName,
+          input.otherFee,
           input.note,
           input.rateVarianceNote,
           input.duplicateReason,
@@ -685,7 +699,7 @@ function register(router) {
           `UPDATE entries SET
              entry_date = ?, customer = ?, carrier = ?, recipient = ?,
              address = ?, spec = ?, ticket_fee = ?, transport_fee = ?,
-             gate_fee = ?, note = ?, rate_variance_note = ?, duplicate_reason = ?, bill_status = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?, updated_at = ?
+             gate_fee = ?, other_fee_name = ?, other_fee = ?, note = ?, rate_variance_note = ?, duplicate_reason = ?, bill_status = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
@@ -698,6 +712,8 @@ function register(router) {
           input.ticketFee,
           input.transportFee,
           input.gateFee,
+          input.otherFeeName,
+          input.otherFee,
           input.note,
           input.rateVarianceNote,
           input.duplicateReason,

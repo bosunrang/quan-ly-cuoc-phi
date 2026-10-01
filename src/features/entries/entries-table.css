@@ -9,9 +9,7 @@
 .entry-list-table th:nth-child(7),
 .entry-list-table td:nth-child(7),
 .entry-list-table th:nth-child(8),
-.entry-list-table td:nth-child(8),
-.entry-list-table.is-admin th:nth-child(9),
-.entry-list-table.is-admin td:nth-child(9) {
+.entry-list-table td:nth-child(8) {
 	text-align: center;
 }
 

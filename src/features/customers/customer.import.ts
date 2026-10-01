@@ -43,7 +43,6 @@ export async function parseCustomerWorkbook(
 	]);
 	const customerCode = indexOf(headers, ["ma khach hang", "ma kh", "ma khach"]);
 	const carrier = indexOf(headers, ["nha xe lien ket", "nha xe", "chanh xe"]);
-	const recipient = indexOf(headers, ["nguoi nhan", "ten nguoi nhan"]);
 	const address = indexOf(headers, ["dia chi", "dia chi giao hang"]);
 	if (customerName < 0)
 		throw new Error("Không tìm thấy cột “Tên khách hàng” trong file.");
@@ -65,7 +64,6 @@ export async function parseCustomerWorkbook(
 			customerName: clean(row[customerName]),
 			customerCode: customerCode < 0 ? "" : clean(row[customerCode]),
 			carrier: carrier < 0 ? "" : clean(row[carrier]),
-			recipient: recipient < 0 ? "" : clean(row[recipient]),
 			address: address < 0 ? "" : clean(row[address]),
 		};
 		const rowNumber = index + 2;

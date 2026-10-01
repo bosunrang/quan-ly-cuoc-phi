@@ -54,6 +54,8 @@ const detailLabels: Record<string, string> = {
 	ticketFee: "Phí cước",
 	transportFee: "Cước vận chuyển",
 	gateFee: "Phí vào cổng",
+	otherFeeName: "Tên chi phí khác",
+	otherFee: "Chi phí khác",
 	standardTransportFee: "Cước thiết lập",
 	rateVarianceNote: "Ghi chú chênh lệch cước",
 	duplicateReason: "Lý do nhập trùng",
@@ -269,13 +271,25 @@ function auditTimeParts(value: string): { time: string; date: string } {
 	return { time, date };
 }
 
-function AuditTime({ value }: { value: string }) {
+function AuditTime({ id, value }: { id: number; value: string }) {
 	const { time, date } = auditTimeParts(value);
 	return (
 		<time dateTime={value}>
-			<strong>{time}</strong>
-			<span>{date}</span>
+			<span className="audit-record-id">#{id}</span>
+			<strong>
+				{time} {date}
+			</strong>
 		</time>
+	);
+}
+
+function AuditUser({ username }: { username: string }) {
+	const name = username || "Hệ thống";
+	return (
+		<div className="audit-user-content">
+			<strong>{name}</strong>
+			{username && <span>Tài khoản · @{username}</span>}
+		</div>
 	);
 }
 
@@ -439,11 +453,18 @@ export function AuditPage({ isAdmin }: { isAdmin: boolean }) {
 					<>
 						<div className="table-scroll large-table audit-table">
 							<table>
+								<colgroup>
+									<col className="audit-col-time" />
+									<col className="audit-col-user" />
+									<col className="audit-col-action" />
+									<col className="audit-col-entity" />
+									<col className="audit-col-detail" />
+								</colgroup>
 								<thead>
 									<tr>
-										<th>Thời điểm</th>
-										<th>Người thực hiện</th>
-										<th>Hoạt động</th>
+										<th>Thời gian</th>
+										<th>Người dùng</th>
+										<th>Hành động</th>
 										<th>Đối tượng</th>
 										<th>Chi tiết</th>
 									</tr>
@@ -452,13 +473,17 @@ export function AuditPage({ isAdmin }: { isAdmin: boolean }) {
 									{items.map((row) => (
 										<tr key={row.id}>
 											<td className="audit-time">
-												<AuditTime value={row.at} />
+												<AuditTime id={row.id} value={row.at} />
 											</td>
 											<td className="audit-user">
-												<strong>{row.username || "Hệ thống"}</strong>
+												<AuditUser username={row.username} />
 											</td>
 											<td>
-												<StatusPill tone={actionTone(row.action)}>
+												<StatusPill
+													tone={actionTone(row.action)}
+													className="audit-action-pill"
+													title={actionLabel(row.action)}
+												>
 													{actionLabel(row.action)}
 												</StatusPill>
 											</td>

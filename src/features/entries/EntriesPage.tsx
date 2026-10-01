@@ -233,15 +233,24 @@ export function EntriesPage() {
 								<thead>
 									<tr>
 										<th>Ngày gửi</th>
-										<th>Tên khách hàng</th>
-										<th>Nhà xe</th>
-										<th>Người nhận</th>
+										{isAdmin && <th>Nhân viên</th>}
+										{isAdmin ? (
+											<>
+												<th>Nhà xe</th>
+												<th>Tên khách hàng</th>
+											</>
+										) : (
+											<>
+												<th>Tên khách hàng</th>
+												<th>Nhà xe</th>
+											</>
+										)}
+										<th className="entry-note-heading">Sản phẩm</th>
 										<th>Quy cách</th>
 										<th>Bill</th>
 										<th>Cước phí</th>
 										<th>Phí vào cổng</th>
-										{isAdmin && <th>Nhân viên</th>}
-										<th className="entry-note-heading">Sản phẩm</th>
+										<th>Chi phí khác</th>
 										<th>Thao tác</th>
 									</tr>
 								</thead>
@@ -261,11 +270,23 @@ export function EntriesPage() {
 										return (
 											<tr key={entry.id}>
 												<td>{formatDate(entry.entryDate)}</td>
-												<td>
-													<strong>{entry.customer}</strong>
-												</td>
-												<td>{entry.carrier}</td>
-												<td>{entry.recipient || "—"}</td>
+												{isAdmin && <td>{entry.employeeName || "Chưa gán"}</td>}
+												{isAdmin ? (
+													<>
+														<td>{entry.carrier}</td>
+														<td>
+															<strong>{entry.customer}</strong>
+														</td>
+													</>
+												) : (
+													<>
+														<td>
+															<strong>{entry.customer}</strong>
+														</td>
+														<td>{entry.carrier}</td>
+													</>
+												)}
+												<td className="entry-note-cell">{entry.note || "—"}</td>
 												<td>{entry.spec || "—"}</td>
 												<td>
 													{entry.billStatus ? (
@@ -288,8 +309,18 @@ export function EntriesPage() {
 												<td className="entry-money">
 													{entry.gateFee ? formatMoney(entry.gateFee) : "—"}
 												</td>
-												{isAdmin && <td>{entry.employeeName || "Chưa gán"}</td>}
-												<td className="entry-note-cell">{entry.note || "—"}</td>
+												<td className="entry-money">
+													{entry.otherFee ? (
+														<span className="entry-other-cost">
+															<small>
+																{entry.otherFeeName || "Chi phí khác"}
+															</small>
+															{formatMoney(entry.otherFee)}
+														</span>
+													) : (
+														"—"
+													)}
+												</td>
 												<td>
 													<div className="entry-row-actions">
 														<button

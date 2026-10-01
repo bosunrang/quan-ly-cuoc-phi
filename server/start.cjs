@@ -9,25 +9,27 @@
 
 const { join } = require('node:path');
 const { createApp } = require('./index.cjs');
+const { companyFromArgs, databaseFileName } = require('./company-profiles.cjs');
 
-const PORT = Number(process.env.PORT) || 3100;
+const COMPANY = companyFromArgs();
+const PORT = Number(process.env.PORT) || COMPANY.port;
 const API_ONLY = process.argv.includes('--api-only');
 const LOOPBACK_ONLY = process.argv.includes('--loopback');
 const HOST = LOOPBACK_ONLY ? '127.0.0.1' : process.env.HOST || '0.0.0.0';
 const ROOT = join(__dirname, '..');
-const ALLOW_DEV_LOGIN =
-  process.argv.includes('--dev-bypass-login') ||
-  process.env.DEV_BYPASS_LOGIN === '1';
+// Tự đăng nhập chỉ được bật bằng lệnh phát triển tường minh. Không đọc biến môi
+// trường để tránh một cấu hình cũ vô tình làm server vận hành mất xác thực.
+const ALLOW_DEV_LOGIN = process.argv.includes('--dev-bypass-login');
 
 async function main() {
   const app = createApp({
-    dbFile: process.env.DB_FILE || join(ROOT, 'data', 'cost-app.sqlite'),
+    dbFile: process.env.DB_FILE || join(ROOT, 'data', databaseFileName(COMPANY)),
     staticRoot: API_ONLY ? null : join(ROOT, 'dist'),
     allowDevLogin: ALLOW_DEV_LOGIN,
   });
 
   await app.listen(PORT, HOST);
-	console.log(`Server đang chạy tại http://localhost:${PORT}`);
+	console.log(`${COMPANY.name}: server đang chạy tại http://localhost:${PORT}`);
 	if (API_ONLY) console.log('Chế độ API nội bộ: giao diện chỉ chạy qua Vite.');
 
 	if (ALLOW_DEV_LOGIN) {

@@ -21,9 +21,17 @@ import { formatDate, formatMoney, todayIso } from "../../shared/lib/format";
 import { Alert } from "../../shared/ui/Alert";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
 import { Dialog } from "../../shared/ui/Dialog";
+import { MoneyInput } from "../../shared/ui/MoneyInput";
 import { LoadingState } from "../../shared/ui/Panel";
 
-type Leg = { id: string; destination: string; km: string; source?: string };
+type ExtraCost = { id: string; name: string; amount: number };
+type Leg = {
+	id: string;
+	destination: string;
+	km: string;
+	source?: string;
+	extraCosts: ExtraCost[];
+};
 type OnlineFuelPrice = {
 	name: string;
 	region1: number;
@@ -38,6 +46,12 @@ const newLeg = (): Leg => ({
 	id: newLegId(),
 	destination: "",
 	km: "",
+	extraCosts: [],
+});
+const newExtraCost = (): ExtraCost => ({
+	id: newLegId(),
+	name: "",
+	amount: 0,
 });
 
 const DEFAULT_FUEL_TYPE = "Xăng E10";
@@ -289,9 +303,15 @@ export function FuelPage() {
 		(leg) => !leg.from.trim() || !leg.to.trim() || leg.km <= 0,
 	);
 	const totalKm = routeLegs.reduce((sum, leg) => sum + leg.km, 0);
-	const total = Math.round(
+	const fuelTotal = Math.round(
 		((totalKm * decimal(consumption)) / (decimal(baseKm) || 1)) * appliedPrice,
 	);
+	const extraCostTotal = legs.reduce(
+		(sum, leg) =>
+			sum + leg.extraCosts.reduce((legSum, item) => legSum + item.amount, 0),
+		0,
+	);
+	const total = fuelTotal + extraCostTotal;
 	const historyRecords = data?.records ?? [];
 	const historyPageCount = Math.max(
 		1,
@@ -454,10 +474,13 @@ export function FuelPage() {
 		setOrigin(recordLegs[0]?.from ?? "");
 		setLegs(
 			recordLegs.length
-				? recordLegs.map((leg) => ({
+				? recordLegs.map((leg, legIndex) => ({
 						id: newLegId(),
 						destination: leg.to,
 						km: String(leg.km),
+						extraCosts: record.extraCosts
+							.filter((item) => (item.legIndex ?? 0) === legIndex)
+							.map((item) => ({ ...item, id: newLegId() })),
 					}))
 				: [newLeg()],
 		);
@@ -473,6 +496,11 @@ export function FuelPage() {
 			throw new Error("Vui lòng nhập điểm đi và quãng đường.");
 		if (incompleteRouteLeg)
 			throw new Error("Mỗi chặng cần có điểm đi, điểm đến và số km lớn hơn 0.");
+		const extraCosts = legs.flatMap((leg, legIndex) =>
+			leg.extraCosts.map(({ name, amount }) => ({ name, amount, legIndex })),
+		);
+		if (extraCosts.some((item) => !item.name.trim() || item.amount <= 0))
+			throw new Error("Mỗi chi phí khác cần có tên và số tiền lớn hơn 0.");
 		const input = {
 			periodFrom,
 			periodTo,
@@ -484,6 +512,7 @@ export function FuelPage() {
 			region: DEFAULT_REGION,
 			fuelPrice: appliedPrice,
 			legs: routeLegs,
+			extraCosts,
 		};
 		if (editingRecord)
 			await fuelRepository.updateRecord(editingRecord.id, input);
@@ -709,6 +738,67 @@ export function FuelPage() {
 											<Trash2 size={16} />
 										</button>
 									)}
+									{leg.extraCosts.length > 0 && (
+										<div className="fuel-leg-extra-costs">
+											{leg.extraCosts.map((item, costIndex) => (
+												<div className="fuel-extra-cost" key={item.id}>
+													<label>
+														{costIndex === 0
+															? "Tên chi phí khác"
+															: "Tên chi phí"}
+														<input
+															value={item.name}
+															placeholder="Ví dụ: Tiền ăn, gửi xe, Grab..."
+															onChange={(event) =>
+																setLeg(index, {
+																	extraCosts: leg.extraCosts.map((current) =>
+																		current.id === item.id
+																			? { ...current, name: event.target.value }
+																			: current,
+																	),
+																})
+															}
+														/>
+													</label>
+													<div className="fuel-extra-cost-field">
+														<label
+															htmlFor={`fuel-extra-cost-amount-${item.id}`}
+														>
+															Số tiền
+														</label>
+														<MoneyInput
+															id={`fuel-extra-cost-amount-${item.id}`}
+															value={item.amount}
+															placeholder="Nhập số tiền (đ)"
+															onValueChange={(amount) =>
+																setLeg(index, {
+																	extraCosts: leg.extraCosts.map((current) =>
+																		current.id === item.id
+																			? { ...current, amount }
+																			: current,
+																	),
+																})
+															}
+														/>
+													</div>
+													<button
+														className="row-action is-danger"
+														type="button"
+														aria-label="Xóa chi phí khác"
+														onClick={() =>
+															setLeg(index, {
+																extraCosts: leg.extraCosts.filter(
+																	(current) => current.id !== item.id,
+																),
+															})
+														}
+													>
+														<Trash2 size={16} />
+													</button>
+												</div>
+											))}
+										</div>
+									)}
 								</div>
 							);
 						})}
@@ -726,6 +816,25 @@ export function FuelPage() {
 							>
 								<Plus size={15} />
 								Thêm điểm giao
+							</button>
+							<button
+								className="button secondary"
+								type="button"
+								onClick={() =>
+									setLegs((rows) =>
+										rows.map((leg, index) =>
+											index === rows.length - 1
+												? {
+														...leg,
+														extraCosts: [...leg.extraCosts, newExtraCost()],
+													}
+												: leg,
+										),
+									)
+								}
+							>
+								<Plus size={15} />
+								Thêm chi phí khác
 							</button>
 							<button
 								className={`button secondary fuel-update-distance${estimatingLegId === "all" ? " is-loading" : ""}`}
@@ -747,9 +856,21 @@ export function FuelPage() {
 							<strong>{totalKm.toLocaleString("vi-VN")} km</strong>
 						</div>
 						<div className="fuel-footer-metric is-total">
-							<span>Tổng tiền xăng</span>
-							<strong>{formatMoney(total)} đ</strong>
+							<span>{extraCostTotal ? "Tiền xăng" : "Tổng tiền xăng"}</span>
+							<strong>{formatMoney(fuelTotal)} đ</strong>
 						</div>
+						{extraCostTotal > 0 && (
+							<>
+								<div className="fuel-footer-metric">
+									<span>Chi phí khác</span>
+									<strong>{formatMoney(extraCostTotal)} đ</strong>
+								</div>
+								<div className="fuel-footer-metric is-total">
+									<span>Tổng chi phí</span>
+									<strong>{formatMoney(total)} đ</strong>
+								</div>
+							</>
+						)}
 						{editingRecord && (
 							<button
 								className="button secondary"
@@ -1062,6 +1183,13 @@ function FuelRecordDetailDialog({
 	remove: () => void;
 }) {
 	const legs = record.legs ?? [];
+	const extraCostsForLeg = (legIndex: number) =>
+		record.extraCosts.filter((item) => (item.legIndex ?? 0) === legIndex);
+	const extraCostTotal = record.extraCosts.reduce(
+		(sum, item) => sum + item.amount,
+		0,
+	);
+	const fuelTotal = record.totalFee - extraCostTotal;
 	return (
 		<Dialog
 			className="fuel-record-detail-dialog"
@@ -1099,7 +1227,8 @@ function FuelRecordDetailDialog({
 							<th>Phương tiện</th>
 							<th>Giá xăng</th>
 							<th>Quãng đường</th>
-							<th>Số tiền tính</th>
+							<th>Tiền xăng</th>
+							<th>Chi phí khác</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -1108,6 +1237,11 @@ function FuelRecordDetailDialog({
 								const legFee = Math.round(
 									(leg.km * record.consumptionLiters * record.fuelPrice) /
 										(record.consumptionBaseKm || 1),
+								);
+								const extraCosts = extraCostsForLeg(index);
+								const legExtraCost = extraCosts.reduce(
+									(sum, item) => sum + item.amount,
+									0,
 								);
 								return (
 									<tr key={`${record.id}-${leg.from}-${leg.to}-${leg.km}`}>
@@ -1125,6 +1259,18 @@ function FuelRecordDetailDialog({
 										<td>{formatMoney(record.fuelPrice)} đ/lít</td>
 										<td>{leg.km.toLocaleString("vi-VN")} km</td>
 										<td>{formatMoney(legFee)} đ</td>
+										<td>
+											{legExtraCost ? (
+												<div className="fuel-record-extra-cost">
+													<span>
+														{extraCosts.map((item) => item.name).join(" / ")}
+													</span>
+													<strong>{formatMoney(legExtraCost)} đ</strong>
+												</div>
+											) : (
+												"—"
+											)}
+										</td>
 									</tr>
 								);
 							})
@@ -1134,7 +1280,10 @@ function FuelRecordDetailDialog({
 								<td>{savedVehicleLabel(record.vehicleType)}</td>
 								<td>{formatMoney(record.fuelPrice)} đ/lít</td>
 								<td>{record.distanceKm.toLocaleString("vi-VN")} km</td>
-								<td>{formatMoney(record.totalFee)} đ</td>
+								<td>{formatMoney(fuelTotal)} đ</td>
+								<td>
+									{extraCostTotal ? `${formatMoney(extraCostTotal)} đ` : "—"}
+								</td>
 							</tr>
 						)}
 					</tbody>
@@ -1143,7 +1292,10 @@ function FuelRecordDetailDialog({
 							<tr>
 								<th colSpan={3}>Tổng toàn bộ lộ trình</th>
 								<th>{record.distanceKm.toLocaleString("vi-VN")} km</th>
-								<th>{formatMoney(record.totalFee)} đ</th>
+								<th>{formatMoney(fuelTotal)} đ</th>
+								<th>
+									{extraCostTotal ? `${formatMoney(extraCostTotal)} đ` : "—"}
+								</th>
 							</tr>
 						</tfoot>
 					)}

@@ -14,7 +14,9 @@ export interface Entry {
 	/** Cước đang thiết lập trong bảng giá; null khi không tìm thấy mức phù hợp. */
 	standardTransportFee: number | null;
 	gateFee: number;
-	/** Máy chủ tự cộng ba khoản phí, giao diện không tự tính. */
+	otherFeeName: string;
+	otherFee: number;
+	/** Máy chủ tự cộng các khoản phí, giao diện không tự tính. */
 	totalFee: number;
 	note: string;
 	rateVarianceNote: string;
@@ -43,6 +45,9 @@ export interface EntryInput {
 	ticketFee: number;
 	transportFee: number;
 	gateFee: number;
+	/** Khoản phát sinh khác của chính phiếu giao hàng. */
+	otherFeeName: string;
+	otherFee: number;
 	note: string;
 	rateVarianceNote: string;
 	/** Chỉ bắt buộc khi trùng ngày gửi và khách hàng. */
@@ -193,6 +198,8 @@ export function emptyEntryInput(entryDate: string): EntryInput {
 		ticketFee: 0,
 		transportFee: 0,
 		gateFee: 0,
+		otherFeeName: "",
+		otherFee: 0,
 		note: "",
 		rateVarianceNote: "",
 		duplicateReason: "",
@@ -216,6 +223,8 @@ export function toEntryInput(entry: Entry): EntryInput {
 		ticketFee: entry.ticketFee,
 		transportFee: entry.transportFee,
 		gateFee: entry.gateFee,
+		otherFeeName: entry.otherFeeName,
+		otherFee: entry.otherFee,
 		note: entry.note,
 		rateVarianceNote: entry.rateVarianceNote,
 		duplicateReason: entry.duplicateReason,
@@ -241,7 +250,6 @@ export function validateEntry(
 		return "Vui lòng chọn nhân viên phụ trách.";
 	if (!input.customer.trim()) return "Vui lòng nhập tên khách hàng.";
 	if (!input.carrier.trim()) return "Vui lòng nhập nhà xe.";
-	if (!input.recipient.trim()) return "Vui lòng nhập người nhận.";
 	if (!input.spec.trim()) return "Vui lòng nhập quy cách.";
 	if (!input.billStatus) return "Vui lòng chọn bill.";
 	if (!input.note.trim()) return "Vui lòng nhập sản phẩm.";
@@ -249,10 +257,15 @@ export function validateEntry(
 		[input.ticketFee, "Phí vé"],
 		[input.transportFee, "Cước vận chuyển"],
 		[input.gateFee, "Phí cổng"],
+		[input.otherFee, "Chi phí khác"],
 	] as const) {
 		if (!Number.isInteger(value)) return `${label} phải là số nguyên.`;
 		if (value < 0) return `${label} không được âm.`;
 	}
+	if (input.otherFee > 0 && !input.otherFeeName.trim())
+		return "Vui lòng nhập tên chi phí khác.";
+	if (input.otherFeeName.trim() && input.otherFee === 0)
+		return "Vui lòng nhập số tiền chi phí khác.";
 	if (input.transportFee === 0)
 		return "Vui lòng nhập cước vận chuyển lớn hơn 0.";
 	return null;

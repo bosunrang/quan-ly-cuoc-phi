@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 35;
+const SCHEMA_VERSION = 39;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -615,6 +615,39 @@ function migrate(db) {
       ALTER TABLE carriers ADD COLUMN delivery_point TEXT NOT NULL DEFAULT '';
     `);
   }
+
+  if (current < 36) {
+    db.exec(`
+      -- Khoản phát sinh riêng của từng phiếu giao hàng; tổng hiển thị được
+      -- tính kèm khoản này tại tầng nghiệp vụ để vẫn tương thích dữ liệu cũ.
+      ALTER TABLE entries ADD COLUMN other_fee INTEGER NOT NULL DEFAULT 0
+        CHECK (other_fee >= 0);
+    `);
+  }
+
+  if (current < 37) {
+    db.exec(`
+      ALTER TABLE entries ADD COLUMN other_fee_name TEXT NOT NULL DEFAULT '';
+    `);
+  }
+
+	if (current < 38) {
+    db.exec(`
+      -- Các khoản phát sinh ngoài tiền xăng của một kỳ tính.
+      ALTER TABLE fuel_records ADD COLUMN extra_costs TEXT NOT NULL DEFAULT '[]';
+    `);
+	}
+
+	if (current < 39) {
+		db.exec(`
+		  -- Người nhận không còn là thuộc tính danh mục khách hàng. Giữ cột cũ
+		  -- để bảo toàn dữ liệu lịch sử, nhưng loại khỏi chỉ mục tìm kiếm mới.
+		  UPDATE customers
+		  SET search_text = vn_normalize(
+		    customer_name || ' ' || customer_code || ' ' || carrier || ' ' || address
+		  );
+		`);
+	}
 
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');

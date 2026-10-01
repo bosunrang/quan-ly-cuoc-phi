@@ -97,16 +97,6 @@ export function CarrierDialog({
 					</>
 				)}
 			</Field>
-			<Field label="Giờ xe chạy / nhận hàng">
-				{(id) => (
-					<input
-						id={id}
-						value={form.schedule}
-						onChange={setText("schedule")}
-						placeholder="Ví dụ: Nhận hàng 10h–13h"
-					/>
-				)}
-			</Field>
 			<Field label="Ghi chú">
 				{(id) => (
 					<textarea

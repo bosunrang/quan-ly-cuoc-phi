@@ -38,7 +38,6 @@ describe("kiểm tra phiếu cước", () => {
 			"tên khách hàng",
 		);
 		expect(validateEntry({ ...valid, carrier: "" })).toContain("nhà xe");
-		expect(validateEntry({ ...valid, recipient: "" })).toContain("người nhận");
 		expect(validateEntry({ ...valid, spec: "" })).toContain("quy cách");
 		expect(validateEntry({ ...valid, billStatus: "" })).toContain("bill");
 		expect(validateEntry({ ...valid, note: "" })).toContain("sản phẩm");
@@ -54,6 +53,12 @@ describe("kiểm tra phiếu cước", () => {
 		);
 		expect(validateEntry({ ...valid, ticketFee: 1.5 })).toBe(
 			"Phí vé phải là số nguyên.",
+		);
+		expect(validateEntry({ ...valid, otherFee: -1 })).toBe(
+			"Chi phí khác không được âm.",
+		);
+		expect(validateEntry({ ...valid, otherFee: 20_000 })).toBe(
+			"Vui lòng nhập tên chi phí khác.",
 		);
 	});
 });
@@ -72,6 +77,8 @@ describe("chuyển phiếu sang dữ liệu biểu mẫu", () => {
 			transportFee: 350_000,
 			standardTransportFee: 350_000,
 			gateFee: 15_000,
+			otherFeeName: "",
+			otherFee: 0,
 			totalFee: 385_000,
 			note: "",
 			rateVarianceNote: "",

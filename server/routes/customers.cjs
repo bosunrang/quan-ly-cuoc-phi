@@ -38,21 +38,19 @@ function text(value, field, { max = 300, required = false } = {}) {
 }
 
 function readCustomerInput(body) {
-  const customerName = text(body.customerName, 'tên khách hàng', { required: true });
-  const customerCode = text(body.customerCode, 'mã khách hàng', { max: 100 });
-  const carrier = text(body.carrier, 'nhà xe');
-  const recipient = text(body.recipient, 'người nhận');
-  const address = text(body.address, 'địa chỉ giao hàng', { max: 500 });
+	const customerName = text(body.customerName, 'tên khách hàng', { required: true });
+	const customerCode = text(body.customerCode, 'mã khách hàng', { max: 100 });
+	const carrier = text(body.carrier, 'nhà xe');
+	const address = text(body.address, 'địa chỉ giao hàng', { max: 500 });
   return {
-    customerName,
-    customerCode,
-    carrier,
-    recipient,
-    address,
+		customerName,
+		customerCode,
+		carrier,
+		address,
     customerKey: normalizeSearchText(customerName),
     customerCodeKey: customerCode.toLocaleUpperCase('vi-VN'),
     searchText: normalizeSearchText(
-      `${customerName} ${customerCode} ${carrier} ${recipient} ${address}`,
+		`${customerName} ${customerCode} ${carrier} ${address}`,
     ),
   };
 }
@@ -69,11 +67,10 @@ function readImportRows(value) {
 function toApi(row) {
   return {
     id: row.id,
-    customerName: row.customer_name,
-    customerCode: row.customer_code,
-    carrier: row.linked_carrier_names || row.carrier,
-    recipient: row.recipient,
-    address: row.address,
+		customerName: row.customer_name,
+		customerCode: row.customer_code,
+		carrier: row.linked_carrier_names || row.carrier,
+		address: row.address,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -134,10 +131,9 @@ function register(router) {
            UNION
            SELECT customer_id FROM carrier_customers
          )
-         SELECT COUNT(*) AS count,
-                (SELECT COUNT(*) FROM linked_customers) AS carrier_count,
-                COUNT(DISTINCT NULLIF(recipient, '')) AS recipient_count,
-                COUNT(NULLIF(address, '')) AS address_count
+		 SELECT COUNT(*) AS count,
+		        (SELECT COUNT(*) FROM linked_customers) AS carrier_count,
+		        COUNT(NULLIF(address, '')) AS address_count
            FROM customers`,
       )
       .get();
@@ -174,10 +170,9 @@ function register(router) {
     return {
       items: rows.map(toApi),
       count: Number(summary.count),
-      resultCount,
-      carrierCount: Number(summary.carrier_count),
-      recipientCount: Number(summary.recipient_count),
-      addressCount: Number(summary.address_count),
+		resultCount,
+		carrierCount: Number(summary.carrier_count),
+		addressCount: Number(summary.address_count),
       page: currentPage,
       pageSize,
       pageCount,
@@ -192,17 +187,16 @@ function register(router) {
       ensureNameAvailable(c.db, input.customerKey);
       ensureCodeAvailable(c.db, input.customerCode);
       const result = c.db
-        .prepare(
-          `INSERT INTO customers
-              (customer_name, customer_code, carrier, recipient, address, customer_key, search_text, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		.prepare(
+			`INSERT INTO customers
+			  (customer_name, customer_code, carrier, address, customer_key, search_text, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
-          input.customerName,
-          input.customerCode,
-          input.carrier,
-          input.recipient,
-          input.address,
+			input.customerName,
+			input.customerCode,
+			input.carrier,
+			input.address,
           input.customerKey,
           input.searchText,
           at,
@@ -229,12 +223,12 @@ function register(router) {
           .filter((row) => row.customer_code)
           .map((row) => [String(row.customer_code).toLocaleUpperCase('vi-VN'), row]),
       );
-      const insert = c.db.prepare(
-        'INSERT INTO customers (customer_name, customer_code, carrier, recipient, address, customer_key, search_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      );
-      const update = c.db.prepare(
-        `UPDATE customers SET
-            customer_name = ?, customer_code = ?, recipient = ?, address = ?,
+	const insert = c.db.prepare(
+		'INSERT INTO customers (customer_name, customer_code, carrier, address, customer_key, search_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+	);
+	const update = c.db.prepare(
+		`UPDATE customers SET
+			customer_name = ?, customer_code = ?, address = ?,
             customer_key = ?, updated_at = ?
           WHERE id = ?`,
       );
@@ -265,13 +259,11 @@ function register(router) {
           }
           const previousKey = sameCode.customer_key;
           const customerCode = sameCode.customer_code || input.customerCode;
-          const recipient = input.recipient || sameCode.recipient;
-          const address = input.address || sameCode.address;
-          update.run(
-            input.customerName,
-            customerCode,
-            recipient,
-            address,
+			const address = input.address || sameCode.address;
+			update.run(
+				input.customerName,
+				customerCode,
+				address,
             input.customerKey,
             at,
             sameCode.id,
@@ -296,11 +288,10 @@ function register(router) {
           // Cùng tên và bản ghi cũ chưa có mã: bổ sung mã mới mà
           // không tạo thêm khách hàng, nhờ đó giữ nguyên liên kết nhà xe.
           if (input.customerCode && !sameName.customer_code) {
-            update.run(
-              input.customerName,
-              input.customerCode,
-              input.recipient || sameName.recipient,
-              input.address || sameName.address,
+			update.run(
+				input.customerName,
+				input.customerCode,
+				input.address || sameName.address,
               input.customerKey,
               at,
               sameName.id,
@@ -323,11 +314,10 @@ function register(router) {
         }
 
         const result = insert.run(
-          input.customerName,
-          input.customerCode,
-          input.carrier,
-          input.recipient,
-          input.address,
+			input.customerName,
+			input.customerCode,
+			input.carrier,
+			input.address,
           input.customerKey,
           input.searchText,
           at,
@@ -359,18 +349,17 @@ function register(router) {
       ensureNameAvailable(c.db, input.customerKey, before.id);
       ensureCodeAvailable(c.db, input.customerCode, before.id);
       c.db
-        .prepare(
-          `UPDATE customers SET
-              customer_name = ?, customer_code = ?, carrier = ?, recipient = ?, address = ?,
+		.prepare(
+			`UPDATE customers SET
+			  customer_name = ?, customer_code = ?, carrier = ?, address = ?,
              customer_key = ?, search_text = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
-          input.customerName,
-          input.customerCode,
-          input.carrier,
-          input.recipient,
-          input.address,
+			input.customerName,
+			input.customerCode,
+			input.carrier,
+			input.address,
           input.customerKey,
           input.searchText,
           at,

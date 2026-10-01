@@ -36,6 +36,36 @@ describe('tính tiền xăng', () => {
     assert.equal(calculateFuelTotal(input), 72_000);
   });
 
+  test('cộng chi phí khác có tên vào tổng tiền xăng', () => {
+    const input = fuelRecordInput({
+      periodFrom: '2026-09-01',
+      periodTo: '2026-09-01',
+      consumptionLiters: 1,
+      consumptionBaseKm: 40,
+      fuelPrice: 20_000,
+      legs: [{ from: 'Kho', to: 'Bệnh viện', km: 40 }],
+      extraCosts: [
+        { name: 'Gửi xe', amount: 10_000, legIndex: 0 },
+        { name: 'Tiền ăn', amount: 25_000, legIndex: 0 },
+      ],
+    });
+
+    assert.deepEqual(input.extraCosts, [
+      { name: 'Gửi xe', amount: 10_000, legIndex: 0 },
+      { name: 'Tiền ăn', amount: 25_000, legIndex: 0 },
+    ]);
+    assert.equal(calculateFuelTotal(input), 55_000);
+    assert.throws(
+      () => fuelRecordInput({ ...input, extraCosts: [{ name: '', amount: 1 }] }),
+      /Mỗi chi phí khác cần có tên và số tiền lớn hơn 0/,
+    );
+
+    assert.throws(
+      () => fuelRecordInput({ ...input, extraCosts: [{ name: 'Gửi xe', amount: 1, legIndex: 1 }] }),
+      /Chặng của chi phí khác không hợp lệ/,
+    );
+  });
+
   test('chỉ nhận phương tiện đã được hệ thống hỗ trợ', () => {
     const base = {
       periodFrom: '2026-09-01', periodTo: '2026-09-01', distanceKm: 1,
