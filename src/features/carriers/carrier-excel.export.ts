@@ -7,6 +7,7 @@ import {
 
 interface WideRateGroup {
 	carrierName: string;
+	customerCode: string;
 	customerName: string;
 	gateFee: number;
 	fees: Map<string, number>;
@@ -32,11 +33,13 @@ export function wideCarrierRateExport(rates: CarrierExcelExport["rates"]) {
 	for (const rate of rates) {
 		const key = JSON.stringify([
 			rate.carrierName,
+			rate.customerCode ?? "",
 			rate.customerName,
 			rate.gateFee,
 		]);
 		const group = groups.get(key) ?? {
 			carrierName: rate.carrierName,
+			customerCode: rate.customerCode ?? "",
 			customerName: rate.customerName,
 			gateFee: rate.gateFee,
 			fees: new Map<string, number>(),
@@ -50,6 +53,7 @@ export function wideCarrierRateExport(rates: CarrierExcelExport["rates"]) {
 		specs,
 		rows: [...groups.values()].map((group) => [
 			group.carrierName,
+			group.customerCode,
 			group.customerName,
 			...specs.map((spec) => group.fees.get(spec) ?? null),
 			group.gateFee,

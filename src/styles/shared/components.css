@@ -1,7 +1,6 @@
 .button{height:37px;padding:0 13px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:var(--type-meta);font-weight:700;cursor:pointer;white-space:nowrap;border:1px solid transparent;transition:.15s ease}
 .button.primary{background:var(--teal);color:var(--on-accent)}.button.primary:hover{background:var(--teal-dark)}
 .button.secondary{background:var(--panel);color:var(--text-button);border-color:var(--line-strong)}.button.secondary:hover{background:var(--surface-hover)}
-.button.ghost{background:var(--surface-hover);color:var(--text-button-muted);border-color:var(--line)}
 .button.danger{background:var(--danger-action);color:var(--on-accent);border-color:var(--danger-action)}.button.danger:hover{background:var(--danger-action-hover)}
 
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:9px;min-width:0}

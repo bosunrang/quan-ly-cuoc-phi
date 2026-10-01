@@ -8,6 +8,7 @@ import { canonicalCarrierRateSpec } from "./carrier-rate-specs";
 
 const CARRIER_HEADERS = ["nha xe", "chanh xe", "ten chanh xe"];
 const CUSTOMER_HEADERS = ["don vi", "ten kh", "ten khach hang", "khach hang"];
+const CUSTOMER_CODE_HEADERS = ["ma khach hang", "ma kh"];
 const GATE_FEE_HEADERS = ["phi vao cong", "phi cong"];
 
 const clean = (value: unknown) => String(value ?? "").trim();
@@ -83,6 +84,7 @@ function parseNarrowRateRows(
 ): CarrierExcelRateInput[] {
 	const header = rows[headerAt];
 	const carrierName = indexOf(header, CARRIER_HEADERS);
+	const customerCode = indexOf(header, CUSTOMER_CODE_HEADERS);
 	const customerName = indexOf(header, CUSTOMER_HEADERS);
 	const spec = indexOf(header, ["quy cach"]);
 	const transportFee = indexOf(header, [
@@ -95,7 +97,8 @@ function parseNarrowRateRows(
 	return nonEmptyRows(rows, headerAt).map(({ row, rowNumber }) => ({
 		rowNumber,
 		carrierName: clean(row[carrierName]),
-		customerName: clean(row[customerName]),
+		...(customerCode < 0 ? {} : { customerCode: clean(row[customerCode]) }),
+		customerName: customerName < 0 ? "" : clean(row[customerName]),
 		spec: clean(row[spec]),
 		transportFee: transportFee < 0 ? 0 : money(row[transportFee]),
 		gateFee: gateFee < 0 ? 0 : money(row[gateFee]),
@@ -109,12 +112,13 @@ function parseWideRateRows(
 ): CarrierExcelRateInput[] {
 	const header = rows[headerAt];
 	const carrierName = indexOf(header, CARRIER_HEADERS);
+	const customerCode = indexOf(header, CUSTOMER_CODE_HEADERS);
 	const customerName = indexOf(header, CUSTOMER_HEADERS);
 	const gateFee = indexOf(header, GATE_FEE_HEADERS);
 	const note = indexOf(header, ["ghi chu"]);
 	// Hai cột nhận diện đứng trước; các cột có tên tiếp theo là quy cách động.
 	// Nếu có cột Phí cổng, phần quy cách kết thúc ngay trước cột đó.
-	const firstRateColumn = Math.max(carrierName, customerName) + 1;
+	const firstRateColumn = Math.max(carrierName, customerCode, customerName) + 1;
 	const rateColumnEnd = gateFee >= 0 ? gateFee : header.length;
 	const rateColumns = header
 		.map((value, index) => ({
@@ -133,7 +137,8 @@ function parseWideRateRows(
 		const common = {
 			rowNumber,
 			carrierName: clean(row[carrierName]),
-			customerName: clean(row[customerName]),
+			...(customerCode < 0 ? {} : { customerCode: clean(row[customerCode]) }),
+			customerName: customerName < 0 ? "" : clean(row[customerName]),
 			gateFee: gateFee < 0 ? 0 : money(row[gateFee]),
 			note: note < 0 ? "" : clean(row[note]),
 		};
@@ -157,10 +162,15 @@ function parseWideRateRows(
 }
 
 function parseRateRows(rows: Row[]): CarrierExcelRateInput[] {
-	const headerAt = headerIndex(rows, [CARRIER_HEADERS, CUSTOMER_HEADERS]);
+	const headerAt = rows.findIndex(
+		(row) =>
+			row.some((cell) => aliases(cell, CARRIER_HEADERS)) &&
+			(row.some((cell) => aliases(cell, CUSTOMER_HEADERS)) ||
+				row.some((cell) => aliases(cell, CUSTOMER_CODE_HEADERS))),
+	);
 	if (headerAt < 0)
 		throw new Error(
-			"Không tìm thấy cột “Nhà xe” và “Khách hàng” trong file bảng cước.",
+			"Không tìm thấy cột “Nhà xe” và “Mã khách hàng” hoặc “Khách hàng” trong file bảng cước.",
 		);
 	return indexOf(rows[headerAt], ["quy cach"]) >= 0
 		? parseNarrowRateRows(rows, headerAt)

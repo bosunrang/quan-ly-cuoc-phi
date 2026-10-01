@@ -31,7 +31,7 @@ describe("nhập Excel nhà xe và bảng cước", () => {
 	it("đọc mẫu nhà xe độc lập", async () => {
 		const rows = await parseCarrierWorkbook(
 			workbookFile("Nhà xe.xlsx", [
-				["Nhà xe", "Địa chỉ", "Điểm giao / Bến xe", "Điện thoại"],
+				["Nhà xe", "Địa chỉ", "Điểm giao/ Bến xe", "Điện thoại"],
 				[
 					"6 Quang",
 					"1B Bắc Hải, TP Hồ Chí Minh",
@@ -61,6 +61,7 @@ describe("nhập Excel nhà xe và bảng cước", () => {
 			workbookFile("Bảng cước.xlsx", [
 				[
 					"Nhà xe",
+					"Mã khách hàng",
 					"Khách hàng",
 					"Tất cả",
 					"Thùng nhỏ",
@@ -69,7 +70,7 @@ describe("nhập Excel nhà xe và bảng cước", () => {
 					"Hồ sơ",
 					"Phí vào cổng",
 				],
-				["6 Quang", "Bệnh viện A", "", 40_000, 50_000, "", "", 5_000],
+				["6 Quang", "KH001", "Bệnh viện A", "", 40_000, 50_000, "", "", 5_000],
 			]),
 		);
 
@@ -77,6 +78,7 @@ describe("nhập Excel nhà xe và bảng cước", () => {
 			{
 				rowNumber: 2,
 				carrierName: "6 Quang",
+				customerCode: "KH001",
 				customerName: "Bệnh viện A",
 				spec: "Thùng nhỏ",
 				transportFee: 40_000,
@@ -86,6 +88,7 @@ describe("nhập Excel nhà xe và bảng cước", () => {
 			{
 				rowNumber: 2,
 				carrierName: "6 Quang",
+				customerCode: "KH001",
 				customerName: "Bệnh viện A",
 				spec: "Thùng trung",
 				transportFee: 50_000,
@@ -204,7 +207,18 @@ describe("xuất bảng cước nhà xe", () => {
 			"Kiện đặc biệt",
 		]);
 		expect(result.rows).toEqual([
-			["6 Quang", "Bệnh viện A", null, 40_000, null, null, null, 75_000, 5_000],
+			[
+				"6 Quang",
+				"",
+				"Bệnh viện A",
+				null,
+				40_000,
+				null,
+				null,
+				null,
+				75_000,
+				5_000,
+			],
 		]);
 	});
 });

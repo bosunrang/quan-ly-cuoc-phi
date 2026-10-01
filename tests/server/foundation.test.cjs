@@ -864,6 +864,105 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     );
   });
 
+  test('import nhà xe cập nhật điểm giao hoặc bến xe cho nhà xe đã có', async () => {
+    const carrier = await call('POST', '/api/carriers', {
+      token: adminToken,
+      body: {
+        name: 'Nhà xe cập nhật bến',
+        phone: '0909111222',
+        deliveryPoint: '',
+      },
+    });
+    assert.equal(carrier.status, 200);
+
+    const body = {
+      carriers: [{
+        rowNumber: 2,
+        name: 'Nhà xe cập nhật bến',
+        contact: '',
+        phone: '0909111222',
+        address: '',
+        deliveryPoint: 'Bến xe Trung tâm, 25 Đường A',
+        schedule: '',
+        note: '',
+        isActive: true,
+      }],
+      rates: [],
+    };
+    const preview = await call('POST', '/api/carriers/excel/preview', {
+      token: adminToken,
+      body,
+    });
+    assert.equal(preview.status, 200);
+    assert.equal(preview.data.carrierSummary.update, 1);
+    assert.equal(preview.data.carriers[0].status, 'update');
+
+    const imported = await call('POST', '/api/carriers/excel/import', {
+      token: adminToken,
+      body,
+    });
+    assert.equal(imported.status, 200);
+    assert.equal(imported.data.carriersCreated, 0);
+    assert.equal(imported.data.carriersUpdated, 1);
+
+    const carriers = await call('GET', '/api/carriers', { token: adminToken });
+    const updated = carriers.data.items.find((item) => item.id === carrier.data.id);
+    assert.equal(updated.deliveryPoint, 'Bến xe Trung tâm, 25 Đường A');
+  });
+
+  test('import bảng cước gán khách hàng theo mã dù tên khách hàng đã thay đổi', async () => {
+    const customer = await call('POST', '/api/customers', {
+      token: adminToken,
+      body: {
+        customerName: 'Khách hàng mã bảng cước',
+        customerCode: 'KH-BANG-CUOC-001',
+      },
+    });
+    assert.equal(customer.status, 200);
+
+    const body = {
+      carriers: [],
+      rates: [{
+        rowNumber: 2,
+        carrierName: 'Nhà xe gán theo mã',
+        customerCode: 'kh-bang-cuoc-001',
+        customerName: 'Khách hàng mã bảng cước',
+        spec: 'Thùng nhỏ',
+        transportFee: 45_000,
+        gateFee: 0,
+        note: '',
+      }],
+    };
+    const preview = await call('POST', '/api/carriers/excel/preview', {
+      token: adminToken,
+      body,
+    });
+    assert.equal(preview.status, 200);
+    assert.equal(preview.data.rateSummary.ready, 1);
+
+    const imported = await call('POST', '/api/carriers/excel/import', {
+      token: adminToken,
+      body,
+    });
+    assert.equal(imported.status, 200);
+    assert.equal(imported.data.ratesCreated, 1);
+
+    const renamedCustomer = await call('POST', '/api/carriers/excel/preview', {
+      token: adminToken,
+      body: {
+        carriers: [],
+        rates: [{
+          ...body.rates[0],
+          customerName: 'Tên khách hàng đã đổi trên file cước',
+          spec: 'Thùng trung',
+        }],
+      },
+    });
+    assert.equal(renamedCustomer.status, 200);
+    assert.equal(renamedCustomer.data.rateSummary.ready, 1);
+    assert.equal(renamedCustomer.data.rates[0].customerId, customer.data.id);
+  });
+
   test('mỗi khách hàng được gán có nhiều quy cách, gồm cả mức mặc định', async () => {
     const customer = await call('POST', '/api/customers', {
       token: adminToken,

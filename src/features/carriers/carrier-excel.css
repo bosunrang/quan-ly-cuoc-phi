@@ -50,7 +50,7 @@
 
 .carrier-preview-stats {
 	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: 10px;
 }
 
@@ -124,19 +124,13 @@
 	border-color: var(--status-info-border);
 }
 
-.carrier-preview-stats .is-ready {
+.carrier-preview-stats .is-actionable {
 	--preview-accent: var(--status-success-text);
 	--preview-icon-bg: var(--status-success-bg);
 	border-color: var(--status-success-border);
 }
 
-.carrier-preview-stats .is-duplicate {
-	--preview-accent: var(--status-warning-text);
-	--preview-icon-bg: var(--status-warning-bg);
-	border-color: var(--status-warning-border);
-}
-
-.carrier-preview-stats .is-skipped {
+.carrier-preview-stats .is-ignored {
 	--preview-accent: var(--status-neutral-text);
 	--preview-icon-bg: var(--status-neutral-bg);
 	border-color: var(--status-neutral-border);
@@ -206,6 +200,12 @@
 	color: var(--status-success-text);
 }
 
+.carrier-import-status.is-update {
+	border-color: var(--status-info-border);
+	background: var(--status-info-bg);
+	color: var(--status-info-text);
+}
+
 .carrier-import-status.is-duplicate {
 	border-color: var(--status-warning-border);
 	background: var(--status-warning-bg);
@@ -223,15 +223,16 @@
 }
 
 .carrier-excel-table.is-rates th:nth-child(1) { width: 5%; }
-.carrier-excel-table.is-rates th:nth-child(2) { width: 13%; }
-.carrier-excel-table.is-rates th:nth-child(3) { width: 34%; }
-.carrier-excel-table.is-rates th:nth-child(4) { width: 12%; }
-.carrier-excel-table.is-rates th:nth-child(5) { width: 14%; }
+.carrier-excel-table.is-rates th:nth-child(2) { width: 12%; }
+.carrier-excel-table.is-rates th:nth-child(3) { width: 12%; }
+.carrier-excel-table.is-rates th:nth-child(4) { width: 26%; }
+.carrier-excel-table.is-rates th:nth-child(5) { width: 10%; }
 .carrier-excel-table.is-rates th:nth-child(6) { width: 12%; }
-.carrier-excel-table.is-rates th:nth-child(7) { width: 10%; }
+.carrier-excel-table.is-rates th:nth-child(7) { width: 12%; }
+.carrier-excel-table.is-rates th:nth-child(8) { width: 11%; }
 
-.carrier-excel-table.is-rates th:nth-child(n + 4),
-.carrier-excel-table.is-rates td:nth-child(n + 4) {
+.carrier-excel-table.is-rates th:nth-child(n + 5),
+.carrier-excel-table.is-rates td:nth-child(n + 5) {
 	text-align: center;
 }
 

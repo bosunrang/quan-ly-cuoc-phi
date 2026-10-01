@@ -74,7 +74,11 @@ function readExcelCarrier(row) {
 
 function readExcelRate(row) {
   const carrierName = text(row?.carrierName, 'nhà xe', { required: true });
-  const customerName = text(row?.customerName, 'đơn vị', { required: true });
+  const customerCode = text(row?.customerCode, 'mã khách hàng', { max: 100 });
+  const customerName = text(row?.customerName, 'đơn vị');
+  if (!customerCode && !customerName) {
+    throw badRequest('Vui lòng nhập mã hoặc tên khách hàng.');
+  }
   const input = readRateInput({
     spec: row?.spec,
     isDefault: normalizeSearchText(row?.spec) === 'tat ca',
@@ -82,19 +86,27 @@ function readExcelRate(row) {
     gateFee: row?.gateFee,
     note: row?.note,
   });
-  return { carrierName, customerName, ...input };
+  return { carrierName, customerCode, customerName, ...input };
 }
 
 function prepareExcelImport(db, body) {
   const carrierRows = excelRows(body.carriers, 'Sheet Nhà xe');
   const rateRows = excelRows(body.rates, 'Sheet Bảng cước');
   const existingCarriers = new Map(
-    db.prepare('SELECT id, name, carrier_key FROM carriers').all()
+    db.prepare('SELECT id, name, carrier_key, delivery_point FROM carriers').all()
       .map((row) => [row.carrier_key, row]),
   );
-  const customers = new Map(
-    db.prepare('SELECT id, customer_key FROM customers').all()
+  const customerRows = db.prepare(
+    'SELECT id, customer_name, customer_key, customer_code FROM customers',
+  ).all();
+  const customersByName = new Map(
+    customerRows
       .map((row) => [row.customer_key, row]),
+  );
+  const customersByCode = new Map(
+    customerRows
+      .filter((row) => row.customer_code)
+      .map((row) => [String(row.customer_code).toLocaleUpperCase('vi-VN'), row]),
   );
   const existingRates = new Set(
     db.prepare(
@@ -111,10 +123,17 @@ function prepareExcelImport(db, body) {
         return { rowNumber: Number(row?.rowNumber) || index + 2, status: 'skipped', reason: 'Nhà xe trùng trong file' };
       }
       carrierKeys.add(input.key);
+      const existing = existingCarriers.get(input.key);
+      const hasNewDeliveryPoint = input.deliveryPoint
+        && normalizeSearchText(input.deliveryPoint) !== normalizeSearchText(existing?.delivery_point);
       return {
         rowNumber: Number(row?.rowNumber) || index + 2,
-        status: existingCarriers.has(input.key) ? 'duplicate' : 'ready',
-        reason: existingCarriers.has(input.key) ? 'Nhà xe đã tồn tại' : undefined,
+        status: !existing ? 'ready' : hasNewDeliveryPoint ? 'update' : 'duplicate',
+        reason: !existing
+          ? undefined
+          : hasNewDeliveryPoint
+            ? 'Sẽ cập nhật điểm giao / bến xe'
+            : 'Nhà xe đã tồn tại',
         ...input,
       };
     } catch (error) {
@@ -129,9 +148,16 @@ function prepareExcelImport(db, body) {
   const rates = rateRows.map((row, index) => {
     try {
       const input = readExcelRate(row);
-      const customer = customers.get(normalizeSearchText(input.customerName));
+      const customer = input.customerCode
+        ? customersByCode.get(input.customerCode.toLocaleUpperCase('vi-VN'))
+        : customersByName.get(normalizeSearchText(input.customerName));
       if (!customer) {
-        return { rowNumber: Number(row?.rowNumber) || index + 2, status: 'skipped', reason: 'Chưa có đơn vị trong danh mục', ...input };
+        return {
+          rowNumber: Number(row?.rowNumber) || index + 2,
+          status: 'skipped',
+          reason: input.customerCode ? 'Không tìm thấy mã khách hàng trong danh mục' : 'Chưa có đơn vị trong danh mục',
+          ...input,
+        };
       }
       const carrierKey = normalizeSearchText(input.carrierName);
       const key = `${carrierKey}|${customer.id}|${input.specKey}`;
@@ -160,11 +186,13 @@ function prepareExcelImport(db, body) {
     rates,
     carrierSummary: {
       ready: carriers.filter((row) => row.status === 'ready').length,
+      update: carriers.filter((row) => row.status === 'update').length,
       duplicate: carriers.filter((row) => row.status === 'duplicate').length,
       skipped: carriers.filter((row) => row.status === 'skipped').length,
     },
     rateSummary: {
       ready: rates.filter((row) => row.status === 'ready').length,
+      update: 0,
       duplicate: rates.filter((row) => row.status === 'duplicate').length,
       skipped: rates.filter((row) => row.status === 'skipped').length,
     },
@@ -256,7 +284,7 @@ function register(router) {
          FROM carriers ORDER BY name COLLATE NOCASE, id`,
     ).all();
     const rates = c.db.prepare(
-      `SELECT carriers.name AS carrier_name, customers.customer_name, carrier_customer_rates.spec,
+      `SELECT carriers.name AS carrier_name, customers.customer_code, customers.customer_name, carrier_customer_rates.spec,
               carrier_customer_rates.transport_fee, carrier_customer_rates.gate_fee, carrier_customer_rates.note
          FROM carrier_customer_rates
          INNER JOIN carriers ON carriers.id = carrier_customer_rates.carrier_id
@@ -276,6 +304,7 @@ function register(router) {
       })),
       rates: rates.map((row) => ({
         carrierName: row.carrier_name,
+        customerCode: row.customer_code,
         customerName: row.customer_name,
         spec: row.spec,
         transportFee: row.transport_fee,
@@ -304,12 +333,16 @@ function register(router) {
            (name, contact, phone, address, delivery_point, schedule, note, is_active, carrier_key, created_at, updated_at)
          VALUES (?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
+      const updateCarrierDeliveryPoint = c.db.prepare(
+        'UPDATE carriers SET delivery_point = ?, updated_at = ? WHERE id = ?',
+      );
       for (const carrier of preview.carriers) {
-        if (carrier.status !== 'ready') continue;
         const existingId = carrierIds.get(carrier.key);
-        if (!existingId) {
+        if (carrier.status === 'ready' && !existingId) {
           const result = createCarrier.run(carrier.name, carrier.phone, carrier.address, carrier.deliveryPoint, carrier.schedule, carrier.note, Number(carrier.isActive), carrier.key, at, at);
           carrierIds.set(carrier.key, Number(result.lastInsertRowid));
+        } else if (carrier.status === 'update' && existingId) {
+          updateCarrierDeliveryPoint.run(carrier.deliveryPoint, at, existingId);
         }
       }
       const assign = c.db.prepare(
@@ -342,7 +375,7 @@ function register(router) {
       for (const customerId of refreshedCustomers) refreshCustomerCarrier(c.db, customerId, at);
       const summary = {
         carriersCreated: preview.carrierSummary.ready,
-        carriersUpdated: 0,
+        carriersUpdated: preview.carrierSummary.update,
         ratesCreated: preview.rateSummary.ready,
         ratesUpdated: 0,
         skipped: preview.carrierSummary.skipped + preview.rateSummary.skipped,

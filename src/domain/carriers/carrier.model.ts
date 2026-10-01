@@ -57,6 +57,7 @@ export interface CarrierExcelCarrierInput extends CarrierInput {
 export interface CarrierExcelRateInput {
 	rowNumber: number;
 	carrierName: string;
+	customerCode?: string;
 	customerName: string;
 	spec: string;
 	transportFee: number;
@@ -66,13 +67,14 @@ export interface CarrierExcelRateInput {
 
 export interface CarrierExcelPreviewRow {
 	rowNumber: number;
-	status: "ready" | "duplicate" | "skipped";
+	status: "ready" | "update" | "duplicate" | "skipped";
 	reason?: string;
 	name?: string;
 	address?: string;
 	deliveryPoint?: string;
 	phone?: string;
 	carrierName?: string;
+	customerCode?: string;
 	customerName?: string;
 	spec?: string;
 	transportFee?: number;
@@ -82,8 +84,8 @@ export interface CarrierExcelPreviewRow {
 export interface CarrierExcelPreview {
 	carriers: CarrierExcelPreviewRow[];
 	rates: CarrierExcelPreviewRow[];
-	carrierSummary: Record<"ready" | "duplicate" | "skipped", number>;
-	rateSummary: Record<"ready" | "duplicate" | "skipped", number>;
+	carrierSummary: Record<"ready" | "update" | "duplicate" | "skipped", number>;
+	rateSummary: Record<"ready" | "update" | "duplicate" | "skipped", number>;
 }
 
 export interface CarrierExcelExport {

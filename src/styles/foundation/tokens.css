@@ -54,7 +54,6 @@
   --surface-emphasis:#f1f8f8;
   --text-body:#304852;
   --text-button:#27414b;
-  --text-button-muted:#405761;
   --text-strong:#173c46;
   --text-accent:#0f676e;
   --text-success:#0a7969;
@@ -65,7 +64,6 @@
   --line-soft:#e8edef;
   --danger-action:#b23a33;
   --danger-action-hover:#992f2a;
-  --danger-notice:#b93a32;
   --danger-border-soft:#e7cfcc;
   /* Trạng thái toàn ứng dụng: success, warning, info, neutral, danger. */
   --status-success-bg:var(--teal-soft);

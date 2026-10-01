@@ -1,9 +1,4 @@
-import {
-	CheckCircle2,
-	CircleSlash2,
-	CopyCheck,
-	FileSpreadsheet,
-} from "lucide-react";
+import { CheckCircle2, CircleSlash2, FileSpreadsheet } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import type {
 	CarrierExcelPreview,
@@ -13,7 +8,7 @@ import { formatMoney } from "../../../shared/lib/format";
 import { Dialog } from "../../../shared/ui/Dialog";
 
 type ImportKind = "carriers" | "rates";
-type Filter = "all" | "ready" | "duplicate" | "skipped";
+type Filter = "all" | "actionable" | "ignored";
 
 interface Props {
 	fileName: string;
@@ -36,24 +31,32 @@ export function CarrierExcelImportDialog({
 	const rows = kind === "carriers" ? preview.carriers : preview.rates;
 	const summary =
 		kind === "carriers" ? preview.carrierSummary : preview.rateSummary;
+	const actionableCount = summary.ready + summary.update;
 	const visibleRows = useMemo(
 		() =>
-			(filter === "all"
-				? rows
-				: rows.filter((row) => row.status === filter)
-			).slice(0, 100),
+			rows
+				.filter((row) => {
+					if (filter === "all") return true;
+					if (filter === "actionable")
+						return row.status === "ready" || row.status === "update";
+					return row.status === "duplicate" || row.status === "skipped";
+				})
+				.slice(0, 100),
 		[filter, rows],
 	);
-	const filterCount = (next: Filter) =>
-		next === "all" ? rows.length : summary[next];
+	const filterCount = (next: Filter) => {
+		if (next === "all") return rows.length;
+		if (next === "actionable") return actionableCount;
+		return summary.duplicate + summary.skipped;
+	};
 	const fileLabel = kind === "carriers" ? "Nhà xe" : "Bảng cước";
 
 	return (
 		<Dialog
 			title={title}
 			subtitle={fileName}
-			confirmLabel={`Nhập ${summary.ready.toLocaleString("vi-VN")} dòng`}
-			confirmDisabled={summary.ready === 0}
+			confirmLabel={`Nhập / cập nhật ${actionableCount.toLocaleString("vi-VN")} dòng`}
+			confirmDisabled={actionableCount === 0}
 			onConfirm={onConfirm}
 			onClose={onClose}
 			className="carrier-excel-dialog"
@@ -63,8 +66,9 @@ export function CarrierExcelImportDialog({
 				<div>
 					<strong>{fileLabel}</strong>
 					<span>
-						Toàn bộ {rows.length.toLocaleString("vi-VN")} dòng được rà soát.
-						Dòng trùng hoặc lỗi sẽ không được nhập.
+						Toàn bộ {rows.length.toLocaleString("vi-VN")} dòng được rà soát. Nhà
+						xe có điểm giao / bến xe mới sẽ được cập nhật; dòng trùng hoặc lỗi
+						sẽ không được nhập.
 					</span>
 				</div>
 			</div>
@@ -73,33 +77,25 @@ export function CarrierExcelImportDialog({
 					active={filter === "all"}
 					count={filterCount("all")}
 					icon={<FileSpreadsheet size={17} />}
-					label="Tổng dòng"
+					label="Toàn bộ"
 					tone="all"
 					onClick={() => setFilter("all")}
 				/>
 				<FilterButton
-					active={filter === "ready"}
-					count={filterCount("ready")}
+					active={filter === "actionable"}
+					count={filterCount("actionable")}
 					icon={<CheckCircle2 size={17} />}
-					label="Sẵn sàng nhập"
-					tone="ready"
-					onClick={() => setFilter("ready")}
+					label="Sẵn sàng xử lý"
+					tone="actionable"
+					onClick={() => setFilter("actionable")}
 				/>
 				<FilterButton
-					active={filter === "duplicate"}
-					count={filterCount("duplicate")}
-					icon={<CopyCheck size={17} />}
-					label="Dòng trùng"
-					tone="duplicate"
-					onClick={() => setFilter("duplicate")}
-				/>
-				<FilterButton
-					active={filter === "skipped"}
-					count={filterCount("skipped")}
+					active={filter === "ignored"}
+					count={filterCount("ignored")}
 					icon={<CircleSlash2 size={17} />}
-					label="Bỏ qua"
-					tone="skipped"
-					onClick={() => setFilter("skipped")}
+					label="Không nhập"
+					tone="ignored"
+					onClick={() => setFilter("ignored")}
 				/>
 			</div>
 			<div className="carrier-import-table-wrap">
@@ -110,6 +106,7 @@ export function CarrierExcelImportDialog({
 						<tr>
 							<th>Dòng</th>
 							<th>Nhà xe</th>
+							{kind === "rates" && <th>Mã khách hàng</th>}
 							{kind === "rates" && <th>Khách hàng</th>}
 							{kind === "rates" && <th>Quy cách</th>}
 							{kind === "carriers" && <th>Địa chỉ</th>}
@@ -129,7 +126,8 @@ export function CarrierExcelImportDialog({
 			</div>
 			<p className="carrier-import-limit">
 				Hiển thị 100 dòng đầu theo bộ lọc. Khi xác nhận, toàn bộ{" "}
-				{summary.ready.toLocaleString("vi-VN")} dòng sẵn sàng sẽ được nhập.
+				{actionableCount.toLocaleString("vi-VN")} dòng sẽ được nhập hoặc cập
+				nhật.
 			</p>
 		</Dialog>
 	);
@@ -149,6 +147,7 @@ function PreviewRow({
 				<strong>{row.carrierName ?? row.name ?? "—"}</strong>
 				{row.reason && <small>{row.reason}</small>}
 			</td>
+			{kind === "rates" && <td>{row.customerCode ?? "—"}</td>}
 			{kind === "rates" && <td>{row.customerName ?? "—"}</td>}
 			{kind === "rates" && <td>{row.spec ?? "—"}</td>}
 			{kind === "carriers" && <td>{row.address ?? "—"}</td>}
@@ -198,6 +197,7 @@ function rowKey(row: CarrierExcelPreviewRow): string {
 	return [
 		row.rowNumber,
 		row.carrierName ?? row.name,
+		row.customerCode,
 		row.customerName,
 		row.spec,
 	].join("-");
@@ -205,6 +205,7 @@ function rowKey(row: CarrierExcelPreviewRow): string {
 
 function statusLabel(status: CarrierExcelPreviewRow["status"]): string {
 	if (status === "ready") return "Sẵn sàng";
+	if (status === "update") return "Cập nhật";
 	if (status === "duplicate") return "Trùng";
 	return "Bỏ qua";
 }
