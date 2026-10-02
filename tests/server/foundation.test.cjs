@@ -1286,8 +1286,8 @@ describe('phân quyền thẻ', () => {
   });
 });
 
-describe('mỗi người chỉ thấy phiếu của mình', () => {
-  test('nhân viên tạo phiếu và chỉ thấy phiếu của mình', async () => {
+describe('nhân viên thấy phiếu được giao nhưng chỉ quản lý phiếu tự tạo', () => {
+  test('nhân viên thấy cả phiếu tự nhập và phiếu Admin nhập giúp', async () => {
     const staffDelivery = await configureStaffRate('Khách của A');
     await call('POST', '/api/entries', {
       token: staffAToken,
@@ -1304,13 +1304,19 @@ describe('mỗi người chỉ thấy phiếu của mình', () => {
 
     const staffView = await call('GET', '/api/entries', { token: staffAToken });
     assert.equal(staffView.data.scope, 'own');
-    assert.equal(staffView.data.items.length, 1);
-    assert.equal(staffView.data.items[0].customer, 'Khách của A');
+    assert.ok(staffView.data.items.length >= 2);
+    const ownEntry = staffView.data.items.find((item) => item.customer === 'Khách của A');
+    const assignedEntry = staffView.data.items.find((item) => item.customer === 'Khách của Admin');
+    assert.equal(ownEntry.canEdit, true);
+    assert.equal(ownEntry.canDelete, true);
+    assert.equal(assignedEntry.canEdit, false);
+    assert.equal(assignedEntry.canDelete, false);
 
     const adminView = await call('GET', '/api/entries', { token: adminToken });
     assert.equal(adminView.data.scope, 'all');
     assert.equal(adminView.data.items.some((item) => item.customer === 'Khách của A'), true);
     assert.equal(adminView.data.items.some((item) => item.customer === 'Khách của Admin'), true);
+    assert.ok(adminView.data.items.every((item) => item.canEdit && item.canDelete));
   });
 
   test('người tạo lấy từ phiên đăng nhập, không lấy từ dữ liệu gửi lên', async () => {
@@ -1365,12 +1371,13 @@ describe('mỗi người chỉ thấy phiếu của mình', () => {
       `/api/entries?createdBy=${admin.data.user.id}`,
       { token: staffAToken },
     );
-    // Bộ lọc chủ sở hữu ở server phải thắng tham số gửi lên.
+    // Bộ lọc nhân viên phụ trách ở server phải thắng tham số gửi lên.
     assert.equal(result.data.scope, 'own');
     assert.ok(
-      result.data.items.every((e) => e.customer !== 'Khách của Admin'),
-      'Không được lọt phiếu của người khác',
+      result.data.items.every((entry) => entry.employeeId === staffAEmployeeId),
+      'Không được lọt phiếu giao cho nhân viên khác',
     );
+    assert.ok(result.data.items.some((entry) => entry.customer === 'Khách của Admin'));
   });
 
   test('tổng tiền tự cộng và chỉ tính trên phạm vi được xem', async () => {

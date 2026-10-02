@@ -139,9 +139,12 @@ async function chooseMachine() {
 }
 
 async function startBackend() {
+  const dataDir = path.join(app.getPath('userData'), 'data');
+  const dbFile = path.join(dataDir, 'cost-app.sqlite');
   backend = createApp({
-    dbFile: path.join(app.getPath('userData'), 'data', 'cost-app.sqlite'),
+    dbFile,
     staticRoot: path.join(__dirname, '..', 'dist'),
+    automaticBackupDir: path.join(dataDir, 'backups'),
   });
   const address = await backend.listen(company.port, '0.0.0.0');
   origin = `http://127.0.0.1:${address.port}`;

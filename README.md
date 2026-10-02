@@ -135,8 +135,11 @@ Lưu ý vận hành:
   dụng không sao — nó chỉ thu nhỏ xuống khay và server vẫn chạy.
 - Lần đầu chạy, Windows Firewall sẽ hỏi. Chọn cho phép ở **mạng Private**.
 - Nên đặt IP tĩnh cho máy chính để địa chỉ không đổi.
-- **Sao lưu**: copy file `cost-app.sqlite` trong thư mục dữ liệu của ứng dụng.
-  Copy cả file `-wal` nếu có.
+- **Sao lưu tự động**: máy chủ tạo một snapshot SQLite mỗi ngày trong thư mục
+  `data/backups` cạnh cơ sở dữ liệu và giữ 14 bản gần nhất. Có thể tiếp tục dùng
+  nút **Xuất backup** trong Cài đặt để lưu thêm một bản ở nơi khác.
+- Khi cần copy thủ công file `cost-app.sqlite` lúc ứng dụng đang chạy, copy cả
+  file `-wal` nếu có.
 - Chỉ dùng trong mạng nội bộ. Không mở cổng này ra Internet.
 
 ### Nhiều công ty trên cùng hệ thống

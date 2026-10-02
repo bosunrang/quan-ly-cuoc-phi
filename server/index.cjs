@@ -4,6 +4,7 @@ const http = require('node:http');
 const { existsSync } = require('node:fs');
 
 const { openDatabase, SCHEMA_VERSION } = require('./db.cjs');
+const { startAutomaticBackups } = require('./automatic-backup.cjs');
 const auth = require('./auth.cjs');
 const { writeAudit } = require('./audit.cjs');
 const { pagesForUser } = require('./permissions.cjs');
@@ -53,9 +54,15 @@ function bearerToken(req) {
   return header.startsWith('Bearer ') ? header.slice(7).trim() : null;
 }
 
-function createApp({ dbFile, staticRoot, allowDevLogin = false }) {
+function createApp({
+  dbFile,
+  staticRoot,
+  allowDevLogin = false,
+  automaticBackupDir = null,
+}) {
   const db = openDatabase(dbFile);
   const seeded = seedFirstAdmin(db);
+  let backupScheduler = null;
 
   const router = createRouter();
   const authRoutes = require('./routes/auth.cjs');
@@ -172,12 +179,20 @@ function createApp({ dbFile, staticRoot, allowDevLogin = false }) {
         server.once('error', reject);
         server.listen(port, host, () => {
           server.removeListener('error', reject);
+          if (automaticBackupDir && !backupScheduler) {
+            backupScheduler = startAutomaticBackups(
+              db,
+              dbFile,
+              automaticBackupDir,
+            );
+          }
           resolve(server.address());
         });
       });
     },
-    close() {
-      return new Promise((resolve) => {
+    async close() {
+      if (backupScheduler) await backupScheduler.stop();
+      await new Promise((resolve) => {
         server.close(() => {
           db.close();
           resolve();

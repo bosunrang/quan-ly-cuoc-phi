@@ -86,6 +86,8 @@ describe("chuyển phiếu sang dữ liệu biểu mẫu", () => {
 			billStatus: "Có bill",
 			createdBy: 2,
 			createdByName: "Nhân viên A",
+			canEdit: true,
+			canDelete: true,
 			createdAt: "2026-08-29T07:00:00.000Z",
 			updatedAt: "2026-08-29T07:00:00.000Z",
 		};

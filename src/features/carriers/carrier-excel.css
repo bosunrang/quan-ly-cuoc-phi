@@ -50,7 +50,7 @@
 
 .carrier-preview-stats {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 10px;
 }
 
@@ -72,6 +72,7 @@
 	font: inherit;
 	text-align: left;
 	cursor: pointer;
+	transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 
 .carrier-preview-stats button::before {
@@ -82,12 +83,13 @@
 	content: "";
 }
 
-.carrier-preview-stats button:hover,
-.carrier-preview-stats button.is-active {
-	border-color: var(--preview-accent);
+.carrier-preview-stats button:hover {
+	transform: translateY(-1px);
+	box-shadow: var(--shadow-control);
 }
 
 .carrier-preview-stats button.is-active {
+	border-color: var(--preview-accent);
 	box-shadow: 0 0 0 1px var(--preview-accent);
 }
 
@@ -122,18 +124,33 @@
 	--preview-accent: var(--status-info-text);
 	--preview-icon-bg: var(--status-info-bg);
 	border-color: var(--status-info-border);
+	background: linear-gradient(135deg, var(--panel), var(--status-info-bg));
 }
 
-.carrier-preview-stats .is-actionable {
+.carrier-preview-stats .is-ready {
 	--preview-accent: var(--status-success-text);
 	--preview-icon-bg: var(--status-success-bg);
 	border-color: var(--status-success-border);
+	background: linear-gradient(135deg, var(--panel), var(--status-success-bg));
 }
 
-.carrier-preview-stats .is-ignored {
+.carrier-preview-stats .is-duplicate {
+	--preview-accent: var(--status-warning-text);
+	--preview-icon-bg: var(--status-warning-bg);
+	border-color: var(--status-warning-border);
+	background: linear-gradient(135deg, var(--panel), var(--status-warning-bg));
+}
+
+.carrier-preview-stats .is-skipped {
 	--preview-accent: var(--status-neutral-text);
 	--preview-icon-bg: var(--status-neutral-bg);
 	border-color: var(--status-neutral-border);
+	background: linear-gradient(135deg, var(--panel), var(--status-neutral-bg));
+}
+
+.carrier-preview-stats button.is-active .carrier-preview-stat-icon {
+	background: var(--preview-accent);
+	color: var(--on-accent);
 }
 
 .carrier-import-table-wrap {
@@ -220,6 +237,10 @@
 
 .carrier-excel-table.is-rates {
 	table-layout: fixed;
+}
+
+.carrier-excel-table.is-carriers th:nth-child(5) {
+	width: 120px;
 }
 
 .carrier-excel-table.is-rates th:nth-child(1) { width: 5%; }

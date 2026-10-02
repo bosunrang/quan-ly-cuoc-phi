@@ -7,6 +7,30 @@ const { extname, join, normalize, sep } = require('node:path');
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+const SECURITY_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'referrer-policy': 'no-referrer',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+};
+
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'none'",
+  "connect-src 'self'",
+  "font-src 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "img-src 'self' data: blob:",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "script-src 'self'",
+  "style-src 'self'",
+  // read-excel-file tạo Web Worker từ Blob URL để giải nén và phân tích XLSX.
+  // Chỉ mở blob: cho worker; các script thông thường vẫn bị giới hạn ở 'self'.
+  "worker-src 'self' blob:",
+].join('; ');
+
 /** Lỗi có mã HTTP. Ném cái này ở route, lớp dưới tự dịch thành phản hồi. */
 class HttpError extends Error {
   constructor(status, message, code) {
@@ -48,7 +72,7 @@ function sendJson(res, status, payload) {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(body),
     'cache-control': 'no-store',
-    'x-content-type-options': 'nosniff',
+    ...SECURITY_HEADERS,
   });
   res.end(body);
 }
@@ -172,7 +196,8 @@ function serveStatic(root, pathname, res) {
 	const isPwaMetadata = file.endsWith('sw.js') || file.endsWith('manifest.webmanifest');
   res.writeHead(200, {
     'content-type': type,
-    'x-content-type-options': 'nosniff',
+		...SECURITY_HEADERS,
+		...(isHtml ? { 'content-security-policy': CONTENT_SECURITY_POLICY } : {}),
 		'cache-control': isHtml || isPwaMetadata ? 'no-cache' : 'public, max-age=3600',
 		...(file.endsWith('sw.js') ? { 'service-worker-allowed': '/' } : {}),
   });

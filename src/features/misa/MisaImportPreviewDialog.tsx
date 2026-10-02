@@ -1,5 +1,4 @@
 import {
-	AlertTriangle,
 	CheckCircle2,
 	CircleSlash2,
 	CopyCheck,
@@ -121,17 +120,6 @@ export function MisaImportPreviewDialog({
 					);
 				})}
 			</div>
-
-			{preview.skippedCount > 0 && (
-				<div className="misa-preview-note">
-					<AlertTriangle size={17} />
-					<span>
-						Các dòng thiếu ngày, tên khách hàng, tên mặt hàng hoặc số lượng hợp
-						lệ sẽ không được nhập.
-					</span>
-				</div>
-			)}
-
 			<div className="misa-preview-table-wrap">
 				<table className="misa-preview-table">
 					<thead>

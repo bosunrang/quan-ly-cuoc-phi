@@ -124,7 +124,7 @@ export function EntriesPage() {
 		? `Đang kiểm tra cước của ${selectedEmployee.name}`
 		: isAdmin
 			? "Theo dõi cước của tất cả nhân viên"
-			: "Các phiếu cước do bạn nhập";
+			: "Phiếu bạn nhập và phiếu Admin nhập giúp";
 	return (
 		<>
 			<section className="panel entry-intro">
@@ -267,6 +267,12 @@ export function EntriesPage() {
 												: rateDifference > 0
 													? " is-over-rate"
 													: " is-under-rate";
+										// Admin luôn được quản lý mọi phiếu. Hai cờ từ API chỉ
+										// quyết định quyền của nhân viên và có thể thiếu ở backend cũ.
+										const isOwnEntry =
+											entry.createdBy === options?.currentUserId;
+										const canEdit = isAdmin || entry.canEdit || isOwnEntry;
+										const canDelete = isAdmin || entry.canDelete || isOwnEntry;
 										return (
 											<tr key={entry.id}>
 												<td>{formatDate(entry.entryDate)}</td>
@@ -322,31 +328,41 @@ export function EntriesPage() {
 													)}
 												</td>
 												<td>
-													<div className="entry-row-actions">
-														<button
-															type="button"
-															className="row-action"
-															title="Sửa phiếu"
-															aria-label="Sửa phiếu"
-															onClick={() =>
-																setEditor({
-																	initial: toEntryInput(entry),
-																	editingId: entry.id,
-																})
-															}
-														>
-															<Pencil size={14} />
-														</button>
-														<button
-															type="button"
-															className="row-action is-danger"
-															title="Xóa phiếu"
-															aria-label="Xóa phiếu"
-															onClick={() => setRemoving(entry)}
-														>
-															<Trash2 size={14} />
-														</button>
-													</div>
+													{canEdit || canDelete ? (
+														<div className="entry-row-actions">
+															{canEdit && (
+																<button
+																	type="button"
+																	className="row-action"
+																	title="Sửa phiếu"
+																	aria-label="Sửa phiếu"
+																	onClick={() =>
+																		setEditor({
+																			initial: toEntryInput(entry),
+																			editingId: entry.id,
+																		})
+																	}
+																>
+																	<Pencil size={14} />
+																</button>
+															)}
+															{canDelete && (
+																<button
+																	type="button"
+																	className="row-action is-danger"
+																	title="Xóa phiếu"
+																	aria-label="Xóa phiếu"
+																	onClick={() => setRemoving(entry)}
+																>
+																	<Trash2 size={14} />
+																</button>
+															)}
+														</div>
+													) : (
+														<span className="entry-readonly-label">
+															Chỉ xem
+														</span>
+													)}
 												</td>
 											</tr>
 										);

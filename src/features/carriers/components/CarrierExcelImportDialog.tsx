@@ -1,4 +1,9 @@
-import { CheckCircle2, CircleSlash2, FileSpreadsheet } from "lucide-react";
+import {
+	CheckCircle2,
+	CircleSlash2,
+	CopyCheck,
+	FileSpreadsheet,
+} from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import type {
 	CarrierExcelPreview,
@@ -8,7 +13,8 @@ import { formatMoney } from "../../../shared/lib/format";
 import { Dialog } from "../../../shared/ui/Dialog";
 
 type ImportKind = "carriers" | "rates";
-type Filter = "all" | "actionable" | "ignored";
+type Filter = "all" | "actionable" | "duplicate" | "skipped";
+type FilterTone = "all" | "ready" | "duplicate" | "skipped";
 
 interface Props {
 	fileName: string;
@@ -39,7 +45,7 @@ export function CarrierExcelImportDialog({
 					if (filter === "all") return true;
 					if (filter === "actionable")
 						return row.status === "ready" || row.status === "update";
-					return row.status === "duplicate" || row.status === "skipped";
+					return row.status === filter;
 				})
 				.slice(0, 100),
 		[filter, rows],
@@ -47,7 +53,7 @@ export function CarrierExcelImportDialog({
 	const filterCount = (next: Filter) => {
 		if (next === "all") return rows.length;
 		if (next === "actionable") return actionableCount;
-		return summary.duplicate + summary.skipped;
+		return summary[next];
 	};
 	const fileLabel = kind === "carriers" ? "Nhà xe" : "Bảng cước";
 
@@ -77,7 +83,7 @@ export function CarrierExcelImportDialog({
 					active={filter === "all"}
 					count={filterCount("all")}
 					icon={<FileSpreadsheet size={17} />}
-					label="Toàn bộ"
+					label="Tổng dòng"
 					tone="all"
 					onClick={() => setFilter("all")}
 				/>
@@ -85,17 +91,25 @@ export function CarrierExcelImportDialog({
 					active={filter === "actionable"}
 					count={filterCount("actionable")}
 					icon={<CheckCircle2 size={17} />}
-					label="Sẵn sàng xử lý"
-					tone="actionable"
+					label="Sẵn sàng nhập"
+					tone="ready"
 					onClick={() => setFilter("actionable")}
 				/>
 				<FilterButton
-					active={filter === "ignored"}
-					count={filterCount("ignored")}
+					active={filter === "duplicate"}
+					count={filterCount("duplicate")}
+					icon={<CopyCheck size={17} />}
+					label="Dòng trùng"
+					tone="duplicate"
+					onClick={() => setFilter("duplicate")}
+				/>
+				<FilterButton
+					active={filter === "skipped"}
+					count={filterCount("skipped")}
 					icon={<CircleSlash2 size={17} />}
-					label="Không nhập"
-					tone="ignored"
-					onClick={() => setFilter("ignored")}
+					label="Bỏ qua"
+					tone="skipped"
+					onClick={() => setFilter("skipped")}
 				/>
 			</div>
 			<div className="carrier-import-table-wrap">
@@ -176,7 +190,7 @@ function FilterButton({
 	count: number;
 	icon: ReactNode;
 	label: string;
-	tone: Filter;
+	tone: FilterTone;
 	onClick: () => void;
 }) {
 	return (

@@ -28,6 +28,9 @@ export interface Entry {
 	createdByName: string | null;
 	employeeId?: number | null;
 	employeeName?: string | null;
+	/** Admin được quản lý mọi phiếu; nhân viên chỉ quản lý phiếu tự tạo. */
+	canEdit: boolean;
+	canDelete: boolean;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -182,7 +185,7 @@ export interface EntryListResult {
 	items: Entry[];
 	count: number;
 	total: number;
-	/** "own" = chỉ phiếu của mình, "all" = mọi phiếu (chỉ Admin). */
+	/** "own" = phiếu được giao cho mình, "all" = mọi phiếu (chỉ Admin). */
 	scope: "own" | "all";
 }
 

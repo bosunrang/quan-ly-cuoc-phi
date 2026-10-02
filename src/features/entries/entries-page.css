@@ -151,6 +151,19 @@
 .entry-note-heading,
 .entry-note-cell { color: var(--text-body); line-height: var(--line-body); text-align: center; }
 .entry-row-actions { display: flex; justify-content: center; gap: 6px; }
+.entry-readonly-label {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 26px;
+	padding: 0 9px;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	background: var(--surface-muted);
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 700;
+}
 .entry-pagination { min-height: 48px; padding: 8px 13px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); background: var(--table-footer-bg); color: var(--muted); font-size: var(--type-caption); font-weight: 650; }
 .entry-pagination button { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--teal); display: grid; place-items: center; cursor: pointer; }
 .entry-pagination button:hover:not(:disabled) { border-color: var(--teal-border); background: var(--surface-accent-faint); }

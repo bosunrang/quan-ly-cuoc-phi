@@ -25,6 +25,9 @@ jobs:
       - name: Cài thư viện
         run: npm ci
 
+      - name: Kiểm tra chất lượng và nghiệp vụ
+        run: npm run check
+
       - name: Đóng gói bộ cài
         run: npm run dist
 

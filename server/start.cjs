@@ -7,7 +7,7 @@
  * Dùng khi phát triển, hoặc sau này nếu muốn tách server ra một máy riêng.
  */
 
-const { join } = require('node:path');
+const { dirname, join } = require('node:path');
 const { createApp } = require('./index.cjs');
 const { companyFromArgs, databaseFileName } = require('./company-profiles.cjs');
 
@@ -22,10 +22,12 @@ const ROOT = join(__dirname, '..');
 const ALLOW_DEV_LOGIN = process.argv.includes('--dev-bypass-login');
 
 async function main() {
+  const dbFile = process.env.DB_FILE || join(ROOT, 'data', databaseFileName(COMPANY));
   const app = createApp({
-    dbFile: process.env.DB_FILE || join(ROOT, 'data', databaseFileName(COMPANY)),
+    dbFile,
     staticRoot: API_ONLY ? null : join(ROOT, 'dist'),
     allowDevLogin: ALLOW_DEV_LOGIN,
+    automaticBackupDir: join(dirname(dbFile), 'backups'),
   });
 
   await app.listen(PORT, HOST);

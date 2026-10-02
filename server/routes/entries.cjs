@@ -311,7 +311,8 @@ function shortProductName(value) {
   return (match?.[1] ?? name).trim();
 }
 
-function toApi(row) {
+function toApi(row, user) {
+  const canManage = canSeeEveryone(user) || row.created_by === user.id;
   return {
     id: row.id,
     entryDate: row.entry_date,
@@ -339,6 +340,8 @@ function toApi(row) {
     createdByName: row.created_by_name ?? null,
     employeeId: row.employee_id ?? null,
     employeeName: row.employee_name ?? null,
+    canEdit: canManage,
+    canDelete: canManage,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -381,11 +384,14 @@ function register(router) {
     const params = [];
     const where = ['1 = 1'];
 
-    // Chốt chặn quan trọng nhất: nhân viên luôn bị ghép thêm điều kiện này,
-    // bất kể giao diện gửi lên cái gì.
+    // Nhân viên xem mọi phiếu được giao cho hồ sơ nhân viên của mình, kể cả
+    // phiếu do Admin nhập hộ. Quyền sửa/xóa vẫn chỉ dựa vào người tạo phiếu.
     if (!canSeeEveryone(c.user)) {
-      where.push('e.created_by = ?');
-      params.push(c.user.id);
+      const employee = c.db.prepare(
+        'SELECT id FROM employees WHERE user_id = ? AND is_active = 1',
+      ).get(c.user.id);
+      where.push('e.employee_id = ?');
+      params.push(employee?.id ?? -1);
     } else if (c.query.createdBy) {
       where.push('e.created_by = ?');
       params.push(Number(c.query.createdBy));
@@ -444,7 +450,7 @@ function register(router) {
       .get(...params);
 
     return {
-      items: rows.map(toApi),
+      items: rows.map((row) => toApi(row, c.user)),
       count: Number(summary.count),
       total: Number(summary.total),
       scope: canSeeEveryone(c.user) ? 'all' : 'own',
@@ -677,7 +683,7 @@ function register(router) {
              LEFT JOIN employees ON employees.id = e.employee_id WHERE e.id = ?`,
         )
         .get(id);
-      return toApi(row);
+      return toApi(row, c.user);
     });
   });
 
@@ -725,7 +731,7 @@ function register(router) {
           before.id,
         );
       writeAudit(c.db, c.user, 'entry.update', 'entry', before.id, {
-        before: toApi(before),
+        before: toApi(before, c.user),
         after: input,
 		delivery,
       });
@@ -737,7 +743,7 @@ function register(router) {
              LEFT JOIN employees ON employees.id = e.employee_id WHERE e.id = ?`,
         )
         .get(before.id);
-      return toApi(row);
+      return toApi(row, c.user);
     });
   });
 
@@ -746,7 +752,7 @@ function register(router) {
     const row = loadOwned(c.db, c.user, Number(c.params.id));
     return transaction(c.db, () => {
       c.db.prepare('DELETE FROM entries WHERE id = ?').run(row.id);
-      writeAudit(c.db, c.user, 'entry.delete', 'entry', row.id, toApi(row));
+      writeAudit(c.db, c.user, 'entry.delete', 'entry', row.id, toApi(row, c.user));
       return { ok: true };
     });
   });

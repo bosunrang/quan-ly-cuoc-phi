@@ -3,7 +3,6 @@ import {
 	CircleSlash2,
 	CopyCheck,
 	FileSpreadsheet,
-	RefreshCw,
 } from "lucide-react";
 import { Dialog } from "../../../shared/ui/Dialog";
 import type {
@@ -52,11 +51,6 @@ export function CustomerImportDialog({
 					tone="ready"
 				/>
 				<ImportStat
-					label="Cập nhật theo mã"
-					count={preview.updateCount}
-					tone="update"
-				/>
-				<ImportStat
 					label="Dòng trùng"
 					count={preview.duplicateCount}
 					tone="duplicate"
@@ -69,6 +63,14 @@ export function CustomerImportDialog({
 			</div>
 			<div className="customer-import-table-wrap">
 				<table className="customer-import-table">
+					<colgroup>
+						<col className="customer-import-row" />
+						<col className="customer-import-code" />
+						<col className="customer-import-name" />
+						<col className="customer-import-carrier" />
+						<col className="customer-import-address" />
+						<col className="customer-import-status-column" />
+					</colgroup>
 					<thead>
 						<tr>
 							<th>Dòng</th>
@@ -128,8 +130,6 @@ function ImportStat({
 	const icon =
 		tone === "ready" ? (
 			<CheckCircle2 size={17} />
-		) : tone === "update" ? (
-			<RefreshCw size={17} />
 		) : tone === "duplicate" ? (
 			<CopyCheck size={17} />
 		) : tone === "skipped" ? (

@@ -30,15 +30,20 @@ function isLoopback(request) {
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
 }
 
+function clientAddress(request) {
+  return request.socket.remoteAddress ?? 'unknown';
+}
+
 function register(router) {
   router.post('/api/login', async (c) => {
     const username = String(c.body.username ?? '').trim().toLowerCase();
     const password = String(c.body.password ?? '');
+    const address = clientAddress(c.req);
     if (!username || !password) {
       throw badRequest('Vui lòng nhập tên đăng nhập và mật khẩu.');
     }
 
-    const blockedMinutes = auth.loginBlockedFor(username);
+    const blockedMinutes = auth.loginBlockedFor(username, address);
     if (blockedMinutes > 0) {
       throw badRequest(
         `Sai quá nhiều lần. Vui lòng thử lại sau ${blockedMinutes} phút.`,
@@ -52,11 +57,11 @@ function register(router) {
     // Cùng một thông báo cho mọi trường hợp sai, để không lộ tài khoản nào có thật.
     const invalid = unauthorized('Tên đăng nhập hoặc mật khẩu không đúng.');
     if (!user) {
-      auth.recordFailedLogin(username);
+      auth.recordFailedLogin(username, address);
       throw invalid;
     }
     if (!auth.verifyPassword(password, user.password_hash, user.password_salt)) {
-      auth.recordFailedLogin(username);
+      auth.recordFailedLogin(username, address);
       writeAudit(c.db, user, 'login.failed', 'user', user.id);
       throw invalid;
     }
@@ -64,7 +69,7 @@ function register(router) {
       throw unauthorized('Tài khoản đã bị khóa. Liên hệ Admin.');
     }
 
-    auth.clearFailedLogins(username);
+    auth.clearFailedLogins(username, address);
     auth.purgeExpiredSessions(c.db);
     const session = auth.createSession(c.db, user.id);
     writeAudit(c.db, user, 'login', 'user', user.id);

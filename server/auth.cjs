@@ -11,6 +11,7 @@ const SCRYPT_KEY_LENGTH = 64;
 const SESSION_HOURS = 12;
 const MAX_ATTEMPTS = 8;
 const LOCKOUT_MS = 15 * 60 * 1000;
+const MAX_ATTEMPT_KEYS = 2_000;
 
 const now = () => new Date().toISOString();
 
@@ -87,31 +88,49 @@ function purgeExpiredSessions(db) {
 
 // ------------------------------------------------- giới hạn số lần đăng nhập
 
-// Bộ đếm nằm trong bộ nhớ: khởi động lại server là xóa. Đủ cho mạng nội bộ.
+// Bộ đếm nằm trong bộ nhớ: khởi động lại server là xóa. Ghép tài khoản với địa
+// chỉ máy để một máy nhập sai không khóa tài khoản trên toàn bộ mạng nội bộ.
 const attempts = new Map();
 
-function loginBlockedFor(username) {
-  const record = attempts.get(username);
+function attemptKey(username, address = '') {
+  return `${String(username).trim().toLowerCase()}\n${String(address).trim() || 'unknown'}`;
+}
+
+function purgeOldAttempts(at = Date.now()) {
+  for (const [key, record] of attempts) {
+    if (at - record.first > LOCKOUT_MS) attempts.delete(key);
+  }
+  while (attempts.size >= MAX_ATTEMPT_KEYS) {
+    attempts.delete(attempts.keys().next().value);
+  }
+}
+
+function loginBlockedFor(username, address) {
+  purgeOldAttempts();
+  const key = attemptKey(username, address);
+  const record = attempts.get(key);
   if (!record) return 0;
   if (Date.now() - record.first > LOCKOUT_MS) {
-    attempts.delete(username);
+    attempts.delete(key);
     return 0;
   }
   if (record.count < MAX_ATTEMPTS) return 0;
   return Math.ceil((LOCKOUT_MS - (Date.now() - record.first)) / 60000);
 }
 
-function recordFailedLogin(username) {
-  const record = attempts.get(username);
+function recordFailedLogin(username, address) {
+  purgeOldAttempts();
+  const key = attemptKey(username, address);
+  const record = attempts.get(key);
   if (!record || Date.now() - record.first > LOCKOUT_MS) {
-    attempts.set(username, { count: 1, first: Date.now() });
+    attempts.set(key, { count: 1, first: Date.now() });
     return;
   }
   record.count += 1;
 }
 
-function clearFailedLogins(username) {
-  attempts.delete(username);
+function clearFailedLogins(username, address) {
+  attempts.delete(attemptKey(username, address));
 }
 
 module.exports = {
