@@ -65,7 +65,7 @@ function register(router) {
          SELECT id FROM carrier_customer_rates
           WHERE customer_id = cu.id AND carrier_id = ca.id
             AND (spec_key = vn_normalize(e.spec) OR is_default = 1)
-          ORDER BY CASE WHEN spec_key = vn_normalize(e.spec) THEN 0 ELSE 1 END, id LIMIT 1
+          ORDER BY is_default ASC, id LIMIT 1
        )
        WHERE ${entryWhere.sql} AND e.transport_fee <> r.transport_fee`,
     ).get(...entryWhere.params);
@@ -82,7 +82,7 @@ function register(router) {
          SELECT id FROM carrier_customer_rates
           WHERE customer_id = cu.id AND carrier_id = ca.id
             AND (spec_key = vn_normalize(e.spec) OR is_default = 1)
-          ORDER BY CASE WHEN spec_key = vn_normalize(e.spec) THEN 0 ELSE 1 END, id LIMIT 1
+          ORDER BY is_default ASC, id LIMIT 1
        )
        WHERE ${entryWhere.sql} AND e.transport_fee <> r.transport_fee
        GROUP BY substr(e.entry_date, 1, 7)

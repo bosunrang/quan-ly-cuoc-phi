@@ -356,8 +356,7 @@ const STANDARD_TRANSPORT_RATE_SELECT = `(
       ON rate.customer_id = customer.id AND rate.carrier_id = carrier.id
    WHERE customer.customer_key = vn_normalize(e.customer)
      AND (rate.spec_key = vn_normalize(e.spec) OR rate.is_default = 1)
-   ORDER BY CASE WHEN rate.spec_key = vn_normalize(e.spec) THEN 0 ELSE 1 END,
-            rate.id
+   ORDER BY rate.is_default ASC, rate.id
    LIMIT 1
 ) AS standard_transport_fee`;
 

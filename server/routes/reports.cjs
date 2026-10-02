@@ -206,7 +206,7 @@ function reportData(db, input) {
                WHERE cu.customer_key = vn_normalize(e.customer)
                  AND ca.carrier_key = vn_normalize(e.carrier)
                  AND (r.spec_key = vn_normalize(e.spec) OR r.is_default = 1)
-               ORDER BY CASE WHEN r.spec_key = vn_normalize(e.spec) THEN 0 ELSE 1 END, r.id
+               ORDER BY r.is_default ASC, r.id
                LIMIT 1
             ) AS standard_transport_fee
        FROM entries e
@@ -270,7 +270,7 @@ function carrierVariance(db, input) {
        SELECT id FROM carrier_customer_rates
         WHERE customer_id = cu.id AND carrier_id = ca.id
           AND (spec_key = vn_normalize(e.spec) OR is_default = 1)
-        ORDER BY CASE WHEN spec_key = vn_normalize(e.spec) THEN 0 ELSE 1 END, id
+        ORDER BY is_default ASC, id
         LIMIT 1
      )
      WHERE ${where.join(' AND ')}
