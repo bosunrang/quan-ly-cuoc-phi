@@ -268,18 +268,26 @@ export function FuelPage() {
 		[estimatingLegId, setEstimatingLegId] = useState<string | null>(null);
 	const initialPeriodTo = useRef(periodTo);
 	const hasLoadedInitialPrice = useRef(false);
-	const loadRequest = useRef(0);
+	// Danh mục (địa điểm, giá, quãng đường) khá nặng và hiếm khi đổi: chỉ tải
+	// khi mở trang hoặc sau thao tác làm đổi danh mục. Chuyển trang/lọc lịch sử
+	// chỉ tải lại phần lịch sử.
+	const historyParams = useMemo(
+		() => ({
+			limit: HISTORY_PAGE_SIZE,
+			offset: (historyPage - 1) * HISTORY_PAGE_SIZE,
+			employeeId: historyEmployeeId,
+		}),
+		[historyEmployeeId, historyPage],
+	);
+	const historyParamsRef = useRef(historyParams);
+	historyParamsRef.current = historyParams;
+	// Một bộ đếm chung: kết quả lịch sử cũ về muộn không đè kết quả mới hơn.
+	const recordsRequest = useRef(0);
 	const load = useCallback(async () => {
-		const requestId = loadRequest.current + 1;
-		loadRequest.current = requestId;
+		const requestId = recordsRequest.current + 1;
+		recordsRequest.current = requestId;
 		try {
-			const next = await fuelRepository.list({
-				limit: HISTORY_PAGE_SIZE,
-				offset: (historyPage - 1) * HISTORY_PAGE_SIZE,
-				employeeId: historyEmployeeId,
-			});
-			// Chuyển trang lịch sử nhanh: bỏ kết quả cũ về muộn.
-			if (loadRequest.current !== requestId) return;
+			const next = await fuelRepository.list(historyParamsRef.current);
 			if (!hasLoadedInitialPrice.current) {
 				const initialPrice = next.prices.find(
 					(item) =>
@@ -290,18 +298,49 @@ export function FuelPage() {
 				setFuelPrice(initialPrice ? formatMoney(initialPrice.price) : "");
 				hasLoadedInitialPrice.current = true;
 			}
-			setData(next);
+			setData((current) =>
+				recordsRequest.current === requestId || !current
+					? next
+					: {
+							...next,
+							records: current.records,
+							recordsTotal: current.recordsTotal,
+						},
+			);
 			setError(null);
 		} catch (cause) {
-			if (loadRequest.current !== requestId) return;
 			setError(
 				cause instanceof Error ? cause.message : "Không tải được dữ liệu.",
 			);
 		}
-	}, [historyEmployeeId, historyPage]);
+	}, []);
+	const loadHistory = useCallback(async () => {
+		const requestId = recordsRequest.current + 1;
+		recordsRequest.current = requestId;
+		try {
+			const history = await fuelRepository.history(historyParams);
+			if (recordsRequest.current !== requestId) return;
+			setData((current) => (current ? { ...current, ...history } : current));
+			setError(null);
+		} catch (cause) {
+			if (recordsRequest.current !== requestId) return;
+			setError(
+				cause instanceof Error ? cause.message : "Không tải được lịch sử.",
+			);
+		}
+	}, [historyParams]);
 	useEffect(() => {
 		void load();
 	}, [load]);
+	// Lần đầu lịch sử đã đi kèm danh mục; từ đó chỉ tải lại phần lịch sử.
+	const historyReady = useRef(false);
+	useEffect(() => {
+		if (!historyReady.current) {
+			historyReady.current = true;
+			return;
+		}
+		void loadHistory();
+	}, [loadHistory]);
 	useEffect(() => {
 		if (!data?.isAdmin && data?.currentEmployee) {
 			setEmployeeId(String(data.currentEmployee.id));
@@ -549,7 +588,7 @@ export function FuelPage() {
 	};
 	const deleteRecord = async (record: FuelData["records"][number]) => {
 		await fuelRepository.deleteRecord(record.id);
-		await load();
+		await loadHistory();
 	};
 	const save = async () => {
 		if (!employeeId) throw new Error("Vui lòng chọn nhân viên.");

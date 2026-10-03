@@ -10,7 +10,7 @@ const {
 const { estimateRoute } = require('../fuel/routes.cjs');
 const { fetchPetrolimexPrices } = require('../fuel/online-prices.cjs');
 const {
-  activeEmployee, consumptionProfiles, listFuelData, saveFuelRecord, editableRecord, deleteFuelRecord,
+  activeEmployee, consumptionProfiles, fuelHistory, listFuelData, saveFuelRecord, editableRecord, deleteFuelRecord,
 } = require('../fuel/records.cjs');
 
 const PAGE = 'fuel';
@@ -31,6 +31,12 @@ function register(router) {
     c.requirePage(PAGE);
     const isAdmin = canSeeEveryone(c.user);
     return listFuelData(c.db, c.user, isAdmin, c.query, FUEL_TYPES);
+  });
+
+  // Chỉ một trang lịch sử, dùng khi chuyển trang hoặc lọc nhân viên.
+  router.get('/api/fuel/records', async (c) => {
+    c.requirePage(PAGE);
+    return fuelHistory(c.db, c.user, canSeeEveryone(c.user), c.query);
   });
 
   router.post('/api/fuel/prices', async (c) => {

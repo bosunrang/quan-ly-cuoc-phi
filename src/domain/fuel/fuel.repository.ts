@@ -50,18 +50,30 @@ export interface FuelData {
 	>;
 	isAdmin: boolean;
 }
+/** Một trang lịch sử kỳ tính xăng. */
+export type FuelHistory = Pick<FuelData, "records" | "recordsTotal">;
+
+export interface FuelHistoryParams {
+	limit?: number;
+	offset?: number;
+	employeeId?: string;
+}
+
+function historySearch(params?: FuelHistoryParams): string {
+	const search = new URLSearchParams();
+	if (params?.limit) search.set("limit", String(params.limit));
+	if (params?.offset) search.set("offset", String(params.offset));
+	if (params?.employeeId) search.set("employeeId", params.employeeId);
+	return search.size ? `?${search}` : "";
+}
+
 export const fuelRepository = {
-	list: (params?: {
-		limit?: number;
-		offset?: number;
-		employeeId?: string;
-	}): Promise<FuelData> => {
-		const search = new URLSearchParams();
-		if (params?.limit) search.set("limit", String(params.limit));
-		if (params?.offset) search.set("offset", String(params.offset));
-		if (params?.employeeId) search.set("employeeId", params.employeeId);
-		return api("GET", `/api/fuel${search.size ? `?${search}` : ""}`);
-	},
+	/** Danh mục (địa điểm, giá, quãng đường…) kèm trang lịch sử đầu tiên. */
+	list: (params?: FuelHistoryParams): Promise<FuelData> =>
+		api("GET", `/api/fuel${historySearch(params)}`),
+	/** Chỉ trang lịch sử: dùng khi chuyển trang hoặc lọc nhân viên. */
+	history: (params?: FuelHistoryParams): Promise<FuelHistory> =>
+		api("GET", `/api/fuel/records${historySearch(params)}`),
 	online: (): Promise<{
 		priceDate: string;
 		source: string;

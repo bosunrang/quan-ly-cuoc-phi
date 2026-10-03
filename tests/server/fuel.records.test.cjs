@@ -187,6 +187,14 @@ test('lưu, sửa và xóa kỳ tính xăng vẫn giữ tổng tiền và các c
   });
   assert.equal(later.status, 200);
 
+  // Chuyển trang lịch sử chỉ trả lịch sử, không kèm danh mục địa điểm/giá.
+  const page = await call('GET', '/api/fuel/records?limit=1&offset=1');
+  assert.equal(page.status, 200);
+  assert.equal(page.data.recordsTotal, 2);
+  assert.deepEqual(page.data.records.map((item) => item.id), [created.data.id]);
+  assert.equal('locations' in page.data, false);
+  assert.equal('prices' in page.data, false);
+
   const history = await call(
     'GET',
     '/api/reports/fuel-history?from=2026-09-01&to=2026-09-30&fuelType=X%C4%83ng%20E10',

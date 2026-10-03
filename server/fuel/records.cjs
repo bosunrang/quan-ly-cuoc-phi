@@ -52,15 +52,12 @@ function extraCosts(value) {
   }
 }
 
-function listFuelData(db, user, isAdmin, query, fuelTypes) {
+/**
+ * Lịch sử kỳ tính xăng theo trang. Tách riêng khỏi danh mục để chuyển trang
+ * lịch sử không phải tải lại toàn bộ địa điểm, giá xăng và quãng đường.
+ */
+function fuelHistory(db, user, isAdmin, query) {
   const employee = currentEmployee(db, user, isAdmin);
-  const employees = isAdmin
-    ? db
-      .prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE')
-      .all()
-    : employee
-      ? [employee]
-      : [];
   const limit = Math.min(Math.max(Number(query.limit) || 50, 1), 100);
   const offset = Math.max(Number(query.offset) || 0, 0);
   const requestedEmployeeId = Number(query.employeeId) || null;
@@ -107,6 +104,44 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
       legsByRecord.set(leg.fuel_record_id, legs);
     }
   }
+  return {
+    records: records.map((item) => ({
+      id: item.id,
+      entryDate: item.entry_date,
+      periodFrom: item.period_from || item.entry_date,
+      periodTo: item.period_to || item.entry_date,
+      employeeId: item.employee_id,
+      employeeName: item.employee_name,
+      distanceKm: item.distance_km,
+      consumptionLiters: item.consumption_liters,
+      consumptionBaseKm: item.consumption_base_km,
+      vehicleType: item.vehicle_type,
+      fuelType: item.fuel_type,
+      region: item.region,
+      fuelPrice: item.fuel_price,
+      totalFee: item.total_fee,
+      extraCosts: extraCosts(item.extra_costs),
+      status: item.status,
+      voidReason: item.void_reason,
+      finalizedAt: item.finalized_at,
+      legs: legsByRecord.get(item.id) ?? [],
+      canEdit: item.status === 'active' && (isAdmin || item.created_by === user.id),
+      canDelete: item.status === 'active' && (isAdmin || item.created_by === user.id),
+    })),
+    recordsTotal,
+  };
+}
+
+/** Danh mục dùng để lập kỳ tính: nhân viên, địa điểm, giá xăng, quãng đường đã lưu. */
+function fuelCatalog(db, user, isAdmin, fuelTypes) {
+  const employee = currentEmployee(db, user, isAdmin);
+  const employees = isAdmin
+    ? db
+      .prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE')
+      .all()
+    : employee
+      ? [employee]
+      : [];
   const prices = db
     .prepare('SELECT * FROM fuel_prices ORDER BY effective_date DESC, fuel_type, region')
     .all();
@@ -142,33 +177,16 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
       to: item.to_name,
       km: item.distance_km,
     })),
-    records: records.map((item) => ({
-      id: item.id,
-      entryDate: item.entry_date,
-      periodFrom: item.period_from || item.entry_date,
-      periodTo: item.period_to || item.entry_date,
-      employeeId: item.employee_id,
-      employeeName: item.employee_name,
-      distanceKm: item.distance_km,
-      consumptionLiters: item.consumption_liters,
-      consumptionBaseKm: item.consumption_base_km,
-      vehicleType: item.vehicle_type,
-      fuelType: item.fuel_type,
-      region: item.region,
-      fuelPrice: item.fuel_price,
-      totalFee: item.total_fee,
-	  extraCosts: extraCosts(item.extra_costs),
-      status: item.status,
-      voidReason: item.void_reason,
-      finalizedAt: item.finalized_at,
-      legs: legsByRecord.get(item.id) ?? [],
-      canEdit: item.status === 'active' && (isAdmin || item.created_by === user.id),
-      canDelete: item.status === 'active' && (isAdmin || item.created_by === user.id),
-    })),
-    recordsTotal,
     fuelTypes,
     consumptionProfiles: consumptionProfiles(db),
     isAdmin,
+  };
+}
+
+function listFuelData(db, user, isAdmin, query, fuelTypes) {
+  return {
+    ...fuelCatalog(db, user, isAdmin, fuelTypes),
+    ...fuelHistory(db, user, isAdmin, query),
   };
 }
 
@@ -278,6 +296,7 @@ function deleteFuelRecord(db, id, user, isAdmin) {
 module.exports = {
   activeEmployee,
   consumptionProfiles,
+  fuelHistory,
   listFuelData,
   saveFuelRecord,
   editableRecord,
