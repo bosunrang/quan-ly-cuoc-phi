@@ -28,7 +28,7 @@ import {
 import { Alert } from "../../shared/ui/Alert";
 import { EmptyState, LoadingState } from "../../shared/ui/Panel";
 import { MisaImportPreviewDialog } from "./MisaImportPreviewDialog";
-import { parseMisaWorkbook } from "./misa.import";
+import { parseMisaWorkbook } from "./misa.workbook";
 
 const number = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
 

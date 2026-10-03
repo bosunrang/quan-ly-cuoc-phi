@@ -1,4 +1,5 @@
-import { type Row, readSheet, type SheetData } from "read-excel-file/browser";
+// Chỉ dùng kiểu dữ liệu: việc đọc file chạy trong misa.worker.ts.
+import type { Row, SheetData } from "read-excel-file/web-worker";
 import type {
 	MisaImportRow,
 	MisaParsedFile,
@@ -212,11 +213,4 @@ export function parseMisaRows(
 	if (!rows.length)
 		throw new Error("Không tìm thấy dòng dữ liệu nào trong file.");
 	return { fileName, rows };
-}
-
-export async function parseMisaWorkbook(file: File): Promise<MisaParsedFile> {
-	if (file.size > 15 * 1024 * 1024) {
-		throw new Error("File MISA quá lớn. Vui lòng chọn file nhỏ hơn 15 MB.");
-	}
-	return parseMisaRows(file.name, await readSheet(file));
 }
