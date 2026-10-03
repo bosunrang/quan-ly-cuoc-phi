@@ -4,6 +4,7 @@ import {
 	Download,
 	FileSpreadsheet,
 	Plus,
+	Printer,
 	ReceiptText,
 	Trash2,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import { Alert } from "../../shared/ui/Alert";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
 import { MoneyInput } from "../../shared/ui/MoneyInput";
 import { EmptyState, LoadingState, PanelHeader } from "../../shared/ui/Panel";
+import { printableReportHtml } from "./print-report";
 import "./reports.css";
 
 type ExtraCost = {
@@ -51,8 +53,11 @@ const download = ({
 	const link = document.createElement("a");
 	link.href = url;
 	link.download = fileName;
+	document.body.append(link);
 	link.click();
-	URL.revokeObjectURL(url);
+	link.remove();
+	// Giữ Blob đủ lâu để Chromium/Electron hoàn tất việc khởi tạo tải xuống.
+	window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 };
 
 function summarizeCarrierVariance(items: CarrierVarianceReport["items"]) {
@@ -91,6 +96,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	const [variance, setVariance] = useState<CarrierVarianceReport | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [exporting, setExporting] = useState<"daily" | "annual" | null>(null);
+	const [printing, setPrinting] = useState<"daily" | "annual" | null>(null);
 	const [exportingCarrier, setExportingCarrier] = useState(false);
 
 	useEffect(() => {
@@ -120,29 +126,35 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 			);
 	}, [carrierEmployeeId, carrierFrom, carrierTo, section]);
 
+	const reportFilters = (type: "daily" | "annual") => {
+		const ownEmployeeId = String(data?.employees[0]?.id ?? "");
+		const employeeId =
+			data?.canReportAll === false
+				? ownEmployeeId
+				: type === "daily"
+					? dailyEmployeeId
+					: annualEmployeeId;
+		return {
+			from: type === "annual" ? `${year}-01-01` : from,
+			to: type === "annual" ? `${year}-12-31` : to,
+			employeeId,
+			type,
+			extraCosts:
+				type === "daily"
+					? extraCosts.map(
+							({ name, amount, employeeId: assignedEmployeeId }) => ({
+								name,
+								amount,
+								employeeId: assignedEmployeeId,
+							}),
+						)
+					: [],
+		};
+	};
 	const exportFile = async (type: "daily" | "annual") => {
-		const employeeId = type === "daily" ? dailyEmployeeId : annualEmployeeId;
 		setExporting(type);
 		try {
-			const period =
-				type === "annual"
-					? { from: `${year}-01-01`, to: `${year}-12-31` }
-					: { from, to };
-			download(
-				await reportRepository.export({
-					...period,
-					employeeId,
-					type,
-					extraCosts:
-						type === "daily"
-							? extraCosts.map(({ name, amount, employeeId }) => ({
-									name,
-									amount,
-									employeeId,
-								}))
-							: [],
-				}),
-			);
+			download(await reportRepository.export(reportFilters(type)));
 			setError(null);
 		} catch (cause) {
 			setError(
@@ -150,6 +162,59 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 			);
 		} finally {
 			setExporting(null);
+		}
+	};
+	const printReport = async (type: "daily" | "annual") => {
+		// Mở cửa sổ ngay trong thao tác click để trình duyệt không chặn popup in.
+		const popup = window.open("", "report-print");
+		// Bản desktop máy trạm cũ chặn popup: in qua iframe cùng nguồn mà không
+		// cần cài lại ứng dụng, vì giao diện vẫn được tải trực tiếp từ máy chủ.
+		const printFrame = popup ? null : document.createElement("iframe");
+		if (printFrame) {
+			printFrame.title = "Bản in báo cáo cước";
+			printFrame.setAttribute("aria-hidden", "true");
+			printFrame.className = "report-print-frame";
+			document.body.append(printFrame);
+		}
+		const printWindow = popup ?? printFrame?.contentWindow;
+		if (!printWindow) {
+			printFrame?.remove();
+			setError("Không thể mở bản in. Hãy thử lại trên trình duyệt Edge.");
+			return;
+		}
+		setPrinting(type);
+		try {
+			if (popup) printWindow.opener = null;
+			printWindow.document.write(
+				"<!doctype html><title>Đang chuẩn bị báo cáo...</title><p>Đang chuẩn bị bản in…</p>",
+			);
+			printWindow.document.close();
+			const report = await reportRepository.print(reportFilters(type));
+			printWindow.document.open();
+			printWindow.addEventListener(
+				"load",
+				() => {
+					printWindow.focus();
+					printWindow.print();
+				},
+				{ once: true },
+			);
+			if (printFrame) {
+				printWindow.addEventListener("afterprint", () => printFrame.remove(), {
+					once: true,
+				});
+			}
+			printWindow.document.write(printableReportHtml(report));
+			printWindow.document.close();
+			setError(null);
+		} catch (cause) {
+			if (popup) printWindow.close();
+			else printFrame?.remove();
+			setError(
+				cause instanceof Error ? cause.message : "Không thể chuẩn bị bản in.",
+			);
+		} finally {
+			setPrinting(null);
 		}
 	};
 	const exportCarrierVariance = async () => {
@@ -201,7 +266,14 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	if (section === "employee" && !data && !error) return <LoadingState />;
 	if (section === "employee" && !data)
 		return <EmptyState>Không tải được dữ liệu báo cáo.</EmptyState>;
-	const reportData = data ?? { employees: [], years: [] };
+	const reportData = data ?? { employees: [], years: [], canReportAll: false };
+	const ownEmployeeId = String(reportData.employees[0]?.id ?? "");
+	const selectedDailyEmployeeId = reportData.canReportAll
+		? dailyEmployeeId
+		: ownEmployeeId;
+	const selectedAnnualEmployeeId = reportData.canReportAll
+		? annualEmployeeId
+		: ownEmployeeId;
 	const years = [...new Set([year, ...reportData.years])].sort((a, b) =>
 		b.localeCompare(a),
 	);
@@ -280,16 +352,23 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 					<section className="panel report-card">
 						<PanelHeader
 							title="Báo cáo theo khoảng ngày"
-							description="Chọn một nhân viên để xuất bảng kê, hoặc tất cả để xuất từng sheet kèm tổng hợp."
+							description={
+								reportData.canReportAll
+									? "Chọn một nhân viên để xuất bảng kê, hoặc tất cả để xuất từng sheet kèm tổng hợp."
+									: "Xuất bảng kê cước thuộc hồ sơ của bạn."
+							}
 						/>
 						<div className="report-form">
 							<label className="field report-employee-field">
 								Nhân viên
 								<select
-									value={dailyEmployeeId}
+									value={selectedDailyEmployeeId}
+									disabled={!reportData.canReportAll}
 									onChange={(event) => setDailyEmployeeId(event.target.value)}
 								>
-									<option value="">Tất cả nhân viên</option>
+									{reportData.canReportAll && (
+										<option value="">Tất cả nhân viên</option>
+									)}
 									{reportData.employees.map((item) => (
 										<option value={item.id} key={item.id}>
 											{item.fullName}
@@ -317,10 +396,10 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 						<div className="report-extra-cost-list">
 							{extraCosts.map((item, index) => (
 								<div
-									className={`report-extra-cost${!dailyEmployeeId ? " is-assigned" : ""}`}
+									className={`report-extra-cost${!selectedDailyEmployeeId ? " is-assigned" : ""}`}
 									key={item.id}
 								>
-									{!dailyEmployeeId && (
+									{!selectedDailyEmployeeId && (
 										<label className="field report-extra-cost-employee">
 											Chi phí khác (nhân viên)
 											<select
@@ -390,31 +469,49 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 								<ReceiptText size={17} /> Bao gồm cước vận chuyển, phí cổng và
 								tiền xăng.
 							</span>
-							<button
-								className="button primary"
-								type="button"
-								disabled={exporting !== null}
-								onClick={() => void exportFile("daily")}
-							>
-								<Download size={16} />
-								{exporting === "daily" ? "Đang xuất..." : "Xuất báo cáo"}
-							</button>
+							<div className="report-actions">
+								<button
+									className="button secondary"
+									type="button"
+									disabled={exporting !== null || printing !== null}
+									onClick={() => void printReport("daily")}
+								>
+									<Printer size={16} />
+									{printing === "daily" ? "Đang chuẩn bị..." : "In / Lưu PDF"}
+								</button>
+								<button
+									className="button primary"
+									type="button"
+									disabled={exporting !== null || printing !== null}
+									onClick={() => void exportFile("daily")}
+								>
+									<Download size={16} />
+									{exporting === "daily" ? "Đang xuất..." : "Xuất Excel"}
+								</button>
+							</div>
 						</div>
 					</section>
 
 					<section className="panel report-card">
 						<PanelHeader
 							title="Báo cáo theo năm"
-							description="Xuất tổng hợp cước cả năm theo nhân viên phụ trách."
+							description={
+								reportData.canReportAll
+									? "Xuất tổng hợp cước cả năm theo nhân viên phụ trách."
+									: "Tổng hợp cước cả năm của bạn."
+							}
 						/>
 						<div className="report-form report-form-annual">
 							<label className="field report-employee-field">
 								Nhân viên
 								<select
-									value={annualEmployeeId}
+									value={selectedAnnualEmployeeId}
+									disabled={!reportData.canReportAll}
 									onChange={(event) => setAnnualEmployeeId(event.target.value)}
 								>
-									<option value="">Tất cả nhân viên</option>
+									{reportData.canReportAll && (
+										<option value="">Tất cả nhân viên</option>
+									)}
 									{reportData.employees.map((item) => (
 										<option value={item.id} key={item.id}>
 											{item.fullName}
@@ -438,18 +535,31 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 						</div>
 						<div className="report-card-footer report-card-footer-annual">
 							<span>
-								<FileSpreadsheet size={17} /> Chọn tất cả để xuất mỗi nhân viên
-								một sheet Excel.
+								<FileSpreadsheet size={17} />{" "}
+								{reportData.canReportAll
+									? "Chọn tất cả để xuất mỗi nhân viên một sheet Excel."
+									: "Xuất Excel hoặc in PDF cho năm đã chọn."}
 							</span>
-							<button
-								className="button primary"
-								type="button"
-								disabled={exporting !== null}
-								onClick={() => void exportFile("annual")}
-							>
-								<Download size={16} />
-								{exporting === "annual" ? "Đang xuất..." : "Xuất báo cáo"}
-							</button>
+							<div className="report-actions">
+								<button
+									className="button secondary"
+									type="button"
+									disabled={exporting !== null || printing !== null}
+									onClick={() => void printReport("annual")}
+								>
+									<Printer size={16} />
+									{printing === "annual" ? "Đang chuẩn bị..." : "In / Lưu PDF"}
+								</button>
+								<button
+									className="button primary"
+									type="button"
+									disabled={exporting !== null || printing !== null}
+									onClick={() => void exportFile("annual")}
+								>
+									<Download size={16} />
+									{exporting === "annual" ? "Đang xuất..." : "Xuất Excel"}
+								</button>
+							</div>
 						</div>
 					</section>
 				</div>

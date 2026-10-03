@@ -1,0 +1,23 @@
+@page { size: A4 landscape; margin: 7mm; }
+* { box-sizing: border-box; }
+body { margin: 0; color: #111; font-family: "Times New Roman", serif; }
+.sheet { break-after: page; page-break-after: always; }
+.sheet:last-child { break-after: auto; page-break-after: auto; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+td { padding: 2px 2.5px; vertical-align: middle; overflow-wrap: anywhere; white-space: pre-line; }
+td.bordered { border: 1px solid #111; }
+td.bold { font-weight: 700; }
+td.italic { font-style: italic; }
+td.bill { font-family: "Segoe UI Symbol", sans-serif; }
+td.align-left { text-align: left; }
+td.align-center { text-align: center; }
+td.align-right { text-align: right; }
+td.color-red { color: #ff0000; }
+td.color-green { color: #00682f; }
+.daily { font-size: 6.5pt; }
+.compact { font-size: 9pt; }
+.daily tr[data-row="4"] { font-size: 15pt; }
+.daily tr[data-row="11"] { font-weight: 700; font-size: 7pt; }
+.daily tr[data-row="11"] td[data-cell="A11"],
+.daily tr[data-row="11"] td[data-cell="M11"] { white-space: nowrap; overflow-wrap: normal; }
+@media print { tr { break-inside: avoid; page-break-inside: avoid; } }

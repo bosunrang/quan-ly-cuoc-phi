@@ -1,4 +1,4 @@
-import { Fuel, LayoutGrid, Receipt } from "lucide-react";
+import { ChartColumn, Fuel, LayoutGrid, Receipt } from "lucide-react";
 import { useState } from "react";
 import type {
 	GrantablePage,
@@ -40,6 +40,7 @@ export function UserDialog({
 		dashboard: LayoutGrid,
 		entries: Receipt,
 		fuel: Fuel,
+		reports_employee: ChartColumn,
 	};
 
 	const toggle = (key: PageId) =>

@@ -2,9 +2,31 @@ import { api } from "../../shared/api/client";
 import type {
 	CarrierVarianceReport,
 	FuelHistoryReport,
+	PrintableReport,
 	ReportData,
 	ReportExport,
 } from "./report.model";
+
+type EmployeeReportFilters = {
+	from: string;
+	to: string;
+	employeeId?: string;
+	type: "daily" | "annual";
+	extraCosts?: Array<{ name: string; amount: string; employeeId?: string }>;
+};
+
+function employeeReportQuery(filters: EmployeeReportFilters): URLSearchParams {
+	const query = new URLSearchParams({
+		from: filters.from,
+		to: filters.to,
+		type: filters.type,
+	});
+	if (filters.employeeId) query.set("employeeId", filters.employeeId);
+	if (filters.extraCosts?.length) {
+		query.set("extraCosts", JSON.stringify(filters.extraCosts));
+	}
+	return query;
+}
 
 function carrierVarianceQuery(from: string, to: string, employeeId: string) {
 	const query = new URLSearchParams({ employeeId });
@@ -72,23 +94,15 @@ export const reportRepository = {
 			{ timeoutMs: 120_000 },
 		);
 	},
-	export(filters: {
-		from: string;
-		to: string;
-		employeeId?: string;
-		type: "daily" | "annual";
-		extraCosts?: Array<{ name: string; amount: string; employeeId?: string }>;
-	}): Promise<ReportExport> {
-		const query = new URLSearchParams({
-			from: filters.from,
-			to: filters.to,
-			type: filters.type,
-		});
-		if (filters.employeeId) query.set("employeeId", filters.employeeId);
-		if (filters.extraCosts?.length) {
-			query.set("extraCosts", JSON.stringify(filters.extraCosts));
-		}
+	export(filters: EmployeeReportFilters): Promise<ReportExport> {
+		const query = employeeReportQuery(filters);
 		return api("GET", `/api/reports/export?${query}`, undefined, {
+			timeoutMs: 120_000,
+		});
+	},
+	print(filters: EmployeeReportFilters): Promise<PrintableReport> {
+		const query = employeeReportQuery(filters);
+		return api("GET", `/api/reports/print?${query}`, undefined, {
 			timeoutMs: 120_000,
 		});
 	},

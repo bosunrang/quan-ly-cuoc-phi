@@ -15,6 +15,9 @@
 .report-card-footer > span { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--type-caption); line-height: var(--line-body); }
 .report-card-footer > span svg { flex: 0 0 auto; color: var(--teal); }
 .report-card-footer .button { min-width: 150px; flex: 0 0 auto; }
+.report-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.report-print-frame { position: fixed; right: 0; bottom: 0; width: 1px; height: 1px; border: 0; opacity: 0; pointer-events: none; }
+@container (max-width: 620px) { .report-actions { width: 100%; } .report-actions .button { flex: 1 1 150px; } }
 @container (max-width: 760px) { .report-extra-cost.is-assigned { grid-template-columns: minmax(0, 1fr) minmax(0, .65fr) minmax(0, .75fr) 36px; } }
 @container (max-width: 620px) { .report-form, .report-extra-cost, .report-extra-cost.is-assigned { grid-template-columns: 1fr; } .report-form-annual { grid-template-columns: minmax(0, 1fr) 150px; } .report-extra-cost-remove { justify-self: start; } .report-card-footer:not(.report-card-footer-annual) { align-items: stretch; flex-direction: column; } .report-card-footer:not(.report-card-footer-annual) .button { width: 100%; } .report-card-footer-annual .button { width: auto; } }
 @container (max-width: 440px) { .report-form-annual { grid-template-columns: 1fr; } }

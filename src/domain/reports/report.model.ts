@@ -6,11 +6,35 @@ export interface ReportEmployee {
 export interface ReportData {
 	employees: ReportEmployee[];
 	years: string[];
+	/** Admin được tổng hợp toàn bộ; máy trạm chỉ có hồ sơ nhân viên của mình. */
+	canReportAll: boolean;
 }
 
 export interface ReportExport {
 	fileName: string;
 	contentBase64: string;
+}
+
+export interface PrintableReport {
+	type: "daily" | "annual";
+	sheets: Array<{
+		name: string;
+		columnWidths: number[];
+		rows: Array<{
+			number: number;
+			cells: Array<{
+				address: string;
+				value: string;
+				rowSpan: number;
+				colSpan: number;
+				align: string;
+				bold: boolean;
+				italic: boolean;
+				color: string;
+				border: boolean;
+			}>;
+		}>;
+	}>;
 }
 
 export interface CarrierVarianceReport {

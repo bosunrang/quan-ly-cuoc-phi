@@ -55,6 +55,39 @@ function filters(query, allowAll = false) {
   };
 }
 
+/**
+ * Nhân viên chỉ được xuất báo cáo cho hồ sơ nhân viên liên kết với tài khoản
+ * của họ. Không tin employeeId do máy trạm gửi lên, vì URL có thể bị sửa tay.
+ */
+function reportInputForUser(db, user, input) {
+  if (canSeeEveryone(user)) return input;
+  const employee = db
+    .prepare('SELECT id FROM employees WHERE user_id = ? AND is_active = 1')
+    .get(user.id);
+  return { ...input, employeeId: Number(employee?.id ?? -1) };
+}
+
+/** Danh sách lựa chọn và năm báo cáo trong đúng phạm vi mà người dùng được xem. */
+function reportCatalog(db, employeeId = null) {
+  const employeeWhere = employeeId === null
+    ? 'WHERE is_active = 1'
+    : 'WHERE id = ? AND is_active = 1';
+  const employees = db
+    .prepare(`SELECT id, full_name FROM employees ${employeeWhere} ORDER BY full_name COLLATE NOCASE`)
+    .all(...(employeeId === null ? [] : [employeeId]));
+  const entryWhere = employeeId === null
+    ? "WHERE entry_date <> ''"
+    : "WHERE entry_date <> '' AND employee_id = ?";
+  const years = db
+    .prepare(`SELECT DISTINCT substr(entry_date, 1, 4) AS year FROM entries ${entryWhere} ORDER BY year DESC`)
+    .all(...(employeeId === null ? [] : [employeeId]))
+    .map((item) => item.year);
+  return {
+    employees: employees.map((item) => ({ id: Number(item.id), fullName: item.full_name })),
+    years,
+  };
+}
+
 function extraCosts(query) {
   const raw = String(query.extraCosts ?? '').trim();
   const legacy = raw ? [] : [{ name: query.extraCostName, amount: query.extraCostAmount }];
@@ -405,6 +438,64 @@ function employeeCosts(data, employeeId) {
   const gate = rows.reduce((sum, row) => sum + number(row.gate_fee), 0);
   const other = rows.reduce((sum, row) => sum + number(row.other_fee), 0);
   return { rows, transport, gate, other, fuelOther, fuel, total: transport + gate + other + fuelOther + fuel };
+}
+
+/** Chuyển nguyên lưới ô của sheet Excel sang dữ liệu in, gồm cả vùng merge. */
+function worksheetForPrint(ws, name) {
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const anchors = new Map();
+  const covered = new Set();
+  for (const mergeRange of ws['!merges'] || []) {
+    anchors.set(`${mergeRange.s.r}:${mergeRange.s.c}`, mergeRange);
+    for (let row = mergeRange.s.r; row <= mergeRange.e.r; row += 1) {
+      for (let column = mergeRange.s.c; column <= mergeRange.e.c; column += 1) {
+        if (row !== mergeRange.s.r || column !== mergeRange.s.c) {
+          covered.add(`${row}:${column}`);
+        }
+      }
+    }
+  }
+  const rows = [];
+  for (let row = range.s.r; row <= range.e.r; row += 1) {
+    const cells = [];
+    for (let column = range.s.c; column <= range.e.c; column += 1) {
+      const coordinate = `${row}:${column}`;
+      if (covered.has(coordinate)) continue;
+      const address = XLSX.utils.encode_cell({ r: row, c: column });
+      const source = ws[address];
+      const mergeRange = anchors.get(coordinate);
+      const style = source?.s || {};
+      const numberFormat = style.numFmt;
+      const decimalPlaces = typeof numberFormat === 'string' && /^#,##0(?:\.0+)?$/.test(numberFormat)
+        ? (numberFormat.split('.')[1]?.length || 0)
+        : null;
+      const value = source?.v == null
+        ? ''
+        : typeof source.v === 'number' && decimalPlaces !== null
+          ? new Intl.NumberFormat('vi-VN', {
+            minimumFractionDigits: decimalPlaces,
+            maximumFractionDigits: decimalPlaces,
+          }).format(source.v)
+          : XLSX.utils.format_cell(source);
+      cells.push({
+        address,
+        value,
+        rowSpan: mergeRange ? mergeRange.e.r - row + 1 : 1,
+        colSpan: mergeRange ? mergeRange.e.c - column + 1 : 1,
+        align: style.alignment?.horizontal || 'left',
+        bold: Boolean(style.font?.bold),
+        italic: Boolean(style.font?.italic),
+        color: style.font?.color?.rgb || '',
+        border: Boolean(style.border),
+      });
+    }
+    rows.push({ number: row + 1, cells });
+  }
+  return {
+    name,
+    columnWidths: (ws['!cols'] || []).map((column) => Number(column.width || column.wch || 10)),
+    rows,
+  };
 }
 
 function deliveryRows(entries) {
@@ -1082,6 +1173,42 @@ function carrierVarianceSheet(items, input) {
   return ws;
 }
 
+/** Một workbook duy nhất phục vụ cả tải Excel và in PDF. */
+function employeeReportWorkbook(data, input, selected, extras, type) {
+  const workbook = XLSX.utils.book_new();
+  if (type === 'daily') {
+    if (!selected.length) throw badRequest('Không có nhân viên đang hoạt động để xuất báo cáo.');
+    validateExtraCostAssignments(extras, selected, input.employeeId);
+    if (input.employeeId) {
+      XLSX.utils.book_append_sheet(workbook, dailySheet(data, input, selected[0], extras), 'Bảng kê cước');
+    } else {
+      XLSX.utils.book_append_sheet(workbook, dailySummarySheet(data, input, selected, extras), 'Tổng hợp');
+      const usedNames = new Set(workbook.SheetNames);
+      for (const employee of selected) {
+        XLSX.utils.book_append_sheet(
+          workbook,
+          dailySheet(data, input, employee, extras.filter((item) => item.employeeId === employee.id)),
+          uniqueSheetName(employee.full_name, usedNames),
+        );
+      }
+    }
+  } else if (type === 'annual') {
+    const year = input.from.slice(0, 4);
+    const usedNames = new Set();
+    for (const employee of selected) {
+      if (data.entries.some((row) => row.employee_id === employee.id)) {
+        XLSX.utils.book_append_sheet(
+          workbook,
+          annualSheet(data, year, employee),
+          uniqueSheetName(employee.full_name, usedNames),
+        );
+      }
+    }
+    if (!workbook.SheetNames.length) throw badRequest('Không có phiếu chi phí trong năm đã chọn.');
+  } else throw badRequest('Loại báo cáo không hợp lệ.');
+  return workbook;
+}
+
 function register(router) {
   router.get('/api/reports/fuel-history/export', async (c) => {
     c.requirePage(FUEL_PRICE_PAGE);
@@ -1125,13 +1252,11 @@ function register(router) {
 
   router.get('/api/reports', async (c) => {
     c.requirePage(EMPLOYEE_PAGE);
-    if (!canSeeEveryone(c.user)) throw badRequest('Bạn không có quyền xem báo cáo tổng hợp.');
-    const employees = c.db.prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE').all();
-    const years = c.db.prepare("SELECT DISTINCT substr(entry_date, 1, 4) AS year FROM entries WHERE entry_date <> '' ORDER BY year DESC").all().map((item) => item.year);
-    return {
-      employees: employees.map((item) => ({ id: item.id, fullName: item.full_name })),
-      years,
-    };
+    const canReportAll = canSeeEveryone(c.user);
+    const ownEmployeeId = canReportAll
+      ? null
+      : reportInputForUser(c.db, c.user, {}).employeeId;
+    return { ...reportCatalog(c.db, ownEmployeeId), canReportAll };
   });
   router.get('/api/reports/carrier-variance', async (c) => {
     c.requirePage(CARRIER_PAGE);
@@ -1166,43 +1291,12 @@ function register(router) {
   });
   router.get('/api/reports/export', async (c) => {
     c.requirePage(EMPLOYEE_PAGE);
-    if (!canSeeEveryone(c.user)) throw badRequest('Bạn không có quyền xuất báo cáo.');
-    const input = filters(c.query);
+    const input = reportInputForUser(c.db, c.user, filters(c.query));
     const type = String(c.query.type ?? 'daily');
     const extras = type === 'daily' ? extraCosts(c.query) : [];
     const data = reportData(c.db, input);
     const selected = input.employeeId ? data.employees.filter((item) => item.id === input.employeeId) : data.employees;
-    const workbook = XLSX.utils.book_new();
-    if (type === 'daily') {
-      if (!selected.length) throw badRequest('Không có nhân viên đang hoạt động để xuất báo cáo.');
-      validateExtraCostAssignments(extras, selected, input.employeeId);
-      if (input.employeeId) {
-        XLSX.utils.book_append_sheet(workbook, dailySheet(data, input, selected[0], extras), 'Bảng kê cước');
-      } else {
-        XLSX.utils.book_append_sheet(workbook, dailySummarySheet(data, input, selected, extras), 'Tổng hợp');
-        const usedNames = new Set(workbook.SheetNames);
-        for (const employee of selected) {
-          XLSX.utils.book_append_sheet(
-            workbook,
-            dailySheet(data, input, employee, extras.filter((item) => item.employeeId === employee.id)),
-            uniqueSheetName(employee.full_name, usedNames),
-          );
-        }
-      }
-    } else if (type === 'annual') {
-      const year = input.from.slice(0, 4);
-      const usedNames = new Set();
-      for (const employee of selected) {
-        if (data.entries.some((row) => row.employee_id === employee.id)) {
-          XLSX.utils.book_append_sheet(
-            workbook,
-            annualSheet(data, year, employee),
-            uniqueSheetName(employee.full_name, usedNames),
-          );
-        }
-      }
-      if (!workbook.SheetNames.length) throw badRequest('Không có phiếu chi phí trong năm đã chọn.');
-    } else throw badRequest('Loại báo cáo không hợp lệ.');
+    const workbook = employeeReportWorkbook(data, input, selected, extras, type);
     const contentBase64 = type === 'daily'
       ? landscapeWorkbookBase64(workbook)
       : XLSX.write(workbook, { type: 'base64', bookType: 'xlsx', compression: true });
@@ -1213,6 +1307,25 @@ function register(router) {
         : `Bảng kê tất cả nhân viên từ ${formatFileDate(input.from)} đến ${formatFileDate(input.to)}`;
     writeAudit(c.db, c.user, 'report.export', 'report', null, { type, ...input, extraCosts: extras, sheetCount: workbook.SheetNames.length });
     return { fileName: `${suffix}.xlsx`, contentBase64 };
+  });
+  router.get('/api/reports/print', async (c) => {
+    c.requirePage(EMPLOYEE_PAGE);
+    const input = reportInputForUser(c.db, c.user, filters(c.query));
+    const type = String(c.query.type ?? 'daily');
+    const extras = type === 'daily' ? extraCosts(c.query) : [];
+    const data = reportData(c.db, input);
+    const selected = input.employeeId
+      ? data.employees.filter((item) => item.id === input.employeeId)
+      : data.employees;
+    const workbook = employeeReportWorkbook(data, input, selected, extras, type);
+    const sheets = workbook.SheetNames.map((name) => worksheetForPrint(workbook.Sheets[name], name));
+    writeAudit(c.db, c.user, 'report.print', 'report', null, {
+      type,
+      ...input,
+      extraCosts: extras,
+      sheetCount: sheets.length,
+    });
+    return { type, sheets };
   });
 }
 

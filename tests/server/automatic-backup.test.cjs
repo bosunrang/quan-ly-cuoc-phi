@@ -31,6 +31,8 @@ test('backup tự động tạo snapshot nhất quán và giữ một bản mỗ
     const first = await createAutomaticBackup(db, dbFile, backupDir, { date });
     assert.equal(first.created, true);
     assert.equal(existsSync(first.path), true);
+    // Bản tạo thật có mtime hiện tại; cố định về ngày giả lập để kiểm tra dọn backup ổn định.
+    utimesSync(first.path, date, date);
 
     db.exec("UPDATE sample SET value = 'sau-do'");
     const second = await createAutomaticBackup(db, dbFile, backupDir, { date });

@@ -411,6 +411,29 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   const exportedBytes = Buffer.from(exported.data.contentBase64, 'base64');
   const workbook = XLSX.read(exportedBytes, { type: 'buffer', cellStyles: true });
   const sheet = workbook.Sheets['Bảng kê cước'];
+  const printable = await call(
+    'GET',
+    `/api/reports/print?from=2026-10-03&to=2026-10-05&employeeId=${employee.data.id}&type=daily`,
+  );
+  assert.equal(printable.status, 200);
+  assert.equal(printable.data.sheets.length, 1);
+  const printSheet = printable.data.sheets[0];
+  assert.equal(printSheet.columnWidths.length, 18);
+  const printCells = new Map(printSheet.rows.flatMap((row) => row.cells.map((cell) => [cell.address, cell])));
+  for (const address of ['C11', 'D11', 'E11', 'M11', 'N11', 'O11', 'P11', 'Q11', 'R11', 'C12', 'D12', 'E12', 'M12', 'R12', 'M13']) {
+    assert.equal(printCells.get(address)?.value, String(sheet[address].v), `${address} bản in phải khớp Excel`);
+  }
+  assert.equal(printCells.get('N12').value, '30,0');
+  assert.equal(printCells.get('O12').value, '20.000');
+  assert.equal(printCells.get('P12').value, '96.000');
+  assert.equal(printCells.get('Q12').value, '9.500');
+  assert.equal(printCells.get('C21').value, '259.500');
+  for (const mergeRange of sheet['!merges']) {
+    const address = XLSX.utils.encode_cell(mergeRange.s);
+    const cell = printCells.get(address);
+    assert.equal(cell?.rowSpan, mergeRange.e.r - mergeRange.s.r + 1, `số dòng gộp của ${address}`);
+    assert.equal(cell?.colSpan, mergeRange.e.c - mergeRange.s.c + 1, `số cột gộp của ${address}`);
+  }
   assert.equal(sheet.A4.v, 'BẢNG CHI TIẾT CƯỚC NHÂN VIÊN');
   assert.deepEqual(workbook.SheetNames, ['Bảng kê cước']);
   assert.equal(sheet.C11.v, 'Điểm đi');

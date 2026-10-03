@@ -124,7 +124,10 @@ git push origin main --follow-tags
 ## Cách dùng trong văn phòng
 
 1. Cài bộ cài trên **máy chính**, mở ứng dụng lên và đăng nhập.
-2. Vào mục Người dùng, tạo tài khoản cho từng nhân viên và tick thẻ họ được vào.
+2. Vào mục Người dùng, tạo tài khoản cho từng nhân viên và tick thẻ họ được
+   vào. Có thể cấp thêm **Báo cáo cước gửi hàng**; máy trạm xuất Excel và
+   in/lưu PDF theo cùng mẫu với máy chủ, nhưng chỉ cho hồ sơ nhân viên gắn với
+   tài khoản đó.
 3. Chuột phải icon dưới khay hệ thống → *Địa chỉ cho máy nhân viên* để lấy địa chỉ.
 4. Trên máy nhân viên, mở Edge vào địa chỉ đó. Muốn có icon Desktop thì chọn
    menu `...` → *Ứng dụng* → *Cài đặt trang này dưới dạng ứng dụng*.

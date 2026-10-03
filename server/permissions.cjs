@@ -63,8 +63,10 @@ const PAGES = [
     key: 'reports_employee',
     label: 'Báo cáo cước gửi hàng',
     description: 'Tổng hợp cước phí giao hàng theo nhân viên và kỳ báo cáo.',
-    adminOnly: true,
-    ownScope: false,
+    // Có thể cấp cho máy trạm. Các route báo cáo vẫn ép nhân viên chỉ thấy
+    // dữ liệu thuộc hồ sơ liên kết với tài khoản của họ.
+    adminOnly: false,
+    ownScope: true,
   },
   {
     key: 'reports_carrier',

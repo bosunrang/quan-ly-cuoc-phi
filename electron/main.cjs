@@ -7,6 +7,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { createApp } = require('../server/index.cjs');
 const { COMPANY_PROFILES } = require('../server/company-profiles.cjs');
+const { isReportPrintPopup } = require('./report-window.cjs');
 
 const ICON = path.join(__dirname, '..', 'build', 'icon.png');
 const MACHINE_CONFIG_FILE = 'machine-mode.json';
@@ -213,9 +214,26 @@ function createWindow() {
       sandbox: true, webSecurity: true, allowRunningInsecureContent: false, devTools: !app.isPackaged, webviewTag: false,
     },
   });
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (isReportPrintPopup(url, frameName)) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 1200, height: 850, autoHideMenuBar: true, icon: ICON,
+          webPreferences: {
+            contextIsolation: true, nodeIntegration: false, sandbox: true,
+            webSecurity: true, devTools: !app.isPackaged,
+          },
+        },
+      };
+    }
     if (url.startsWith('https://')) shell.openExternal(url);
     return { action: 'deny' };
+  });
+  mainWindow.webContents.on('did-create-window', (printWindow) => {
+    printWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    printWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+    printWindow.webContents.on('will-redirect', (event) => event.preventDefault());
   });
   const blockForeign = (event, url) => { if (!url.startsWith(origin)) event.preventDefault(); };
   mainWindow.webContents.on('will-navigate', blockForeign);

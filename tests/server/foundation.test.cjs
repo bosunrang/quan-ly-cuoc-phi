@@ -1268,6 +1268,54 @@ describe('phân quyền thẻ', () => {
     );
   });
 
+  test('máy trạm được cấp báo cáo cước chỉ thấy và xuất dữ liệu của mình', async () => {
+    const list = await call('GET', '/api/users', { token: adminToken });
+    const staffA = list.data.items.find((user) => user.username === 'nhanviena');
+    const anotherEmployee = await call('POST', '/api/employees', {
+      token: adminToken,
+      body: {
+        fullName: 'Nhân viên khác',
+        address: '',
+        userId: null,
+        isActive: true,
+      },
+    });
+    assert.equal(anotherEmployee.status, 200);
+
+    await call('PATCH', `/api/users/${staffA.id}`, {
+      token: adminToken,
+      body: { pages: ['entries', 'reports_employee'] },
+    });
+
+    const profile = await call('GET', '/api/me', { token: staffAToken });
+    assert.ok(profile.data.pages.includes('reports_employee'));
+
+    const catalog = await call('GET', '/api/reports', { token: staffAToken });
+    assert.equal(catalog.status, 200);
+    assert.equal(catalog.data.canReportAll, false);
+    assert.deepEqual(catalog.data.employees.map((employee) => employee.id), [staffAEmployeeId]);
+
+    // Thay employeeId trên URL không được phép đổi sang báo cáo của người khác.
+    const exported = await call(
+      'GET',
+      `/api/reports/export?from=2026-08-01&to=2026-08-01&type=daily&employeeId=${anotherEmployee.data.id}`,
+      { token: staffAToken },
+    );
+    assert.equal(exported.status, 200);
+    assert.match(exported.data.fileName, /Nhân viên A/);
+
+    const printable = await call(
+      'GET',
+      `/api/reports/print?from=2026-08-01&to=2026-08-01&type=daily&employeeId=${anotherEmployee.data.id}`,
+      { token: staffAToken },
+    );
+    assert.equal(printable.status, 200);
+    assert.equal(printable.data.sheets.length, 1);
+    const printCells = printable.data.sheets[0].rows.flatMap((row) => row.cells);
+    assert.ok(printCells.some((cell) => cell.value.includes('Nhân viên A')));
+    assert.equal(printCells.some((cell) => cell.value.includes('Nhân viên khác')), false);
+  });
+
   test('không thể tự cấp cho mình thẻ chỉ dành cho Admin', async () => {
     const list = await call('GET', '/api/users', { token: adminToken });
     const staffA = list.data.items.find((u) => u.username === 'nhanviena');
