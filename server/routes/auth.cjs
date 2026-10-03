@@ -179,6 +179,9 @@ function register(router) {
     const newPassword = String(c.body.newPassword ?? '');
     const weak = auth.checkPasswordStrength(newPassword);
     if (weak) throw badRequest(weak);
+    if (auth.verifyPassword(newPassword, c.user.password_hash, c.user.password_salt)) {
+      throw badRequest('Mật khẩu mới phải khác mật khẩu được cấp.');
+    }
     const { hash, salt } = auth.hashPassword(newPassword);
     c.db.prepare(
       'UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = 0, updated_at = ? WHERE id = ?',

@@ -141,6 +141,9 @@ export function UsersPage({ currentUser }: UsersPageProps) {
 										<StatusPill tone={user.isActive ? "success" : "danger"}>
 											{user.isActive ? "Đang dùng" : "Đã khóa"}
 										</StatusPill>
+										{user.isActive && user.mustChangePassword && (
+											<StatusPill tone="warning">Chờ đổi mật khẩu</StatusPill>
+										)}
 									</td>
 									<td>
 										<div className="inline-actions">

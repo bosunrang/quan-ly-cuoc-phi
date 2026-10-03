@@ -87,6 +87,8 @@ test('body thường bị giới hạn 1 MB; body lớn bị chặn quyền trư
     body: { fullName: 'Nhân viên Tổng quan', address: '', userId: user.data.id, isActive: true },
   });
   assert.equal(linked.status, 200);
+  // Luồng bắt đổi mật khẩu được kiểm tra ở test riêng phía dưới.
+  app.db.prepare("UPDATE users SET must_change_password = 0 WHERE username = 'nhanvientq'").run();
   staffToken = (await call('POST', '/api/login', {
     body: { username: 'nhanvientq', password: 'MatKhau123' },
   })).data.token;
@@ -347,4 +349,48 @@ test('phiếu của khách chưa có trong danh mục tự nối khi danh mục 
   const afterDelete = await listed();
   assert.equal(afterDelete.customer, 'Khách Vãng Lai');
   assert.equal(afterDelete.customerId, null);
+});
+
+test('tài khoản Admin tạo hoặc đặt lại phải tự đổi mật khẩu trước khi dùng', async () => {
+  const created = await call('POST', '/api/users', {
+    token: adminToken,
+    body: { username: 'nhanvienmoi', fullName: 'Nhân viên mới', password: 'MatKhauCap1', pages: ['entries'] },
+  });
+  assert.equal(created.status, 200);
+  assert.equal(created.data.mustChangePassword, true);
+
+  const first = await call('POST', '/api/login', { body: { username: 'nhanvienmoi', password: 'MatKhauCap1' } });
+  assert.equal(first.status, 200);
+  assert.equal(first.data.user.mustChangePassword, true);
+  assert.equal((await call('GET', '/api/entries', { token: first.data.token })).status, 403);
+
+  // Không được giữ nguyên mật khẩu Admin đã cấp.
+  assert.equal((await call('POST', '/api/me/initial-password', {
+    token: first.data.token,
+    body: { newPassword: 'MatKhauCap1' },
+  })).status, 400);
+  assert.equal((await call('POST', '/api/me/initial-password', {
+    token: first.data.token,
+    body: { newPassword: 'MatKhauRieng1' },
+  })).status, 200);
+  assert.equal((await call('GET', '/api/entries', { token: first.data.token })).status, 200);
+
+  // Admin đặt lại mật khẩu hộ: lại phải đổi ở lần đăng nhập tới.
+  assert.equal((await call('POST', `/api/users/${created.data.id}/password`, {
+    token: adminToken,
+    body: { password: 'MatKhauCap2' },
+  })).status, 200);
+  const again = await call('POST', '/api/login', { body: { username: 'nhanvienmoi', password: 'MatKhauCap2' } });
+  assert.equal(again.data.user.mustChangePassword, true);
+
+  // Admin tự đặt lại mật khẩu của chính mình thì không bị bắt đổi lại.
+  const me = await call('GET', '/api/me', { token: adminToken });
+  assert.equal((await call('POST', `/api/users/${me.data.user.id}/password`, {
+    token: adminToken,
+    body: { password: 'MatKhauAdmin456' },
+  })).status, 200);
+  const adminLogin = await call('POST', '/api/login', {
+    body: { username: me.data.user.username, password: 'MatKhauAdmin456' },
+  });
+  assert.equal(adminLogin.data.user.mustChangePassword, false);
 });

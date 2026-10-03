@@ -16,7 +16,7 @@ export function PasswordDialog({ user, onSave, onClose }: PasswordDialogProps) {
 	return (
 		<Dialog
 			title="Đặt lại mật khẩu"
-			subtitle={`${user.fullName} sẽ bị đăng xuất khỏi mọi máy`}
+			subtitle={`${user.fullName} sẽ bị đăng xuất khỏi mọi máy và phải tự đặt mật khẩu mới ở lần đăng nhập tới`}
 			confirmLabel="Đặt lại"
 			onConfirm={async () => {
 				const problem = validatePassword(password);

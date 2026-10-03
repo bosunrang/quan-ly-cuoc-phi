@@ -26,6 +26,8 @@ function toApi(db, row, grantedPages) {
     fullName: row.full_name,
     isAdmin: Boolean(row.is_admin),
     isActive: Boolean(row.is_active),
+    // Đang dùng mật khẩu do Admin cấp, chưa tự đặt mật khẩu riêng.
+    mustChangePassword: Boolean(row.must_change_password),
     // Admin luôn có mọi thẻ nên không hiển thị ô tick cho họ.
     pages: row.is_admin ? PAGES.map((p) => p.key) : pages,
     createdAt: row.created_at,
@@ -106,10 +108,12 @@ function register(router) {
     return transaction(c.db, () => {
       const result = c.db
         .prepare(
+          // Mật khẩu do Admin đặt chỉ dùng cho lần đăng nhập đầu: người dùng
+          // phải tự đặt mật khẩu riêng trước khi thao tác dữ liệu.
           `INSERT INTO users
              (username, password_hash, password_salt, full_name,
-              is_admin, is_active, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+              is_admin, is_active, must_change_password, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
         )
         .run(username, hash, salt, fullName, isAdmin ? 1 : 0, at, at);
       const id = Number(result.lastInsertRowid);
@@ -175,12 +179,15 @@ function register(router) {
     if (weak) throw badRequest(weak);
 
     const { hash, salt } = auth.hashPassword(password);
+    // Đặt lại hộ người khác thì họ phải đổi ngay ở lần đăng nhập tới, để Admin
+    // không biết mật khẩu họ dùng lâu dài. Tự đặt lại cho mình thì không cần.
+    const mustChange = target.id === c.user.id ? target.must_change_password : 1;
     return transaction(c.db, () => {
       c.db
         .prepare(
-          'UPDATE users SET password_hash = ?, password_salt = ?, updated_at = ? WHERE id = ?',
+          'UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = ?, updated_at = ? WHERE id = ?',
         )
-        .run(hash, salt, new Date().toISOString(), id);
+        .run(hash, salt, mustChange, new Date().toISOString(), id);
       auth.destroyAllSessionsFor(c.db, id);
       writeAudit(c.db, c.user, 'user.reset_password', 'user', id);
       return { ok: true };

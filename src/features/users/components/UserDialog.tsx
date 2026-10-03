@@ -107,7 +107,10 @@ export function UserDialog({
 			</FieldGrid>
 
 			{!isEdit && (
-				<Field label="Mật khẩu" hint="Tối thiểu 8 ký tự">
+				<Field
+					label="Mật khẩu"
+					hint="Tối thiểu 8 ký tự. Người dùng phải tự đổi ở lần đăng nhập đầu."
+				>
 					{(id) => (
 						<input
 							id={id}

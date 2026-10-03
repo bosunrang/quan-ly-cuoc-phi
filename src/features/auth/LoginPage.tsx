@@ -209,8 +209,8 @@ export function InitialPasswordPage({
 					</div>
 				</div>
 				<p className="initial-password-copy">
-					Bạn đang dùng mật khẩu mặc định. Hãy đặt mật khẩu mới trước khi sử
-					dụng hệ thống.
+					Bạn đang dùng mật khẩu mặc định hoặc do quản trị viên cấp. Hãy đặt mật
+					khẩu riêng trước khi sử dụng hệ thống.
 				</p>
 				{error && <Alert tone="error">{error}</Alert>}
 				<form onSubmit={submit}>

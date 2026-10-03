@@ -6,6 +6,8 @@ export interface ManagedUser {
 	fullName: string;
 	isAdmin: boolean;
 	isActive: boolean;
+	/** Đang dùng mật khẩu do Admin cấp; phải tự đổi ở lần đăng nhập tới. */
+	mustChangePassword: boolean;
 	/** Thẻ người này được mở. Admin luôn có toàn bộ. */
 	pages: PageId[];
 	createdAt: string;

@@ -60,6 +60,9 @@ async function call(method, path, { token, body } = {}) {
 }
 
 async function login(username, password) {
+  // Tài khoản Admin tạo phải tự đổi mật khẩu ở lần đầu; luồng đó có test riêng
+  // trong hardening.test.cjs. Ở đây bỏ qua bước này để tập trung vào phân quyền.
+  app.db.prepare('UPDATE users SET must_change_password = 0 WHERE username = ?').run(username);
   const result = await call('POST', '/api/login', {
     body: { username, password },
   });
