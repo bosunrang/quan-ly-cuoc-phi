@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 40;
+const SCHEMA_VERSION = 41;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -43,6 +43,21 @@ function restoreTruncatedFuelLocations(db) {
     updateFrom.run(full, truncated);
     updateTo.run(full, truncated);
   }
+}
+
+/**
+ * Nối các phiếu chưa có mã khách hàng/nhà xe với danh mục theo tên đã chuẩn
+ * hóa. Dùng khi nâng cấp và sau khi khôi phục backup cũ chưa có hai cột này.
+ */
+function linkEntriesToCatalog(db) {
+  db.exec(`
+    UPDATE entries SET customer_id = (
+      SELECT id FROM customers WHERE customers.customer_key = entries.customer_key
+    ) WHERE customer_id IS NULL;
+    UPDATE entries SET carrier_id = (
+      SELECT id FROM carriers WHERE carriers.carrier_key = entries.carrier_key
+    ) WHERE carrier_id IS NULL;
+  `);
 }
 
 /**
@@ -712,6 +727,33 @@ function migrate(db) {
     `);
   }
 
+  if (current < 41) {
+    db.exec(`
+      -- Phiếu trỏ thẳng tới khách hàng và nhà xe trong danh mục bằng mã.
+      -- Tên trên phiếu chỉ còn là chữ hiển thị lúc lập; báo cáo, giá chuẩn và
+      -- form sửa phiếu đều nối theo mã nên đổi tên trong danh mục không làm
+      -- phiếu cũ mất liên kết. Xóa khỏi danh mục thì phiếu vẫn giữ, mã về NULL.
+      ALTER TABLE entries ADD COLUMN customer_id INTEGER
+        REFERENCES customers(id) ON DELETE SET NULL;
+      ALTER TABLE entries ADD COLUMN carrier_id INTEGER
+        REFERENCES carriers(id) ON DELETE SET NULL;
+      CREATE INDEX entries_customer_id_idx ON entries(customer_id, entry_date);
+      CREATE INDEX entries_carrier_id_idx ON entries(carrier_id);
+
+      -- Phiếu lập trước khi khách hàng/nhà xe có trong danh mục tự được nối
+      -- khi danh mục thêm đúng tên đó (nhập tay hoặc nhập Excel).
+      CREATE TRIGGER customers_link_entries AFTER INSERT ON customers BEGIN
+        UPDATE entries SET customer_id = new.id
+         WHERE customer_id IS NULL AND customer_key = new.customer_key;
+      END;
+      CREATE TRIGGER carriers_link_entries AFTER INSERT ON carriers BEGIN
+        UPDATE entries SET carrier_id = new.id
+         WHERE carrier_id IS NULL AND carrier_key = new.carrier_key;
+      END;
+    `);
+    linkEntriesToCatalog(db);
+  }
+
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (error) {
@@ -769,6 +811,7 @@ function transaction(db, work) {
 
 module.exports = {
   openDatabase,
+  linkEntriesToCatalog,
   transaction,
   normalizeSearchText,
   SCHEMA_VERSION,

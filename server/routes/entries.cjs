@@ -145,12 +145,23 @@ function customerForEntry(db, body, customerName) {
   return customer;
 }
 
+/** Nhà xe của phiếu: theo mã đã chọn trên form, hoặc theo tên khi chưa có mã. */
+function carrierForEntry(db, body, carrierName) {
+  const requestedId = Number(body.carrierId);
+  const carrier = Number.isInteger(requestedId) && requestedId > 0
+    ? db.prepare('SELECT id, name FROM carriers WHERE id = ?').get(requestedId)
+    : db.prepare('SELECT id, name FROM carriers WHERE carrier_key = ?').get(normalizeSearchText(carrierName));
+  if (!carrier) return null;
+  if (normalizeSearchText(carrier.name) !== normalizeSearchText(carrierName)) {
+    throw badRequest('Nhà xe không khớp với dữ liệu đã chọn.');
+  }
+  return carrier;
+}
+
 function standardTransportRate(db, body, input) {
   const customer = customerForEntry(db, body, input.customer);
   if (!customer) return null;
-  const carrier = db.prepare('SELECT id FROM carriers WHERE carrier_key = ?').get(
-    normalizeSearchText(input.carrier),
-  );
+  const carrier = carrierForEntry(db, body, input.carrier);
   if (!carrier) return null;
   const specKey = normalizeSearchText(input.spec);
   return db.prepare(
@@ -193,9 +204,7 @@ function ensureStaffUsesConfiguredRate(db, user, body, input) {
     throw badRequest('Vui lòng chọn quy cách đã được quản trị viên thiết lập.');
   }
   const customer = customerForEntry(db, body, input.customer);
-  const carrier = db.prepare('SELECT id FROM carriers WHERE carrier_key = ?').get(
-    normalizeSearchText(input.carrier),
-  );
+  const carrier = carrierForEntry(db, body, input.carrier);
   if (!customer || !carrier) {
     throw badRequest('Vui lòng chọn khách hàng và nhà xe có bảng cước đã thiết lập.');
   }
@@ -295,6 +304,14 @@ function syncCustomerDelivery(db, user, body, input, at) {
   return { customerId: customer.id, carrierId: carrier?.id ?? null, carriers, recipients, rate };
 }
 
+/** Mã danh mục lưu trên phiếu; null khi khách hàng/nhà xe chưa có trong danh mục. */
+function catalogIdsForEntry(db, body, input, delivery) {
+  return {
+    customerId: delivery?.customerId ?? customerForEntry(db, body, input.customer)?.id ?? null,
+    carrierId: delivery?.carrierId ?? carrierForEntry(db, body, input.carrier)?.id ?? null,
+  };
+}
+
 function dateOffset(iso, offset) {
   const date = new Date(`${iso}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + offset);
@@ -339,6 +356,8 @@ function toApi(row, user) {
     createdBy: row.created_by,
     createdByName: row.created_by_name ?? null,
     employeeId: row.employee_id ?? null,
+    customerId: row.customer_id ?? null,
+    carrierId: row.carrier_id ?? null,
     employeeName: row.employee_name ?? null,
     canEdit: canManage,
     canDelete: canManage,
@@ -347,16 +366,13 @@ function toApi(row, user) {
   };
 }
 
-// Dùng khóa đã lưu sẵn trên phiếu (migration 40), không gọi vn_normalize()
-// cho từng dòng.
+// Nối theo mã khách hàng/nhà xe lưu trên phiếu (migration 41): đổi tên trong
+// danh mục không làm mất giá chuẩn của phiếu cũ.
 const STANDARD_TRANSPORT_RATE_SELECT = `(
   SELECT rate.transport_fee
-    FROM customers customer
-    INNER JOIN carriers carrier
-      ON carrier.carrier_key = e.carrier_key
-    INNER JOIN carrier_customer_rates rate
-      ON rate.customer_id = customer.id AND rate.carrier_id = carrier.id
-   WHERE customer.customer_key = e.customer_key
+    FROM carrier_customer_rates rate
+   WHERE rate.customer_id = e.customer_id
+     AND rate.carrier_id = e.carrier_id
      AND (rate.spec_key = e.spec_key OR rate.is_default = 1)
    ORDER BY rate.is_default ASC, rate.id
    LIMIT 1
@@ -652,13 +668,14 @@ function register(router) {
     return transaction(c.db, () => {
 		ensureStaffDuplicateReason(c.db, c.user, input);
 		const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, at);
+      const catalog = catalogIdsForEntry(c.db, c.body, input, delivery);
       const result = c.db
         .prepare(
           `INSERT INTO entries
              (entry_date, customer, carrier, recipient, address, spec,
               ticket_fee, transport_fee, gate_fee, other_fee_name, other_fee, note, rate_variance_note, duplicate_reason, bill_status, misa_document_date, misa_document_code, employee_id,
-              created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              customer_id, carrier_id, created_by, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.entryDate,
@@ -679,6 +696,8 @@ function register(router) {
           input.misaDocumentDate,
           input.misaDocumentCode,
           employeeId,
+          catalog.customerId,
+          catalog.carrierId,
           c.user.id,
           at,
           at,
@@ -710,12 +729,14 @@ function register(router) {
     return transaction(c.db, () => {
 		ensureStaffDuplicateReason(c.db, c.user, input, before.id);
 		const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, new Date().toISOString());
+      const catalog = catalogIdsForEntry(c.db, c.body, input, delivery);
       c.db
         .prepare(
           `UPDATE entries SET
              entry_date = ?, customer = ?, carrier = ?, recipient = ?,
              address = ?, spec = ?, ticket_fee = ?, transport_fee = ?,
-             gate_fee = ?, other_fee_name = ?, other_fee = ?, note = ?, rate_variance_note = ?, duplicate_reason = ?, bill_status = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?, updated_at = ?
+             gate_fee = ?, other_fee_name = ?, other_fee = ?, note = ?, rate_variance_note = ?, duplicate_reason = ?, bill_status = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?,
+             customer_id = ?, carrier_id = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
@@ -737,6 +758,8 @@ function register(router) {
           input.misaDocumentDate,
           input.misaDocumentCode,
           employeeId,
+          catalog.customerId,
+          catalog.carrierId,
           new Date().toISOString(),
           before.id,
         );

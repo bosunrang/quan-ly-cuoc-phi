@@ -183,13 +183,18 @@ export function EntryDialog({
 			const next = await entryRepository.customerContext(id);
 			if (customerRequest.current !== requestId) return;
 			setContext(next);
+			// Ưu tiên mã nhà xe lưu trên phiếu: nhà xe đổi tên vẫn nhận đúng.
 			const carrierKey = normalizeCustomerSearch(initial.carrier.trim());
-			const sameCarrier = (item: { name: string }) =>
-				normalizeCustomerSearch(item.name.trim()) === carrierKey;
+			const sameCarrier = (item: { id: number; name: string }) =>
+				initial.carrierId
+					? item.id === initial.carrierId
+					: normalizeCustomerSearch(item.name.trim()) === carrierKey;
 			const linked = next.carriers.find(sameCarrier);
 			const carrier = linked ?? loaded.carriers.find(sameCarrier);
 			if (!carrier) return;
 			setCarrierId(carrier.id);
+			if (carrier.name !== initial.carrier)
+				setForm((current) => ({ ...current, carrier: carrier.name }));
 			if (!linked) return;
 			const ratesRequestId = ratesRequest.current + 1;
 			ratesRequest.current = ratesRequestId;
@@ -212,11 +217,19 @@ export function EntryDialog({
 									(employee) => employee.userId === result.currentUserId,
 								)?.id,
 					}));
-				const existing = result.customers.find(
-					(item) => item.name === initial.customer,
-				);
+				// Ưu tiên mã khách hàng lưu trên phiếu: khách đã đổi tên trong danh
+				// mục vẫn được nhận đúng, và phiếu được cập nhật theo tên mới.
+				const existing =
+					result.customers.find((item) => item.id === initial.customerId) ??
+					result.customers.find((item) => item.name === initial.customer);
 				if (existing) {
 					setCustomerId(existing.id);
+					if (existing.name !== initial.customer) {
+						setForm((current) => ({ ...current, customer: existing.name }));
+						setCustomerSearch(
+							`${existing.name}${existing.provinceCity ? ` · ${existing.provinceCity}` : ""}`,
+						);
+					}
 					if (editingId) return restoreEditingContext(existing.id, result);
 				}
 			})
@@ -231,7 +244,9 @@ export function EntryDialog({
 		editingId,
 		formOptions,
 		initial.carrier,
+		initial.carrierId,
 		initial.customer,
+		initial.customerId,
 		initial.entryDate,
 		initial.spec,
 	]);
@@ -482,7 +497,11 @@ export function EntryDialog({
 			return;
 		}
 		try {
-			await onSave(form);
+			await onSave({
+				...form,
+				customerId: customerId ?? undefined,
+				carrierId: carrierId ?? undefined,
+			});
 			onClose();
 		} catch (cause) {
 			if (cause instanceof ApiError && cause.status === 409)

@@ -66,11 +66,9 @@ function register(router) {
     const variance = c.db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(ABS(e.transport_fee - r.transport_fee)), 0) AS amount
        FROM entries e
-       INNER JOIN customers cu ON cu.customer_key = e.customer_key
-       INNER JOIN carriers ca ON ca.carrier_key = e.carrier_key
        INNER JOIN carrier_customer_rates r ON r.id = (
          SELECT id FROM carrier_customer_rates
-          WHERE customer_id = cu.id AND carrier_id = ca.id
+          WHERE customer_id = e.customer_id AND carrier_id = e.carrier_id
             AND (spec_key = e.spec_key OR is_default = 1)
           ORDER BY is_default ASC, id LIMIT 1
        )
@@ -83,11 +81,9 @@ function register(router) {
          COALESCE(SUM(e.transport_fee - r.transport_fee), 0) AS difference,
          COUNT(*) AS entries
        FROM entries e
-       INNER JOIN customers cu ON cu.customer_key = e.customer_key
-       INNER JOIN carriers ca ON ca.carrier_key = e.carrier_key
        INNER JOIN carrier_customer_rates r ON r.id = (
          SELECT id FROM carrier_customer_rates
-          WHERE customer_id = cu.id AND carrier_id = ca.id
+          WHERE customer_id = e.customer_id AND carrier_id = e.carrier_id
             AND (spec_key = e.spec_key OR is_default = 1)
           ORDER BY is_default ASC, id LIMIT 1
        )

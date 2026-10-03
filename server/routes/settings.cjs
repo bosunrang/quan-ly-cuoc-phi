@@ -4,7 +4,7 @@ const { randomBytes } = require('node:crypto');
 const { copyFileSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
-const { openDatabase, transaction } = require('../db.cjs');
+const { linkEntriesToCatalog, openDatabase, transaction } = require('../db.cjs');
 const auth = require('../auth.cjs');
 const { writeAudit } = require('../audit.cjs');
 const { createSafetyBackup, listAutomaticBackups } = require('../automatic-backup.cjs');
@@ -22,7 +22,7 @@ const BACKUP_TABLES = {
   carrierCustomers: { table: 'carrier_customers', columns: ['carrier_id', 'customer_id', 'assigned_at'] },
   carrierRates: { table: 'carrier_customer_rates', columns: ['id', 'carrier_id', 'customer_id', 'spec', 'spec_key', 'is_default', 'transport_fee', 'gate_fee', 'note', 'created_at', 'updated_at'] },
   employees: { table: 'employees', columns: ['id', 'full_name', 'user_id', 'is_active', 'search_text', 'created_at', 'updated_at', 'address'] },
-  entries: { table: 'entries', columns: ['id', 'entry_date', 'customer', 'carrier', 'recipient', 'address', 'spec', 'ticket_fee', 'transport_fee', 'gate_fee', 'other_fee_name', 'other_fee', 'note', 'general_note', 'created_by', 'created_at', 'updated_at', 'misa_document_date', 'misa_document_code', 'employee_id', 'rate_variance_note', 'duplicate_reason', 'bill_status'] },
+  entries: { table: 'entries', columns: ['id', 'entry_date', 'customer', 'carrier', 'recipient', 'address', 'spec', 'ticket_fee', 'transport_fee', 'gate_fee', 'other_fee_name', 'other_fee', 'note', 'general_note', 'created_by', 'created_at', 'updated_at', 'misa_document_date', 'misa_document_code', 'employee_id', 'rate_variance_note', 'duplicate_reason', 'bill_status', 'customer_id', 'carrier_id'] },
   fuelPrices: { table: 'fuel_prices', columns: ['id', 'effective_date', 'fuel_type', 'region', 'price', 'source', 'created_by', 'created_at', 'updated_at'] },
   fuelRecords: { table: 'fuel_records', columns: ['id', 'entry_date', 'employee_id', 'distance_km', 'consumption_liters', 'consumption_base_km', 'fuel_type', 'region', 'vehicle_type', 'fuel_price', 'total_fee', 'extra_costs', 'note', 'created_by', 'created_at', 'period_from', 'period_to', 'updated_at', 'finalized_at', 'finalized_by', 'voided_at', 'voided_by', 'void_reason', 'status'] },
   routeDistances: { table: 'route_distances', columns: ['id', 'from_name', 'to_name', 'from_key', 'to_key', 'distance_km', 'source', 'updated_at'] },
@@ -108,6 +108,11 @@ function importRows(db, name, rows, userId, knownUserIds) {
     // Backup cũ chưa có chi phí khác thì xem như không phát sinh.
     if (name === 'entries') value.other_fee ??= 0;
     if (name === 'entries') value.other_fee_name ??= '';
+    // Backup trước khi phiếu lưu mã danh mục: nối lại theo tên sau khi nhập xong.
+    if (name === 'entries') {
+      value.customer_id ??= null;
+      value.carrier_id ??= null;
+    }
     // Backup cũ chưa lưu mã khách MISA vẫn khôi phục được.
     if (name === 'misa') value.customer_code ??= '';
     // Backup trước khi bổ sung mã khách vẫn giữ được các bản ghi khách hàng.
@@ -196,6 +201,7 @@ function restoreData(db, user, data, auditAction, auditDetail) {
     for (const name of ['settings', 'customers', 'carriers', 'carrierCustomers', 'carrierRates', 'employees', 'misa', 'entries', 'fuelPrices', 'fuelRecords', 'routeDistances', 'fuelLegs']) {
       importRows(db, name, normalized[name], user.id, knownUserIds);
     }
+    linkEntriesToCatalog(db);
     writeAudit(db, user, auditAction, 'backup', null, auditDetail);
     return { restored: true };
   }));

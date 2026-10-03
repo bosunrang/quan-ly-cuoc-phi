@@ -28,6 +28,9 @@ export interface Entry {
 	createdByName: string | null;
 	employeeId?: number | null;
 	employeeName?: string | null;
+	/** Mã trong danh mục; null khi khách hàng/nhà xe chưa có hoặc đã bị xóa. */
+	customerId?: number | null;
+	carrierId?: number | null;
 	/** Admin được quản lý mọi phiếu; nhân viên chỉ quản lý phiếu tự tạo. */
 	canEdit: boolean;
 	canDelete: boolean;
@@ -41,6 +44,8 @@ export interface EntryInput {
 	/** Khóa khách hàng dùng khi lưu trực tiếp thông tin giao nhận vào danh mục. */
 	customerId?: number;
 	customer: string;
+	/** Mã nhà xe đã chọn trong danh mục; máy chủ dùng để nối phiếu với bảng cước. */
+	carrierId?: number;
 	carrier: string;
 	recipient: string;
 	address: string;
@@ -194,6 +199,7 @@ export function emptyEntryInput(entryDate: string): EntryInput {
 		entryDate,
 		customerId: undefined,
 		customer: "",
+		carrierId: undefined,
 		carrier: "",
 		recipient: "",
 		address: "",
@@ -217,8 +223,9 @@ export function emptyEntryInput(entryDate: string): EntryInput {
 export function toEntryInput(entry: Entry): EntryInput {
 	return {
 		entryDate: entry.entryDate,
-		customerId: undefined,
+		customerId: entry.customerId ?? undefined,
 		customer: entry.customer,
+		carrierId: entry.carrierId ?? undefined,
 		carrier: entry.carrier,
 		recipient: entry.recipient,
 		address: entry.address,

@@ -220,16 +220,13 @@ function reportData(db, input) {
             ), '') AS province_city,
             COALESCE((
               SELECT delivery_point FROM carriers
-               WHERE carrier_key = e.carrier_key
-               LIMIT 1
+               WHERE id = e.carrier_id
             ), '') AS carrier_delivery_point,
             (
               SELECT r.transport_fee
                 FROM carrier_customer_rates r
-                INNER JOIN customers cu ON cu.id = r.customer_id
-                INNER JOIN carriers ca ON ca.id = r.carrier_id
-               WHERE cu.customer_key = e.customer_key
-                 AND ca.carrier_key = e.carrier_key
+               WHERE r.customer_id = e.customer_id
+                 AND r.carrier_id = e.carrier_id
                  AND (r.spec_key = e.spec_key OR r.is_default = 1)
                ORDER BY r.is_default ASC, r.id
                LIMIT 1
@@ -288,8 +285,8 @@ function carrierVariance(db, input) {
        e.transport_fee - r.transport_fee AS difference, e.rate_variance_note
      FROM entries e
      LEFT JOIN employees em ON em.id = e.employee_id
-     INNER JOIN customers cu ON cu.customer_key = e.customer_key
-     INNER JOIN carriers ca ON ca.carrier_key = e.carrier_key
+     INNER JOIN customers cu ON cu.id = e.customer_id
+     INNER JOIN carriers ca ON ca.id = e.carrier_id
      INNER JOIN carrier_customer_rates r ON r.id = (
        SELECT id FROM carrier_customer_rates
         WHERE customer_id = cu.id AND carrier_id = ca.id

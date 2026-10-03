@@ -268,3 +268,83 @@ test('báo cáo năm đã bỏ: máy chủ từ chối loại báo cáo annual',
   assert.equal(catalog.status, 200);
   assert.equal('years' in catalog.data, false);
 });
+
+test('phiếu lưu mã khách hàng/nhà xe: sửa phiếu cũ sau khi đổi tên vẫn đúng', async () => {
+  const customer = await call('POST', '/api/customers', { token: adminToken, body: { customerName: 'Khách Mã Cũ' } });
+  const carrier = await call('POST', '/api/carriers', { token: adminToken, body: { name: 'Xe Mã Cũ' } });
+  await call('PATCH', `/api/carriers/${carrier.data.id}/customers`, {
+    token: adminToken,
+    body: { customerIds: [customer.data.id] },
+  });
+  await call('POST', `/api/carriers/${carrier.data.id}/customers/${customer.data.id}/rates`, {
+    token: adminToken,
+    body: { isDefault: true, transportFee: 100000, gateFee: 0, note: '' },
+  });
+  const entry = await call('POST', '/api/entries', {
+    token: adminToken,
+    body: {
+      entryDate: '2026-08-05', customer: 'Khách Mã Cũ', customerId: customer.data.id,
+      carrier: 'Xe Mã Cũ', carrierId: carrier.data.id, spec: 'Tất cả', transportFee: 100000,
+      note: 'Hàng', billStatus: 'Có bill', employeeId,
+    },
+  });
+  assert.equal(entry.status, 200);
+  assert.equal(entry.data.customerId, customer.data.id);
+  assert.equal(entry.data.carrierId, carrier.data.id);
+
+  await call('PATCH', `/api/customers/${customer.data.id}`, {
+    token: adminToken,
+    body: { customerName: 'Khách Mã Mới', carrier: 'Xe Mã Cũ' },
+  });
+  await call('PATCH', `/api/carriers/${carrier.data.id}`, {
+    token: adminToken,
+    body: { name: 'Xe Mã Mới', isActive: true },
+  });
+
+  // Form sửa phiếu nhận khách/nhà xe theo mã và gửi tên mới trong danh mục.
+  const edited = await call('PATCH', `/api/entries/${entry.data.id}`, {
+    token: adminToken,
+    body: {
+      entryDate: '2026-08-05', customer: 'Khách Mã Mới', customerId: customer.data.id,
+      carrier: 'Xe Mã Mới', carrierId: carrier.data.id, spec: 'Tất cả', transportFee: 120000,
+      rateVarianceNote: 'Tăng giá', note: 'Hàng', billStatus: 'Có bill', employeeId,
+    },
+  });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.data.customer, 'Khách Mã Mới');
+  assert.equal(edited.data.customerId, customer.data.id);
+  assert.equal(edited.data.standardTransportFee, 100000);
+
+  // Gửi mã của khách này kèm tên của khách khác thì bị từ chối.
+  const mismatch = await call('PATCH', `/api/entries/${entry.data.id}`, {
+    token: adminToken,
+    body: {
+      entryDate: '2026-08-05', customer: 'Khách Khác', customerId: customer.data.id,
+      carrier: 'Xe Mã Mới', spec: 'Tất cả', transportFee: 100000,
+      note: 'Hàng', billStatus: 'Có bill', employeeId,
+    },
+  });
+  assert.equal(mismatch.status, 400);
+});
+
+test('phiếu của khách chưa có trong danh mục tự nối khi danh mục thêm khách đó; xóa khách thì phiếu vẫn còn', async () => {
+  const entry = await call('POST', '/api/entries', {
+    token: adminToken,
+    body: {
+      entryDate: '2026-08-06', customer: 'Khách Vãng Lai', carrier: 'Xe Vãng Lai',
+      spec: 'Tất cả', transportFee: 50000, note: 'Hàng', billStatus: 'Có bill', employeeId,
+    },
+  });
+  assert.equal(entry.status, 200);
+  assert.equal(entry.data.customerId, null);
+
+  const customer = await call('POST', '/api/customers', { token: adminToken, body: { customerName: 'Khách Vãng Lai' } });
+  const listed = async () => (await call('GET', '/api/entries?from=2026-08-06&to=2026-08-06', { token: adminToken }))
+    .data.items.find((item) => item.id === entry.data.id);
+  assert.equal((await listed()).customerId, customer.data.id);
+
+  assert.equal((await call('DELETE', `/api/customers/${customer.data.id}`, { token: adminToken })).status, 200);
+  const afterDelete = await listed();
+  assert.equal(afterDelete.customer, 'Khách Vãng Lai');
+  assert.equal(afterDelete.customerId, null);
+});
