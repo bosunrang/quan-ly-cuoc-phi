@@ -11,7 +11,7 @@ type EmployeeReportFilters = {
 	from: string;
 	to: string;
 	employeeId?: string;
-	type: "daily" | "annual";
+	type: "daily";
 	extraCosts?: Array<{ name: string; amount: string; employeeId?: string }>;
 };
 

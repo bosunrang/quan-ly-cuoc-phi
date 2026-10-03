@@ -3,7 +3,7 @@
 const { normalizeSearchText, transaction } = require('../db.cjs');
 const { ensureCustomerCarrier, refreshCustomerCarrier } = require('../carrier-links.cjs');
 const { writeAudit } = require('../audit.cjs');
-const { badRequest, notFound } = require('../http.cjs');
+const { IMPORT_MAX_BODY_BYTES, badRequest, notFound } = require('../http.cjs');
 
 const PAGE = 'carriers';
 const DEFAULT_SPEC_KEY = '__all__';
@@ -317,7 +317,7 @@ function register(router) {
   router.post('/api/carriers/excel/preview', async (c) => {
     c.requirePage(PAGE);
     return prepareExcelImport(c.db, c.body);
-  });
+  }, { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES });
 
   router.post('/api/carriers/excel/import', async (c) => {
     c.requirePage(PAGE);
@@ -383,7 +383,7 @@ function register(router) {
       writeAudit(c.db, c.user, 'carrier.excel.import', 'carrier', null, summary);
       return summary;
     });
-  });
+  }, { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES });
 
   router.get('/api/carriers', async (c) => {
     c.requirePage(PAGE);

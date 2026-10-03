@@ -15,7 +15,14 @@ function readPeriod(query) {
 }
 
 function employeeFilter(db, user, query) {
-  if (!canSeeEveryone(user)) return { employeeId: null, ownUserId: user.id };
+  // Nhân viên xem số liệu của hồ sơ nhân viên liên kết với tài khoản, kể cả
+  // phiếu Admin nhập hộ — cùng phạm vi với Danh sách phiếu và Báo cáo.
+  if (!canSeeEveryone(user)) {
+    const employee = db
+      .prepare('SELECT id FROM employees WHERE user_id = ? AND is_active = 1')
+      .get(user.id);
+    return { employeeId: Number(employee?.id ?? -1), ownUserId: null };
+  }
   if (!query.employeeId) return { employeeId: null, ownUserId: null };
   const employeeId = Number(query.employeeId);
   if (!Number.isInteger(employeeId) || employeeId < 1) {
@@ -59,12 +66,12 @@ function register(router) {
     const variance = c.db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(ABS(e.transport_fee - r.transport_fee)), 0) AS amount
        FROM entries e
-       INNER JOIN customers cu ON cu.customer_key = vn_normalize(e.customer)
-       INNER JOIN carriers ca ON ca.carrier_key = vn_normalize(e.carrier)
+       INNER JOIN customers cu ON cu.customer_key = e.customer_key
+       INNER JOIN carriers ca ON ca.carrier_key = e.carrier_key
        INNER JOIN carrier_customer_rates r ON r.id = (
          SELECT id FROM carrier_customer_rates
           WHERE customer_id = cu.id AND carrier_id = ca.id
-            AND (spec_key = vn_normalize(e.spec) OR is_default = 1)
+            AND (spec_key = e.spec_key OR is_default = 1)
           ORDER BY is_default ASC, id LIMIT 1
        )
        WHERE ${entryWhere.sql} AND e.transport_fee <> r.transport_fee`,
@@ -76,12 +83,12 @@ function register(router) {
          COALESCE(SUM(e.transport_fee - r.transport_fee), 0) AS difference,
          COUNT(*) AS entries
        FROM entries e
-       INNER JOIN customers cu ON cu.customer_key = vn_normalize(e.customer)
-       INNER JOIN carriers ca ON ca.carrier_key = vn_normalize(e.carrier)
+       INNER JOIN customers cu ON cu.customer_key = e.customer_key
+       INNER JOIN carriers ca ON ca.carrier_key = e.carrier_key
        INNER JOIN carrier_customer_rates r ON r.id = (
          SELECT id FROM carrier_customer_rates
           WHERE customer_id = cu.id AND carrier_id = ca.id
-            AND (spec_key = vn_normalize(e.spec) OR is_default = 1)
+            AND (spec_key = e.spec_key OR is_default = 1)
           ORDER BY is_default ASC, id LIMIT 1
        )
        WHERE ${entryWhere.sql} AND e.transport_fee <> r.transport_fee

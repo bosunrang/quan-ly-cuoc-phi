@@ -38,6 +38,7 @@ import type {
 } from "../../domain/customers/customer.model";
 import { customerRepository } from "../../domain/customers/customer.repository";
 import { normalizeText } from "../../shared/lib/text";
+import { useDebouncedValue } from "../../shared/lib/useDebouncedValue";
 import { downloadXlsx } from "../../shared/lib/xlsx";
 import { Alert } from "../../shared/ui/Alert";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
@@ -121,12 +122,14 @@ export function CarriersPage() {
 		}
 	}, []);
 
+	// Chỉ tìm trên máy chủ khi người dùng ngừng gõ.
+	const debouncedQuery = useDebouncedValue(query, 250);
 	const loadCustomerPage = useCallback(async () => {
 		const requestId = customerRequest.current + 1;
 		customerRequest.current = requestId;
 		try {
 			const result = await customerRepository.list(
-				query,
+				debouncedQuery,
 				customerPage,
 				CUSTOMERS_PER_PAGE,
 			);
@@ -135,7 +138,7 @@ export function CarriersPage() {
 			if (customerRequest.current === requestId)
 				setError(errorMessage(cause, "Không tải được danh sách khách hàng."));
 		}
-	}, [customerPage, query]);
+	}, [customerPage, debouncedQuery]);
 
 	const loadAssignedCustomers = useCallback(
 		async (carrierId: number | null) => {
@@ -326,7 +329,9 @@ export function CarriersPage() {
 		}
 	};
 
-	if (error && !carrierData) return <Alert tone="error">{error}</Alert>;
+	// Lỗi tải nhà xe hoặc khách hàng đều phải hiện ra, không treo ở "Đang tải…".
+	if (error && (!carrierData || !customerData))
+		return <Alert tone="error">{error}</Alert>;
 	if (!carrierData || !customerData) return <LoadingState />;
 
 	return (

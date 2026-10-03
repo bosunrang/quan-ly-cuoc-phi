@@ -1,26 +1,70 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { authRepository } from "../domain/auth/auth.repository";
-import { AuditPage } from "../features/audit/AuditPage";
 import { InitialPasswordPage, LoginPage } from "../features/auth/LoginPage";
-import { CarriersPage } from "../features/carriers/CarriersPage";
-import { CustomersPage } from "../features/customers/CustomersPage";
-import { DashboardPage } from "../features/dashboard/DashboardPage";
-import { EmployeesPage } from "../features/employees/EmployeesPage";
-import { EntriesPage } from "../features/entries/EntriesPage";
-import { FuelPage } from "../features/fuel/FuelPage";
-import { MisaPage } from "../features/misa/MisaPage";
-import { FuelPriceReportPage } from "../features/reports/FuelPriceReportPage";
-import { ReportsPage } from "../features/reports/ReportsPage";
-import { SettingsPage } from "../features/settings/SettingsPage";
 import { useAppSettings } from "../features/settings/useAppSettings";
-import { UsersPage } from "../features/users/UsersPage";
 import { hasToken, setUnauthorizedHandler } from "../shared/api/client";
+import { ErrorBoundary } from "../shared/ui/ErrorBoundary";
 import { EmptyState, LoadingState } from "../shared/ui/Panel";
 import type { PageId, Profile } from "../types";
 import { ConnectionBanner } from "./layout/ConnectionBanner";
 import { Header } from "./layout/Header";
 import { Sidebar } from "./layout/Sidebar";
 import { pageConfig } from "./pageConfig";
+
+// Mỗi màn hình là một chunk riêng: lần mở đầu chỉ tải màn đăng nhập, còn bộ
+// đọc Excel và các trang nặng chỉ tải khi người dùng mở đúng thẻ đó.
+const AuditPage = lazy(() =>
+	import("../features/audit/AuditPage").then((m) => ({ default: m.AuditPage })),
+);
+const CarriersPage = lazy(() =>
+	import("../features/carriers/CarriersPage").then((m) => ({
+		default: m.CarriersPage,
+	})),
+);
+const CustomersPage = lazy(() =>
+	import("../features/customers/CustomersPage").then((m) => ({
+		default: m.CustomersPage,
+	})),
+);
+const DashboardPage = lazy(() =>
+	import("../features/dashboard/DashboardPage").then((m) => ({
+		default: m.DashboardPage,
+	})),
+);
+const EmployeesPage = lazy(() =>
+	import("../features/employees/EmployeesPage").then((m) => ({
+		default: m.EmployeesPage,
+	})),
+);
+const EntriesPage = lazy(() =>
+	import("../features/entries/EntriesPage").then((m) => ({
+		default: m.EntriesPage,
+	})),
+);
+const FuelPage = lazy(() =>
+	import("../features/fuel/FuelPage").then((m) => ({ default: m.FuelPage })),
+);
+const MisaPage = lazy(() =>
+	import("../features/misa/MisaPage").then((m) => ({ default: m.MisaPage })),
+);
+const FuelPriceReportPage = lazy(() =>
+	import("../features/reports/FuelPriceReportPage").then((m) => ({
+		default: m.FuelPriceReportPage,
+	})),
+);
+const ReportsPage = lazy(() =>
+	import("../features/reports/ReportsPage").then((m) => ({
+		default: m.ReportsPage,
+	})),
+);
+const SettingsPage = lazy(() =>
+	import("../features/settings/SettingsPage").then((m) => ({
+		default: m.SettingsPage,
+	})),
+);
+const UsersPage = lazy(() =>
+	import("../features/users/UsersPage").then((m) => ({ default: m.UsersPage })),
+);
 
 type Status = "checking" | "guest" | "ready";
 
@@ -154,7 +198,11 @@ export function App() {
 				/>
 				<ConnectionBanner />
 				<div className="page-content">
-					<div className="page-stack">{content}</div>
+					<div className="page-stack">
+						<ErrorBoundary key={page ?? "none"}>
+							<Suspense fallback={<LoadingState />}>{content}</Suspense>
+						</ErrorBoundary>
+					</div>
 				</div>
 			</div>
 		</div>

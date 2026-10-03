@@ -122,5 +122,6 @@ ${sheets.map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}
 	anchor.href = url;
 	anchor.download = fileName;
 	anchor.click();
-	URL.revokeObjectURL(url);
+	// Thu hồi ngay có thể hủy lượt tải trước khi trình duyệt đọc xong blob.
+	window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

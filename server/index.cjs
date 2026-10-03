@@ -32,12 +32,15 @@ const PUBLIC_ROUTES = new Set([
   'GET /api/settings',
 ]);
 
-/** Lần chạy đầu tiên: tạo tài khoản Admin với mật khẩu ngẫu nhiên. */
+/**
+ * Lần chạy đầu tiên: tạo tài khoản Admin với mật khẩu ngẫu nhiên. Server nghe
+ * trên toàn mạng LAN ngay từ đầu, nên không dùng mật khẩu cố định dễ đoán.
+ */
 function seedFirstAdmin(db) {
   const existing = db.prepare('SELECT COUNT(*) AS count FROM users').get();
   if (Number(existing.count) > 0) return null;
 
-  const password = 'admin';
+  const password = auth.generateReadablePassword();
   const { hash, salt } = auth.hashPassword(password);
   const at = new Date().toISOString();
   db.prepare(
@@ -137,10 +140,16 @@ function createApp({
     if (!isPublic && !user) throw unauthorized();
 
     const pages = user ? pagesForUser(db, user) : [];
+    // Route nhận body lớn khai báo thẻ cần có, để người không đủ quyền bị chặn
+    // trước khi máy chủ phải đọc hàng chục/hàng trăm MB vào bộ nhớ.
+    const requiredPage = matched.options?.page;
+    if (requiredPage && !(user && !user.must_change_password && pages.includes(requiredPage))) {
+      throw user ? forbidden('Bạn không được cấp quyền vào mục này.') : unauthorized();
+    }
     const body =
       req.method === 'GET' || req.method === 'DELETE'
         ? {}
-        : await readJsonBody(req);
+        : await readJsonBody(req, matched.options?.maxBodyBytes);
 
     const context = {
       db,
@@ -193,10 +202,16 @@ function createApp({
     async close() {
       if (backupScheduler) await backupScheduler.stop();
       await new Promise((resolve) => {
+        // Yêu cầu đang dở (ví dụ tải backup lớn) được 3 giây để hoàn tất, sau
+        // đó ngắt hẳn, để thoát ứng dụng/cài bản cập nhật không bị treo.
+        const forceClose = setTimeout(() => server.closeAllConnections(), 3000);
+        forceClose.unref();
         server.close(() => {
+          clearTimeout(forceClose);
           db.close();
           resolve();
         });
+        server.closeIdleConnections();
       });
     },
   };

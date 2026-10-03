@@ -67,7 +67,7 @@ function reportInputForUser(db, user, input) {
   return { ...input, employeeId: Number(employee?.id ?? -1) };
 }
 
-/** Danh sách lựa chọn và năm báo cáo trong đúng phạm vi mà người dùng được xem. */
+/** Danh sách nhân viên báo cáo trong đúng phạm vi mà người dùng được xem. */
 function reportCatalog(db, employeeId = null) {
   const employeeWhere = employeeId === null
     ? 'WHERE is_active = 1'
@@ -75,16 +75,8 @@ function reportCatalog(db, employeeId = null) {
   const employees = db
     .prepare(`SELECT id, full_name FROM employees ${employeeWhere} ORDER BY full_name COLLATE NOCASE`)
     .all(...(employeeId === null ? [] : [employeeId]));
-  const entryWhere = employeeId === null
-    ? "WHERE entry_date <> ''"
-    : "WHERE entry_date <> '' AND employee_id = ?";
-  const years = db
-    .prepare(`SELECT DISTINCT substr(entry_date, 1, 4) AS year FROM entries ${entryWhere} ORDER BY year DESC`)
-    .all(...(employeeId === null ? [] : [employeeId]))
-    .map((item) => item.year);
   return {
     employees: employees.map((item) => ({ id: Number(item.id), fullName: item.full_name })),
-    years,
   };
 }
 
@@ -222,13 +214,13 @@ function reportData(db, input) {
     `SELECT e.*,
             COALESCE((
               SELECT province_city FROM misa_rows
-               WHERE customer_key = vn_normalize(e.customer)
+               WHERE customer_key = e.customer_key
                  AND province_city <> ''
                ORDER BY document_date DESC, id DESC LIMIT 1
             ), '') AS province_city,
             COALESCE((
               SELECT delivery_point FROM carriers
-               WHERE carrier_key = vn_normalize(e.carrier)
+               WHERE carrier_key = e.carrier_key
                LIMIT 1
             ), '') AS carrier_delivery_point,
             (
@@ -236,9 +228,9 @@ function reportData(db, input) {
                 FROM carrier_customer_rates r
                 INNER JOIN customers cu ON cu.id = r.customer_id
                 INNER JOIN carriers ca ON ca.id = r.carrier_id
-               WHERE cu.customer_key = vn_normalize(e.customer)
-                 AND ca.carrier_key = vn_normalize(e.carrier)
-                 AND (r.spec_key = vn_normalize(e.spec) OR r.is_default = 1)
+               WHERE cu.customer_key = e.customer_key
+                 AND ca.carrier_key = e.carrier_key
+                 AND (r.spec_key = e.spec_key OR r.is_default = 1)
                ORDER BY r.is_default ASC, r.id
                LIMIT 1
             ) AS standard_transport_fee
@@ -272,9 +264,8 @@ function reportData(db, input) {
     });
   }
   const employees = db.prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE').all();
-  const years = db.prepare("SELECT DISTINCT substr(entry_date, 1, 4) AS year FROM entries WHERE entry_date <> '' ORDER BY year DESC").all().map((item) => item.year);
   const company = db.prepare('SELECT company_name, company_address FROM app_settings WHERE id = 1').get() || {};
-  return { entries, fuels, fuelLegsByRecordId, employees, years, company };
+  return { entries, fuels, fuelLegsByRecordId, employees, company };
 }
 
 function carrierVariance(db, input) {
@@ -297,12 +288,12 @@ function carrierVariance(db, input) {
        e.transport_fee - r.transport_fee AS difference, e.rate_variance_note
      FROM entries e
      LEFT JOIN employees em ON em.id = e.employee_id
-     INNER JOIN customers cu ON cu.customer_key = vn_normalize(e.customer)
-     INNER JOIN carriers ca ON ca.carrier_key = vn_normalize(e.carrier)
+     INNER JOIN customers cu ON cu.customer_key = e.customer_key
+     INNER JOIN carriers ca ON ca.carrier_key = e.carrier_key
      INNER JOIN carrier_customer_rates r ON r.id = (
        SELECT id FROM carrier_customer_rates
         WHERE customer_id = cu.id AND carrier_id = ca.id
-          AND (spec_key = vn_normalize(e.spec) OR is_default = 1)
+          AND (spec_key = e.spec_key OR is_default = 1)
         ORDER BY is_default ASC, id
         LIMIT 1
      )
@@ -949,25 +940,6 @@ function dailySummarySheet(data, input, employees, extras) {
   return ws;
 }
 
-function annualSheet(data, year, employee) {
-  const ws = XLSX.utils.aoa_to_sheet([]);
-  const rows = data.entries.filter((row) => row.employee_id === employee.id);
-  ws['!cols'] = [{ wch: 15 }, { wch: 22 }, { wch: 38 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 24 }, { wch: 18 }, { wch: 42 }];
-  set(ws, 'A1', `BẢNG TỔNG HỢP CƯỚC GỬI HÀNG NĂM ${year} — ${employee.full_name}`, { font: { name: 'Times New Roman', sz: 16, bold: true }, alignment: { horizontal: 'center' } }); merge(ws, 'A1:J1');
-  ['Ngày gửi', 'Nhà xe', 'Khách hàng', 'Tỉnh/ TP', 'Quy cách', 'Cước vận chuyển', 'Phí vào cổng', 'Tên chi phí khác', 'Chi phí khác', 'Sản phẩm'].forEach((value, index) => set(ws, XLSX.utils.encode_cell({ r: 2, c: index }), value, heading));
-  rows.forEach((row, index) => {
-    const values = [formatDate(row.entry_date), row.carrier, row.customer, row.province_city || '', row.spec, number(row.transport_fee), number(row.gate_fee), row.other_fee_name || '', number(row.other_fee), row.note || ''];
-    values.forEach((value, column) => set(ws, XLSX.utils.encode_cell({ r: 3 + index, c: column }), value, [5, 6, 8].includes(column) ? money : [0, 1, 3, 4].includes(column) ? centered : baseStyle));
-    ws['!rows'] ??= [];
-    ws['!rows'][3 + index] = { hpt: (row.note || '').length > 80 ? 45 : 30 };
-  });
-  ws['!rows'] ??= [];
-  ws['!rows'][0] = { hpt: 24 };
-  ws['!rows'][2] = { hpt: 30 };
-  ws['!ref'] = `A1:J${Math.max(4, rows.length + 3)}`;
-  return ws;
-}
-
 function fuelDetailItems(data, employeeId) {
   return data.fuels
     .filter((fuel) => fuel.employee_id === employeeId)
@@ -1176,6 +1148,7 @@ function carrierVarianceSheet(items, input) {
 /** Một workbook duy nhất phục vụ cả tải Excel và in PDF. */
 function employeeReportWorkbook(data, input, selected, extras, type) {
   const workbook = XLSX.utils.book_new();
+  // Chỉ còn bảng kê theo khoảng ngày; báo cáo năm đã được bỏ.
   if (type === 'daily') {
     if (!selected.length) throw badRequest('Không có nhân viên đang hoạt động để xuất báo cáo.');
     validateExtraCostAssignments(extras, selected, input.employeeId);
@@ -1192,19 +1165,6 @@ function employeeReportWorkbook(data, input, selected, extras, type) {
         );
       }
     }
-  } else if (type === 'annual') {
-    const year = input.from.slice(0, 4);
-    const usedNames = new Set();
-    for (const employee of selected) {
-      if (data.entries.some((row) => row.employee_id === employee.id)) {
-        XLSX.utils.book_append_sheet(
-          workbook,
-          annualSheet(data, year, employee),
-          uniqueSheetName(employee.full_name, usedNames),
-        );
-      }
-    }
-    if (!workbook.SheetNames.length) throw badRequest('Không có phiếu chi phí trong năm đã chọn.');
   } else throw badRequest('Loại báo cáo không hợp lệ.');
   return workbook;
 }
@@ -1297,14 +1257,10 @@ function register(router) {
     const data = reportData(c.db, input);
     const selected = input.employeeId ? data.employees.filter((item) => item.id === input.employeeId) : data.employees;
     const workbook = employeeReportWorkbook(data, input, selected, extras, type);
-    const contentBase64 = type === 'daily'
-      ? landscapeWorkbookBase64(workbook)
-      : XLSX.write(workbook, { type: 'base64', bookType: 'xlsx', compression: true });
-    const suffix = type === 'annual'
-      ? `Tổng hợp năm ${input.from.slice(0, 4)}`
-      : input.employeeId
-        ? `Bảng kê ${selected[0].full_name} từ ${formatFileDate(input.from)} đến ${formatFileDate(input.to)}`
-        : `Bảng kê tất cả nhân viên từ ${formatFileDate(input.from)} đến ${formatFileDate(input.to)}`;
+    const contentBase64 = landscapeWorkbookBase64(workbook);
+    const suffix = input.employeeId
+      ? `Bảng kê ${selected[0].full_name} từ ${formatFileDate(input.from)} đến ${formatFileDate(input.to)}`
+      : `Bảng kê tất cả nhân viên từ ${formatFileDate(input.from)} đến ${formatFileDate(input.to)}`;
     writeAudit(c.db, c.user, 'report.export', 'report', null, { type, ...input, extraCosts: extras, sheetCount: workbook.SheetNames.length });
     return { fileName: `${suffix}.xlsx`, contentBase64 };
   });

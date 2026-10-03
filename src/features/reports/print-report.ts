@@ -10,15 +10,12 @@ function escapeHtml(value: string | number): string {
 }
 
 export function printableReportHtml(report: PrintableReport): string {
-	const title =
-		report.type === "daily"
-			? "Bảng kê cước gửi hàng"
-			: "Báo cáo cước gửi hàng theo năm";
+	const title = "Bảng kê cước gửi hàng";
 	const sheets = report.sheets
 		.map((sheet) => {
 			// Chỉ nới trên bản in: giữ nguyên độ rộng cột của workbook Excel.
 			const printWidths = sheet.columnWidths.map((width, index) =>
-				report.type === "daily" && sheet.columnWidths.length >= 18
+				sheet.columnWidths.length >= 18
 					? index === 0
 						? Math.max(width, 9)
 						: index === 12

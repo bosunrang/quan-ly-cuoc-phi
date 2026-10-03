@@ -1,7 +1,11 @@
 import { X } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Alert } from "./Alert";
+
+// Các hộp thoại đang mở, theo thứ tự chồng lên nhau. Escape chỉ đóng hộp
+// thoại trên cùng, không đóng luôn hộp thoại cha bên dưới.
+const openDialogs: symbol[] = [];
 
 interface DialogProps {
 	title: string;
@@ -36,13 +40,21 @@ export function Dialog({
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
 	useEffect(() => {
+		const id = Symbol("dialog");
+		openDialogs.push(id);
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key === "Escape") onClose();
+			if (event.key === "Escape" && openDialogs.at(-1) === id)
+				onCloseRef.current();
 		};
 		document.addEventListener("keydown", onKey);
-		return () => document.removeEventListener("keydown", onKey);
-	}, [onClose]);
+		return () => {
+			document.removeEventListener("keydown", onKey);
+			openDialogs.splice(openDialogs.indexOf(id), 1);
+		};
+	}, []);
 
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();

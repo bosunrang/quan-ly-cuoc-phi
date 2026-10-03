@@ -4,7 +4,7 @@ const { randomBytes } = require('node:crypto');
 const { transaction } = require('../db.cjs');
 const auth = require('../auth.cjs');
 const { writeAudit } = require('../audit.cjs');
-const { badRequest } = require('../http.cjs');
+const { RESTORE_MAX_BODY_BYTES, badRequest } = require('../http.cjs');
 const { invalidateDefaultOverview } = require('./misa.cjs');
 
 const PAGE = 'settings';
@@ -41,6 +41,26 @@ const CLEAR_ORDER = [
 
 function clearTables(db, names) {
   for (const name of names) db.prepare(`DELETE FROM ${BACKUP_TABLES[name].table}`).run();
+}
+
+/**
+ * Nạp/xóa hàng loạt MISA: trigger FTS chạy cho từng dòng chiếm phần lớn thời
+ * gian. Tạm bỏ trigger trong giao dịch, xong việc thì dựng lại chỉ mục tìm kiếm
+ * một lần và tạo lại đúng các trigger cũ. Lỗi giữa chừng thì giao dịch hoàn tác
+ * cả việc bỏ trigger.
+ */
+function withMisaSearchRebuild(db, work) {
+  const triggers = db.prepare(
+    "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'misa_rows'",
+  ).all();
+  for (const trigger of triggers) db.exec(`DROP TRIGGER "${trigger.name}"`);
+  const result = work();
+  db.exec('DELETE FROM misa_search');
+  db.exec(
+    'INSERT INTO misa_search(rowid, search_text) SELECT id, vn_normalize(customer_name) FROM misa_rows',
+  );
+  for (const trigger of triggers) db.exec(trigger.sql);
+  return result;
 }
 
 function rowsForBackup(db) {
@@ -179,7 +199,7 @@ function register(router) {
       });
       return settings;
     });
-  });
+  }, { page: PAGE, maxBodyBytes: 4 * 1024 * 1024 });
 
   // Mã chỉ hiện đúng một lần để người quản trị cất ở nơi an toàn.
   router.post('/api/settings/recovery-code', async (c) => {
@@ -223,8 +243,24 @@ function register(router) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw badRequest('Dữ liệu backup không hợp lệ.');
     }
+    // Màn đăng nhập đọc dòng cài đặt id = 1; backup thiếu dòng này sẽ làm hỏng
+    // giao diện, nên kiểm tra và áp cùng quy tắc như khi sửa cài đặt.
+    const settingsRows = data.settings;
+    if (!Array.isArray(settingsRows) || settingsRows.length !== 1 || Number(settingsRows[0]?.id) !== 1) {
+      throw badRequest('Backup thiếu thông tin cài đặt của đơn vị.');
+    }
+    const restoredSettings = settingsRows[0];
+    data.settings = [{
+      ...restoredSettings,
+      company_name: text(restoredSettings.company_name, 'Tên doanh nghiệp', 200),
+      company_address: text(restoredSettings.company_address, 'Địa chỉ', 400),
+      display_name: text(restoredSettings.display_name, 'Tên hiển thị', 80),
+      tagline: text(restoredSettings.tagline, 'Dòng phụ', 120),
+      logo_data_url: logo(restoredSettings.logo_data_url),
+      updated_at: String(restoredSettings.updated_at || new Date().toISOString()),
+    }];
 
-    const result = transaction(c.db, () => {
+    const result = transaction(c.db, () => withMisaSearchRebuild(c.db, () => {
       const knownUserIds = new Set(c.db.prepare('SELECT id FROM users').all().map((row) => Number(row.id)));
       clearTables(c.db, CLEAR_ORDER);
       for (const name of ['settings', 'customers', 'carriers', 'carrierCustomers', 'carrierRates', 'employees', 'misa', 'entries', 'fuelPrices', 'fuelRecords', 'routeDistances', 'fuelLegs']) {
@@ -234,10 +270,10 @@ function register(router) {
         createdAt: backup.createdAt ?? null,
       });
       return { restored: true };
-    });
+    }));
     invalidateDefaultOverview(c.db);
     return result;
-  });
+  }, { page: PAGE, maxBodyBytes: RESTORE_MAX_BODY_BYTES });
 
   router.post('/api/settings/data/delete', async (c) => {
     c.requirePage(PAGE);
@@ -260,7 +296,9 @@ function register(router) {
         );
       }
       const tables = new Set(selected.flatMap((name) => GROUPS[name]));
-      clearTables(c.db, CLEAR_ORDER.filter((name) => tables.has(name)));
+      const clear = () => clearTables(c.db, CLEAR_ORDER.filter((name) => tables.has(name)));
+      if (tables.has('misa')) withMisaSearchRebuild(c.db, clear);
+      else clear();
       writeAudit(c.db, c.user, 'settings.data_delete', 'data', null, {
         groups: selected,
         detachedEmployeeLinks,

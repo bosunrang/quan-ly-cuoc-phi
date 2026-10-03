@@ -136,6 +136,7 @@ export function EntryDialog({
 	const ordersRequest = useRef(0);
 	const ratesRequest = useRef(0);
 	const duplicateRequest = useRef(0);
+	const editRestoreStarted = useRef(false);
 	const productTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const [carrierId, setCarrierId] = useState<number | null>(null);
 	const [carrierPickerOpen, setCarrierPickerOpen] = useState(false);
@@ -157,6 +158,46 @@ export function EntryDialog({
 	const deferredRateSearch = useDeferredValue(form.spec);
 
 	useEffect(() => {
+		/**
+		 * Khi sửa phiếu, nạp lại nhà xe, bảng cước và đơn MISA của phiếu đó.
+		 * Thiếu bước này thì không biết giá chuẩn, ô lý do chênh lệch không hiện
+		 * và máy chủ từ chối lưu khi người dùng tăng cước.
+		 */
+		const restoreEditingContext = async (
+			id: number,
+			loaded: EntryFormOptions,
+		) => {
+			if (editRestoreStarted.current) return;
+			editRestoreStarted.current = true;
+			const requestId = customerRequest.current + 1;
+			customerRequest.current = requestId;
+			const ordersRequestId = ordersRequest.current + 1;
+			ordersRequest.current = ordersRequestId;
+			void entryRepository
+				.misaOrders(id, initial.entryDate)
+				.then((result) => {
+					if (ordersRequest.current === ordersRequestId)
+						setOrders(result.items);
+				})
+				.catch(() => {});
+			const next = await entryRepository.customerContext(id);
+			if (customerRequest.current !== requestId) return;
+			setContext(next);
+			const carrierKey = normalizeCustomerSearch(initial.carrier.trim());
+			const sameCarrier = (item: { name: string }) =>
+				normalizeCustomerSearch(item.name.trim()) === carrierKey;
+			const linked = next.carriers.find(sameCarrier);
+			const carrier = linked ?? loaded.carriers.find(sameCarrier);
+			if (!carrier) return;
+			setCarrierId(carrier.id);
+			if (!linked) return;
+			const ratesRequestId = ratesRequest.current + 1;
+			ratesRequest.current = ratesRequestId;
+			const result = await entryRepository.rates(id, carrier.id);
+			if (ratesRequest.current !== ratesRequestId) return;
+			setRates(result.items);
+			setRate(rateForSpec(result.items, initial.spec));
+		};
 		void (
 			formOptions ? Promise.resolve(formOptions) : entryRepository.formOptions()
 		)
@@ -174,7 +215,10 @@ export function EntryDialog({
 				const existing = result.customers.find(
 					(item) => item.name === initial.customer,
 				);
-				if (existing) setCustomerId(existing.id);
+				if (existing) {
+					setCustomerId(existing.id);
+					if (editingId) return restoreEditingContext(existing.id, result);
+				}
 			})
 			.catch((cause) =>
 				setError(
@@ -183,7 +227,14 @@ export function EntryDialog({
 						: "Không tải được dữ liệu nhập phiếu.",
 				),
 			);
-	}, [editingId, formOptions, initial.customer]);
+	}, [
+		editingId,
+		formOptions,
+		initial.carrier,
+		initial.customer,
+		initial.entryDate,
+		initial.spec,
+	]);
 	useEffect(() => {
 		const textarea = productTextareaRef.current;
 		if (!textarea || textarea.value !== form.note) return;

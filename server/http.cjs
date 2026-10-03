@@ -3,8 +3,13 @@
 const { createReadStream, existsSync, statSync } = require('node:fs');
 const { extname, join, normalize, sep } = require('node:path');
 
-// Backup có thể chứa nhiều dòng MISA, nên cần lớn hơn các biểu mẫu thông thường.
-const MAX_BODY_BYTES = 25 * 1024 * 1024;
+// Biểu mẫu thông thường rất nhỏ. Route nhập dữ liệu hoặc khôi phục backup
+// khai báo giới hạn lớn hơn của riêng nó khi đăng ký với router.
+const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+const IMPORT_MAX_BODY_BYTES = 25 * 1024 * 1024;
+// Backup JSON tăng theo số dòng MISA (khoảng 0,8 KB/dòng). Giới hạn này đủ cho
+// vài trăm nghìn dòng mà vẫn nằm dưới độ dài chuỗi tối đa của V8.
+const RESTORE_MAX_BODY_BYTES = 400 * 1024 * 1024;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const SECURITY_HEADERS = {
@@ -88,12 +93,16 @@ function sendError(res, error) {
   sendJson(res, status, { error: message, code });
 }
 
-async function readJsonBody(req) {
+async function readJsonBody(req, maxBytes = DEFAULT_MAX_BODY_BYTES) {
+  const declared = Number(req.headers['content-length']);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new HttpError(413, 'Dữ liệu gửi lên quá lớn.');
+  }
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw badRequest('Dữ liệu gửi lên quá lớn.');
+    if (size > maxBytes) throw new HttpError(413, 'Dữ liệu gửi lên quá lớn.');
     chunks.push(chunk);
   }
   if (size === 0) return {};
@@ -127,15 +136,19 @@ function compile(pattern) {
 
 function createRouter() {
   const routes = [];
-  const add = (method, pattern, handler) => {
+  /**
+   * options.maxBodyBytes: giới hạn body riêng của route.
+   * options.page: thẻ bắt buộc, được kiểm tra trước khi đọc body lớn.
+   */
+  const add = (method, pattern, handler, options = {}) => {
     const { regex, names } = compile(pattern);
-    routes.push({ method, regex, names, handler });
+    routes.push({ method, regex, names, handler, options });
   };
   return {
-    get: (pattern, handler) => add('GET', pattern, handler),
-    post: (pattern, handler) => add('POST', pattern, handler),
-    patch: (pattern, handler) => add('PATCH', pattern, handler),
-    delete: (pattern, handler) => add('DELETE', pattern, handler),
+    get: (pattern, handler, options) => add('GET', pattern, handler, options),
+    post: (pattern, handler, options) => add('POST', pattern, handler, options),
+    patch: (pattern, handler, options) => add('PATCH', pattern, handler, options),
+    delete: (pattern, handler, options) => add('DELETE', pattern, handler, options),
     /** Tìm route khớp. Trả về null nếu không có đường dẫn nào khớp. */
     match(method, pathname) {
       let pathExists = false;
@@ -145,10 +158,14 @@ function createRouter() {
         pathExists = true;
         if (route.method !== method) continue;
         const params = {};
-        route.names.forEach((name, index) => {
-          params[name] = decodeURIComponent(found[index + 1]);
-        });
-        return { handler: route.handler, params };
+        try {
+          route.names.forEach((name, index) => {
+            params[name] = decodeURIComponent(found[index + 1]);
+          });
+        } catch {
+          throw badRequest('Đường dẫn không hợp lệ.');
+        }
+        return { handler: route.handler, params, options: route.options };
       }
       if (pathExists) throw new HttpError(405, 'Phương thức không được hỗ trợ.');
       return null;
@@ -176,7 +193,14 @@ const MIME = {
  * để giao diện tự điều hướng. Chặn thoát ra ngoài thư mục gốc.
  */
 function serveStatic(root, pathname, res) {
-  const relative = normalize(decodeURIComponent(pathname)).replace(
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    sendError(res, notFound());
+    return true;
+  }
+  const relative = normalize(decoded).replace(
     /^([/\\])+/,
     '',
   );
@@ -198,14 +222,24 @@ function serveStatic(root, pathname, res) {
     'content-type': type,
 		...SECURITY_HEADERS,
 		...(isHtml ? { 'content-security-policy': CONTENT_SECURITY_POLICY } : {}),
-		'cache-control': isHtml || isPwaMetadata ? 'no-cache' : 'public, max-age=3600',
+		'cache-control': isHtml || isPwaMetadata
+			? 'no-cache'
+			// Vite gắn mã băm vào tên file trong /assets, nên có thể cache lâu dài.
+			: relative.startsWith(`assets${sep}`)
+				? 'public, max-age=31536000, immutable'
+				: 'public, max-age=3600',
 		...(file.endsWith('sw.js') ? { 'service-worker-allowed': '/' } : {}),
   });
-  createReadStream(file).pipe(res);
+  // Lỗi đọc file (bị khóa/thay trong lúc cập nhật) không được làm sập tiến trình.
+  createReadStream(file)
+    .on('error', () => res.destroy())
+    .pipe(res);
   return true;
 }
 
 module.exports = {
+  IMPORT_MAX_BODY_BYTES,
+  RESTORE_MAX_BODY_BYTES,
   HttpError,
   badRequest,
   unauthorized,

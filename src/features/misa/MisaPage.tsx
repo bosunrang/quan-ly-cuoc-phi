@@ -44,6 +44,7 @@ export function MisaPage() {
 	const [preview, setPreview] = useState<MisaImportPreview | null>(null);
 	const [isReading, setIsReading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [importNotice, setImportNotice] = useState<string | null>(null);
 
 	const load = useCallback(async () => {
 		const requestId = ++requestIdRef.current;
@@ -81,6 +82,7 @@ export function MisaPage() {
 		if (!file) return;
 		setIsReading(true);
 		setError(null);
+		setImportNotice(null);
 		try {
 			const parsed = await parseMisaWorkbook(file);
 			setPreview(await misaRepository.preview(parsed));
@@ -100,11 +102,14 @@ export function MisaPage() {
 		if (!preview) return;
 		const result = await misaRepository.import(preview);
 		setPreview(null);
-		setFilters((current) => ({ ...current, page: 1 }));
-		await load();
-		if (result.inserted === 0 && result.duplicates > 0) {
-			setError("Không có dòng mới: toàn bộ dữ liệu đã tồn tại.");
-		}
+		// Đổi bộ lọc đã tự tải lại danh sách; chỉ gọi tay khi đang ở trang 1.
+		if (filters.page === 1) await load();
+		else setFilters((current) => ({ ...current, page: 1 }));
+		setImportNotice(
+			result.inserted === 0 && result.duplicates > 0
+				? "Không có dòng mới: toàn bộ dữ liệu đã tồn tại."
+				: null,
+		);
 	}
 
 	return (
@@ -143,6 +148,7 @@ export function MisaPage() {
 			</section>
 
 			{error && <Alert tone="error">{error}</Alert>}
+			{importNotice && <Alert tone="info">{importNotice}</Alert>}
 
 			{!data ? (
 				<LoadingState />

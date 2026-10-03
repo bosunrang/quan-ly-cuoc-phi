@@ -56,7 +56,13 @@ function register(router) {
 
     // Cùng một thông báo cho mọi trường hợp sai, để không lộ tài khoản nào có thật.
     const invalid = unauthorized('Tên đăng nhập hoặc mật khẩu không đúng.');
+    // Mật khẩu quá dài không thể hợp lệ; chặn sớm để không tốn scrypt.
+    if (password.length > 200) {
+      auth.recordFailedLogin(username, address);
+      throw invalid;
+    }
     if (!user) {
+      auth.verifyDummyPassword(password);
       auth.recordFailedLogin(username, address);
       throw invalid;
     }
@@ -178,6 +184,9 @@ function register(router) {
       'UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = 0, updated_at = ? WHERE id = ?',
     ).run(hash, salt, new Date().toISOString(), c.user.id);
     writeAudit(c.db, c.user, 'password.initial_change', 'user', c.user.id);
+    // Phiên khác mở bằng mật khẩu mặc định (có thể của người khác trong mạng)
+    // bị hủy; chỉ giữ lại phiên vừa đổi mật khẩu.
+    auth.destroyOtherSessionsFor(c.db, c.user.id, c.token);
     return { ok: true };
   });
 }

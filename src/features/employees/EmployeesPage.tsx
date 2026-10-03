@@ -8,7 +8,7 @@ import {
 	UserCheck,
 	UserRoundCheck,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	type Employee,
 	type EmployeeInput,
@@ -38,12 +38,17 @@ export function EmployeesPage() {
 	const [editor, setEditor] = useState<EditorState | null>(null);
 	const [removing, setRemoving] = useState<Employee | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const loadRequest = useRef(0);
 	const loadEmployees = useCallback(async () => {
+		const requestId = loadRequest.current + 1;
+		loadRequest.current = requestId;
 		try {
 			const employees = await employeeRepository.list(search);
+			if (loadRequest.current !== requestId) return;
 			setData(employees);
 			setError(null);
 		} catch (cause) {
+			if (loadRequest.current !== requestId) return;
 			setError(
 				cause instanceof Error ? cause.message : "Không tải được nhân viên.",
 			);

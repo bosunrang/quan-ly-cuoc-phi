@@ -77,7 +77,6 @@ function summarizeCarrierVariance(items: CarrierVarianceReport["items"]) {
 }
 
 export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
-	const today = todayIso();
 	const [from, setFrom] = useState(() =>
 		savedReportDate(REPORT_FROM_DRAFT_KEY),
 	);
@@ -87,16 +86,14 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	const [carrierTo, setCarrierTo] = useState("");
 	const [carrierEmployeeId, setCarrierEmployeeId] = useState("");
 	const [dailyEmployeeId, setDailyEmployeeId] = useState("");
-	const [annualEmployeeId, setAnnualEmployeeId] = useState("");
-	const [year, setYear] = useState(today.slice(0, 4));
 	const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([
 		{ id: 1, name: "", amount: "", employeeId: "" },
 	]);
 	const [data, setData] = useState<ReportData | null>(null);
 	const [variance, setVariance] = useState<CarrierVarianceReport | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [exporting, setExporting] = useState<"daily" | "annual" | null>(null);
-	const [printing, setPrinting] = useState<"daily" | "annual" | null>(null);
+	const [exporting, setExporting] = useState(false);
+	const [printing, setPrinting] = useState(false);
 	const [exportingCarrier, setExportingCarrier] = useState(false);
 
 	useEffect(() => {
@@ -114,57 +111,58 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	}, [section]);
 	useEffect(() => {
 		if (section !== "carrier") return;
+		// Đổi ngày liên tục: bỏ kết quả của yêu cầu cũ về muộn.
+		let current = true;
 		void reportRepository
 			.carrierVariance(carrierFrom, carrierTo, carrierEmployeeId)
-			.then(setVariance)
-			.catch((cause) =>
+			.then((result) => {
+				if (current) setVariance(result);
+			})
+			.catch((cause) => {
+				if (!current) return;
 				setError(
 					cause instanceof Error
 						? cause.message
 						: "Không tải được chênh lệch cước.",
-				),
-			);
+				);
+			});
+		return () => {
+			current = false;
+		};
 	}, [carrierEmployeeId, carrierFrom, carrierTo, section]);
 
-	const reportFilters = (type: "daily" | "annual") => {
+	const reportFilters = () => {
 		const ownEmployeeId = String(data?.employees[0]?.id ?? "");
 		const employeeId =
-			data?.canReportAll === false
-				? ownEmployeeId
-				: type === "daily"
-					? dailyEmployeeId
-					: annualEmployeeId;
+			data?.canReportAll === false ? ownEmployeeId : dailyEmployeeId;
 		return {
-			from: type === "annual" ? `${year}-01-01` : from,
-			to: type === "annual" ? `${year}-12-31` : to,
+			from,
+			to,
 			employeeId,
-			type,
-			extraCosts:
-				type === "daily"
-					? extraCosts.map(
-							({ name, amount, employeeId: assignedEmployeeId }) => ({
-								name,
-								amount,
-								employeeId: assignedEmployeeId,
-							}),
-						)
-					: [],
+			type: "daily" as const,
+			extraCosts: extraCosts.map(
+				({ name, amount, employeeId: assignedEmployeeId }) => ({
+					name,
+					amount,
+					employeeId: assignedEmployeeId,
+				}),
+			),
 		};
 	};
-	const exportFile = async (type: "daily" | "annual") => {
-		setExporting(type);
+	const exportFile = async () => {
+		setExporting(true);
 		try {
-			download(await reportRepository.export(reportFilters(type)));
+			download(await reportRepository.export(reportFilters()));
 			setError(null);
 		} catch (cause) {
 			setError(
 				cause instanceof Error ? cause.message : "Không thể xuất Excel.",
 			);
 		} finally {
-			setExporting(null);
+			setExporting(false);
 		}
 	};
-	const printReport = async (type: "daily" | "annual") => {
+	const printReport = async () => {
 		// Mở cửa sổ ngay trong thao tác click để trình duyệt không chặn popup in.
 		const popup = window.open("", "report-print");
 		// Bản desktop máy trạm cũ chặn popup: in qua iframe cùng nguồn mà không
@@ -182,14 +180,14 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 			setError("Không thể mở bản in. Hãy thử lại trên trình duyệt Edge.");
 			return;
 		}
-		setPrinting(type);
+		setPrinting(true);
 		try {
 			if (popup) printWindow.opener = null;
 			printWindow.document.write(
 				"<!doctype html><title>Đang chuẩn bị báo cáo...</title><p>Đang chuẩn bị bản in…</p>",
 			);
 			printWindow.document.close();
-			const report = await reportRepository.print(reportFilters(type));
+			const report = await reportRepository.print(reportFilters());
 			printWindow.document.open();
 			printWindow.addEventListener(
 				"load",
@@ -214,7 +212,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 				cause instanceof Error ? cause.message : "Không thể chuẩn bị bản in.",
 			);
 		} finally {
-			setPrinting(null);
+			setPrinting(false);
 		}
 	};
 	const exportCarrierVariance = async () => {
@@ -266,17 +264,11 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	if (section === "employee" && !data && !error) return <LoadingState />;
 	if (section === "employee" && !data)
 		return <EmptyState>Không tải được dữ liệu báo cáo.</EmptyState>;
-	const reportData = data ?? { employees: [], years: [], canReportAll: false };
+	const reportData = data ?? { employees: [], canReportAll: false };
 	const ownEmployeeId = String(reportData.employees[0]?.id ?? "");
 	const selectedDailyEmployeeId = reportData.canReportAll
 		? dailyEmployeeId
 		: ownEmployeeId;
-	const selectedAnnualEmployeeId = reportData.canReportAll
-		? annualEmployeeId
-		: ownEmployeeId;
-	const years = [...new Set([year, ...reportData.years])].sort((a, b) =>
-		b.localeCompare(a),
-	);
 	const carrierSummary = variance
 		? summarizeCarrierVariance(variance.items)
 		: null;
@@ -295,7 +287,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 					</h2>
 					<p>
 						{section === "employee"
-							? "Tổng hợp chi phí giao hàng theo khoảng ngày hoặc theo năm."
+							? "Tổng hợp chi phí giao hàng theo khoảng ngày."
 							: "Đối chiếu cước thực tế với giá thiết lập theo nhà xe và khách hàng."}
 					</p>
 				</div>
@@ -473,91 +465,20 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 								<button
 									className="button secondary"
 									type="button"
-									disabled={exporting !== null || printing !== null}
-									onClick={() => void printReport("daily")}
+									disabled={exporting || printing}
+									onClick={() => void printReport()}
 								>
 									<Printer size={16} />
-									{printing === "daily" ? "Đang chuẩn bị..." : "In / Lưu PDF"}
+									{printing ? "Đang chuẩn bị..." : "In / Lưu PDF"}
 								</button>
 								<button
 									className="button primary"
 									type="button"
-									disabled={exporting !== null || printing !== null}
-									onClick={() => void exportFile("daily")}
+									disabled={exporting || printing}
+									onClick={() => void exportFile()}
 								>
 									<Download size={16} />
-									{exporting === "daily" ? "Đang xuất..." : "Xuất Excel"}
-								</button>
-							</div>
-						</div>
-					</section>
-
-					<section className="panel report-card">
-						<PanelHeader
-							title="Báo cáo theo năm"
-							description={
-								reportData.canReportAll
-									? "Xuất tổng hợp cước cả năm theo nhân viên phụ trách."
-									: "Tổng hợp cước cả năm của bạn."
-							}
-						/>
-						<div className="report-form report-form-annual">
-							<label className="field report-employee-field">
-								Nhân viên
-								<select
-									value={selectedAnnualEmployeeId}
-									disabled={!reportData.canReportAll}
-									onChange={(event) => setAnnualEmployeeId(event.target.value)}
-								>
-									{reportData.canReportAll && (
-										<option value="">Tất cả nhân viên</option>
-									)}
-									{reportData.employees.map((item) => (
-										<option value={item.id} key={item.id}>
-											{item.fullName}
-										</option>
-									))}
-								</select>
-							</label>
-							<label className="field">
-								Năm
-								<select
-									value={year}
-									onChange={(event) => setYear(event.target.value)}
-								>
-									{years.map((item) => (
-										<option value={item} key={item}>
-											{item}
-										</option>
-									))}
-								</select>
-							</label>
-						</div>
-						<div className="report-card-footer report-card-footer-annual">
-							<span>
-								<FileSpreadsheet size={17} />{" "}
-								{reportData.canReportAll
-									? "Chọn tất cả để xuất mỗi nhân viên một sheet Excel."
-									: "Xuất Excel hoặc in PDF cho năm đã chọn."}
-							</span>
-							<div className="report-actions">
-								<button
-									className="button secondary"
-									type="button"
-									disabled={exporting !== null || printing !== null}
-									onClick={() => void printReport("annual")}
-								>
-									<Printer size={16} />
-									{printing === "annual" ? "Đang chuẩn bị..." : "In / Lưu PDF"}
-								</button>
-								<button
-									className="button primary"
-									type="button"
-									disabled={exporting !== null || printing !== null}
-									onClick={() => void exportFile("annual")}
-								>
-									<Download size={16} />
-									{exporting === "annual" ? "Đang xuất..." : "Xuất Excel"}
+									{exporting ? "Đang xuất..." : "Xuất Excel"}
 								</button>
 							</div>
 						</div>

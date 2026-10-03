@@ -124,6 +124,35 @@ const locationRouteText = (item: FuelData["locations"][number]) => {
 	return `${name}, ${address}`;
 };
 
+type LocationSearchItem = {
+	item: FuelData["locations"][number];
+	nameKey: string;
+	searchKey: string;
+};
+// Danh mục địa điểm có thể lên tới vài nghìn dòng. Chuẩn hóa một lần cho mỗi
+// lần tải dữ liệu và dùng chung cho mọi ô địa điểm, thay vì chuẩn hóa lại toàn
+// bộ danh mục ở từng ô sau mỗi phím gõ.
+const locationSearchIndexes = new WeakMap<
+	FuelData["locations"],
+	LocationSearchItem[]
+>();
+function locationSearchIndex(
+	locations: FuelData["locations"],
+): LocationSearchItem[] {
+	let index = locationSearchIndexes.get(locations);
+	if (!index) {
+		index = locations.map((item) => ({
+			item,
+			nameKey: locationKey(item.name),
+			searchKey: locationKey(
+				`${item.name} ${item.address} ${item.deliveryPoint}`,
+			),
+		}));
+		locationSearchIndexes.set(locations, index);
+	}
+	return index;
+}
+
 function LocationInput({
 	value,
 	ariaLabel,
@@ -141,21 +170,18 @@ function LocationInput({
 }) {
 	const [open, setOpen] = useState(false);
 	const matches = useMemo(() => {
+		if (!open || readOnly) return [];
 		const query = locationKey(value);
-		return locations
-			.filter(
-				(item) =>
-					!query ||
-					locationKey(
-						`${item.name} ${item.address} ${item.deliveryPoint}`,
-					).includes(query),
-			)
-			.slice(0, 8);
-	}, [locations, value]);
+		return locationSearchIndex(locations)
+			.filter((entry) => !query || entry.searchKey.includes(query))
+			.slice(0, 8)
+			.map((entry) => entry.item);
+	}, [locations, open, readOnly, value]);
 	const type = (value: string) => {
-		const exact = locations.filter(
-			(item) => locationKey(item.name) === locationKey(value),
-		);
+		const key = locationKey(value);
+		const exact = locationSearchIndex(locations)
+			.filter((entry) => entry.nameKey === key)
+			.map((entry) => entry.item);
 		onChange(
 			exact.length === 1 ? locationRouteText(exact[0]) : value,
 			exact.length === 1,
@@ -242,13 +268,18 @@ export function FuelPage() {
 		[estimatingLegId, setEstimatingLegId] = useState<string | null>(null);
 	const initialPeriodTo = useRef(periodTo);
 	const hasLoadedInitialPrice = useRef(false);
+	const loadRequest = useRef(0);
 	const load = useCallback(async () => {
+		const requestId = loadRequest.current + 1;
+		loadRequest.current = requestId;
 		try {
 			const next = await fuelRepository.list({
 				limit: HISTORY_PAGE_SIZE,
 				offset: (historyPage - 1) * HISTORY_PAGE_SIZE,
 				employeeId: historyEmployeeId,
 			});
+			// Chuyển trang lịch sử nhanh: bỏ kết quả cũ về muộn.
+			if (loadRequest.current !== requestId) return;
 			if (!hasLoadedInitialPrice.current) {
 				const initialPrice = next.prices.find(
 					(item) =>
@@ -262,6 +293,7 @@ export function FuelPage() {
 			setData(next);
 			setError(null);
 		} catch (cause) {
+			if (loadRequest.current !== requestId) return;
 			setError(
 				cause instanceof Error ? cause.message : "Không tải được dữ liệu.",
 			);
@@ -276,12 +308,20 @@ export function FuelPage() {
 			setHistoryEmployeeId(String(data.currentEmployee.id));
 		}
 	}, [data?.currentEmployee, data?.isAdmin]);
+	// Chỉ áp định mức khi định mức thật sự đổi (lần tải đầu, Admin sửa định mức,
+	// đổi phương tiện). Mỗi lần chuyển trang lịch sử đều tải lại dữ liệu nên không
+	// được ghi đè số người dùng đang nhập, và không bao giờ ghi đè định mức đã chốt
+	// của bản ghi đang được sửa.
+	const appliedProfileKey = useRef("");
 	useEffect(() => {
 		const profile = data?.consumptionProfiles[vehicleType];
-		if (!profile) return;
+		if (!profile || editingRecord) return;
+		const key = `${vehicleType}:${profile.consumptionLiters}:${profile.consumptionBaseKm}`;
+		if (appliedProfileKey.current === key) return;
+		appliedProfileKey.current = key;
 		setConsumption(String(profile.consumptionLiters));
 		setBaseKm(String(profile.consumptionBaseKm));
-	}, [data?.consumptionProfiles, vehicleType]);
+	}, [data?.consumptionProfiles, editingRecord, vehicleType]);
 	const findStoredPrice = (date: string) =>
 		data?.prices.find(
 			(item) =>
@@ -418,7 +458,10 @@ export function FuelPage() {
 			return;
 		}
 		setEstimatingLegId("all");
-		const next = [...legs];
+		const estimated = new Map<
+			string,
+			{ from: string; destination: string; km: string; source: string }
+		>();
 		let failed = false;
 		let failureMessage = "";
 		for (let index = 0; index < legs.length; index += 1) {
@@ -430,18 +473,34 @@ export function FuelPage() {
 			if (decimal(legs[index].km) > 0) continue;
 			try {
 				const result = await fuelRepository.estimateRoute(from, destination);
-				next[index] = {
-					...next[index],
+				estimated.set(legs[index].id, {
+					from,
+					destination,
 					km: String(result.km),
 					source: result.source,
-				};
+				});
 			} catch (cause) {
 				failed = true;
 				failureMessage =
 					cause instanceof Error ? cause.message : "Không lấy được km tự động.";
 			}
 		}
-		setLegs(next);
+		// Gọi VietMap có thể mất vài chục giây; người dùng vẫn sửa được lộ trình
+		// trong lúc chờ. Chỉ điền km vào chặng còn đúng điểm đi/đến và chưa có km,
+		// không ghi đè những gì người dùng vừa thay đổi.
+		setLegs((current) =>
+			current.map((leg, index) => {
+				const result = estimated.get(leg.id);
+				if (!result) return leg;
+				const unchanged =
+					leg.destination === result.destination &&
+					(index === 0 || current[index - 1].destination === result.from) &&
+					!(decimal(leg.km) > 0);
+				return unchanged
+					? { ...leg, km: result.km, source: result.source }
+					: leg;
+			}),
+		);
 		setEstimatingLegId(null);
 		setError(
 			failed ? failureMessage || "Một vài chặng chưa lấy được km." : null,
@@ -457,6 +516,8 @@ export function FuelPage() {
 		fillStoredPrice(value);
 	};
 	const resetRecordForm = () => {
+		// Thoát chế độ sửa thì quay lại định mức hiện hành.
+		appliedProfileKey.current = "";
 		setEditingRecord(null);
 		setOrigin("");
 		setLegs([newLeg()]);
@@ -1328,7 +1389,9 @@ function PriceDialog({
 		[fuelType, setFuelType] = useState(DEFAULT_FUEL_TYPE),
 		[region, setRegion] = useState<FuelPrice["region"]>(DEFAULT_REGION),
 		[source, setSource] = useState("Nhập tay"),
-		[online, setOnline] = useState<OnlineFuelPrice[]>([]);
+		[online, setOnline] = useState<OnlineFuelPrice[]>([]),
+		[onlineError, setOnlineError] = useState<string | null>(null),
+		[onlineLoading, setOnlineLoading] = useState(false);
 	const fillStoredPrice = (
 		nextDate: string,
 		nextRegion: FuelPrice["region"],
@@ -1441,17 +1504,31 @@ function PriceDialog({
 			<button
 				className="button secondary"
 				type="button"
+				disabled={onlineLoading}
 				onClick={async () => {
-					const next = await fuelRepository.online();
-					setOnline(
-						next.items.map((item) => ({ ...item, source: next.source })),
-					);
-					setSource(next.source);
-					if (next.priceDate) setDate(next.priceDate);
+					setOnlineError(null);
+					setOnlineLoading(true);
+					try {
+						const next = await fuelRepository.online();
+						setOnline(
+							next.items.map((item) => ({ ...item, source: next.source })),
+						);
+						setSource(next.source);
+						if (next.priceDate) setDate(next.priceDate);
+					} catch (cause) {
+						setOnlineError(
+							cause instanceof Error
+								? cause.message
+								: "Không lấy được giá xăng online.",
+						);
+					} finally {
+						setOnlineLoading(false);
+					}
 				}}
 			>
-				Lấy giá online
+				{onlineLoading ? "Đang lấy giá…" : "Lấy giá online"}
 			</button>
+			{onlineError && <Alert tone="error">{onlineError}</Alert>}
 			{onlineChoices.length > 0 && (
 				<div className="fuel-online-choices">
 					{onlineChoices.map((item) => (

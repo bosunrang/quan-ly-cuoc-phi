@@ -10,6 +10,9 @@ const {
 const SCRYPT_KEY_LENGTH = 64;
 const SESSION_HOURS = 12;
 const MAX_ATTEMPTS = 8;
+// Một máy thử sai quá nhiều lần (với bất kỳ tên đăng nhập nào) cũng bị chặn,
+// để không thể dùng hàng loạt tên rác đẩy bản ghi khóa của tài khoản thật ra.
+const MAX_ATTEMPTS_PER_ADDRESS = 30;
 const LOCKOUT_MS = 15 * 60 * 1000;
 const MAX_ATTEMPT_KEYS = 2_000;
 
@@ -21,6 +24,23 @@ function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
   const hash = scryptSync(password, salt, SCRYPT_KEY_LENGTH).toString('hex');
   return { hash, salt };
+}
+
+// Hash giả để tài khoản không tồn tại cũng tốn đúng một lần scrypt, tránh lộ
+// tài khoản nào có thật qua thời gian phản hồi.
+const DUMMY_SALT = randomBytes(16).toString('hex');
+const DUMMY_HASH = scryptSync('dummy-password', DUMMY_SALT, SCRYPT_KEY_LENGTH).toString('hex');
+
+function verifyDummyPassword(password) {
+  verifyPassword(password, DUMMY_HASH, DUMMY_SALT);
+  return false;
+}
+
+/** Mật khẩu ngẫu nhiên dễ đọc (bỏ các ký tự dễ nhầm như 0/O, 1/l/I). */
+function generateReadablePassword(length = 12) {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = randomBytes(length);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
 }
 
 function verifyPassword(password, hash, salt) {
@@ -82,6 +102,13 @@ function destroyAllSessionsFor(db, userId) {
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
 }
 
+function destroyOtherSessionsFor(db, userId, keepToken) {
+  db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?').run(
+    userId,
+    keepToken ? hashToken(keepToken) : '',
+  );
+}
+
 function purgeExpiredSessions(db) {
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now());
 }
@@ -96,37 +123,65 @@ function attemptKey(username, address = '') {
   return `${String(username).trim().toLowerCase()}\n${String(address).trim() || 'unknown'}`;
 }
 
+const ADDRESS_KEY_PREFIX = '*address*\n';
+
+function addressKey(address = '') {
+  return `${ADDRESS_KEY_PREFIX}${String(address).trim() || 'unknown'}`;
+}
+
+function limitFor(key) {
+  return key.startsWith(ADDRESS_KEY_PREFIX) ? MAX_ATTEMPTS_PER_ADDRESS : MAX_ATTEMPTS;
+}
+
 function purgeOldAttempts(at = Date.now()) {
   for (const [key, record] of attempts) {
     if (at - record.first > LOCKOUT_MS) attempts.delete(key);
+  }
+  if (attempts.size < MAX_ATTEMPT_KEYS) return;
+  // Hết chỗ: bỏ bản ghi chưa bị khóa trước, giữ lại bản ghi đang khóa.
+  for (const [key, record] of attempts) {
+    if (attempts.size < MAX_ATTEMPT_KEYS) return;
+    if (record.count < limitFor(key)) attempts.delete(key);
   }
   while (attempts.size >= MAX_ATTEMPT_KEYS) {
     attempts.delete(attempts.keys().next().value);
   }
 }
 
-function loginBlockedFor(username, address) {
-  purgeOldAttempts();
-  const key = attemptKey(username, address);
+function blockedMinutes(key, at) {
   const record = attempts.get(key);
   if (!record) return 0;
-  if (Date.now() - record.first > LOCKOUT_MS) {
+  if (at - record.first > LOCKOUT_MS) {
     attempts.delete(key);
     return 0;
   }
-  if (record.count < MAX_ATTEMPTS) return 0;
-  return Math.ceil((LOCKOUT_MS - (Date.now() - record.first)) / 60000);
+  if (record.count < limitFor(key)) return 0;
+  return Math.ceil((LOCKOUT_MS - (at - record.first)) / 60000);
+}
+
+function loginBlockedFor(username, address) {
+  purgeOldAttempts();
+  const at = Date.now();
+  return Math.max(
+    blockedMinutes(attemptKey(username, address), at),
+    blockedMinutes(addressKey(address), at),
+  );
+}
+
+function countFailure(key, at) {
+  const record = attempts.get(key);
+  if (!record || at - record.first > LOCKOUT_MS) {
+    attempts.set(key, { count: 1, first: at });
+    return;
+  }
+  record.count += 1;
 }
 
 function recordFailedLogin(username, address) {
   purgeOldAttempts();
-  const key = attemptKey(username, address);
-  const record = attempts.get(key);
-  if (!record || Date.now() - record.first > LOCKOUT_MS) {
-    attempts.set(key, { count: 1, first: Date.now() });
-    return;
-  }
-  record.count += 1;
+  const at = Date.now();
+  countFailure(attemptKey(username, address), at);
+  countFailure(addressKey(address), at);
 }
 
 function clearFailedLogins(username, address) {
@@ -136,11 +191,14 @@ function clearFailedLogins(username, address) {
 module.exports = {
   hashPassword,
   verifyPassword,
+  verifyDummyPassword,
+  generateReadablePassword,
   checkPasswordStrength,
   createSession,
   userForToken,
   destroySession,
   destroyAllSessionsFor,
+  destroyOtherSessionsFor,
   purgeExpiredSessions,
   loginBlockedFor,
   recordFailedLogin,

@@ -1,27 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	auditDetailRows,
-	matchesAuditSearch,
-} from "../src/features/audit/AuditPage";
-
-describe("matchesAuditSearch", () => {
-	it("tìm theo nhãn hành động tiếng Việt, có hoặc không dấu", () => {
-		const row = {
-			id: 1,
-			at: "2026-09-05T04:00:00.000Z",
-			userId: 1,
-			username: "admin",
-			action: "entry.delete",
-			entity: "entry",
-			entityId: "2",
-			detail: { customer: "Bệnh viện Từ Dũ" },
-		};
-
-		expect(matchesAuditSearch(row, "xóa")).toBe(true);
-		expect(matchesAuditSearch(row, "xoa phieu")).toBe(true);
-		expect(matchesAuditSearch(row, "bệnh viện")).toBe(true);
-	});
-});
+import { auditDetailRows } from "../src/features/audit/AuditPage";
 
 describe("auditDetailRows", () => {
 	it("dịch nhãn kỹ thuật của nhật ký nhập liệu sang tiếng Việt", () => {

@@ -81,14 +81,18 @@ export function SettingsPage({
 	const exportBackup = async () => {
 		try {
 			const backup = await settingsRepository.backup();
-			const blob = new Blob([JSON.stringify(backup, null, 2)], {
+			// Không thụt lề: backup có thể chứa hàng trăm nghìn dòng MISA, thụt lề
+			// làm tệp lớn thêm khoảng một phần ba mà không đem lại lợi ích gì.
+			const blob = new Blob([JSON.stringify(backup)], {
 				type: "application/json",
 			});
 			const link = document.createElement("a");
 			link.href = URL.createObjectURL(blob);
 			link.download = `backup-cuoc-phi-${backup.createdAt.slice(0, 10)}.json`;
 			link.click();
-			URL.revokeObjectURL(link.href);
+			// Thu hồi ngay có thể hủy lượt tải tệp lớn trước khi trình duyệt đọc xong.
+			const href = link.href;
+			window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
 			showNotice("Đã xuất tệp backup.");
 		} catch (error) {
 			showNotice(

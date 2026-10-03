@@ -3,7 +3,7 @@
 const { transaction, normalizeSearchText } = require('../db.cjs');
 const { replaceCustomerCarriers, refreshCustomerCarrier } = require('../carrier-links.cjs');
 const { writeAudit } = require('../audit.cjs');
-const { badRequest, notFound } = require('../http.cjs');
+const { IMPORT_MAX_BODY_BYTES, badRequest, notFound } = require('../http.cjs');
 
 const PAGE = 'customers';
 const PAGE_SIZE = 50;
@@ -338,7 +338,7 @@ function register(router) {
       });
       return { inserted, updated, duplicates };
     });
-  });
+  }, { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES });
 
   router.patch('/api/customers/:id', async (c) => {
     c.requirePage(PAGE);

@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 39;
+const SCHEMA_VERSION = 40;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -649,6 +649,69 @@ function migrate(db) {
 		`);
 	}
 
+  if (current < 40) {
+    db.exec(`
+      -- Khóa chuẩn hóa của khách hàng, nhà xe và quy cách được lưu sẵn trên
+      -- phiếu. Trước đây mỗi truy vấn báo cáo gọi vn_normalize() (hàm JS) cho
+      -- từng phiếu, làm Tổng quan/báo cáo chậm dần theo số phiếu.
+      ALTER TABLE entries ADD COLUMN customer_key TEXT NOT NULL DEFAULT '';
+      ALTER TABLE entries ADD COLUMN carrier_key TEXT NOT NULL DEFAULT '';
+      ALTER TABLE entries ADD COLUMN spec_key TEXT NOT NULL DEFAULT '';
+      UPDATE entries SET
+        customer_key = vn_normalize(customer),
+        carrier_key = vn_normalize(carrier),
+        spec_key = vn_normalize(spec);
+
+      -- Mọi đường ghi (form, khôi phục backup) đều tự có khóa đúng.
+      CREATE TRIGGER entries_keys_insert AFTER INSERT ON entries BEGIN
+        UPDATE entries SET
+          customer_key = vn_normalize(new.customer),
+          carrier_key = vn_normalize(new.carrier),
+          spec_key = vn_normalize(new.spec)
+        WHERE id = new.id;
+      END;
+
+      -- Chỉ tính lại khi chữ thật sự đổi, để khóa đã được nối theo danh mục
+      -- (sau khi đổi tên khách hàng/nhà xe) không bị trả về tên cũ khi sửa phiếu.
+      CREATE TRIGGER entries_keys_update AFTER UPDATE OF customer, carrier, spec ON entries BEGIN
+        UPDATE entries SET
+          customer_key = CASE WHEN old.customer IS new.customer
+            THEN customer_key ELSE vn_normalize(new.customer) END,
+          carrier_key = CASE WHEN old.carrier IS new.carrier
+            THEN carrier_key ELSE vn_normalize(new.carrier) END,
+          spec_key = CASE WHEN old.spec IS new.spec
+            THEN spec_key ELSE vn_normalize(new.spec) END
+        WHERE id = new.id;
+      END;
+
+      -- Đổi tên trong danh mục thì phiếu cũ vẫn nối được với bảng cước,
+      -- báo cáo chênh lệch và tỉnh/thành; chữ in trên phiếu giữ nguyên lịch sử.
+      CREATE TRIGGER customers_rename_entries AFTER UPDATE OF customer_key ON customers
+      WHEN old.customer_key IS NOT new.customer_key BEGIN
+        UPDATE entries SET customer_key = new.customer_key
+         WHERE customer_key = old.customer_key;
+      END;
+      CREATE TRIGGER carriers_rename_entries AFTER UPDATE OF carrier_key ON carriers
+      WHEN old.carrier_key IS NOT new.carrier_key BEGIN
+        UPDATE entries SET carrier_key = new.carrier_key
+         WHERE carrier_key = old.carrier_key;
+      END;
+
+      CREATE INDEX entries_customer_key_idx ON entries(customer_key, entry_date);
+      CREATE INDEX entries_carrier_key_idx ON entries(carrier_key);
+
+      -- Danh sách phiếu sắp xếp theo ngày rồi id; chỉ mục ghép bỏ được bước
+      -- sắp xếp tạm và thay thế hoàn toàn chỉ mục chỉ theo ngày.
+      CREATE INDEX entries_list_idx ON entries(entry_date DESC, id DESC);
+      DROP INDEX entries_date_idx;
+
+      -- Chỉ mục MISA trùng lặp: đã có chỉ mục ghép bắt đầu bằng cùng cột.
+      DROP INDEX misa_date_idx;
+      DROP INDEX misa_province_idx;
+      DROP INDEX misa_customer_idx;
+    `);
+  }
+
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (error) {
@@ -681,7 +744,10 @@ function openDatabase(file) {
   db.function('vn_normalize', { deterministic: true }, normalizeSearchText);
   // WAL cho phép đọc trong lúc đang ghi — cần thiết khi nhiều máy dùng chung.
   db.exec(
-    'PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;',
+    // journal_size_limit: sau lần ghi lớn (nhập MISA, khôi phục backup) file WAL
+    // được cắt về tối đa 16 MB thay vì giữ nguyên kích thước đỉnh. cache_size 32 MB
+    // giúp nhập MISA/khôi phục backup lớn không phải ghi tràn bộ đệm liên tục.
+    'PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA journal_size_limit = 16777216; PRAGMA cache_size = -32768;',
   );
   migrate(db);
   ensureCustomerCodeUniqueIndex(db);

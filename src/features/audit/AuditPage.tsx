@@ -5,7 +5,7 @@ import {
 	Search,
 	Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	type AuditEntry,
 	type AuditFilters,
@@ -28,7 +28,6 @@ import { StatusPill } from "../../shared/ui/StatusPill";
 import "./audit.css";
 
 const PAGE_SIZE = 50;
-const CLIENT_SEARCH_LIMIT = 500;
 const defaultCleanupDate = () => {
 	const date = new Date();
 	date.setMonth(date.getMonth() - 6);
@@ -232,39 +231,6 @@ export function auditDetailRows(detail: unknown): Array<[string, string]> {
 		.map(([key, value]) => [detailLabel(key), detailValue(value, key)]);
 }
 
-function normalizeSearch(value: string): string {
-	return value
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.replace(/[đĐ]/g, "d")
-		.toLocaleLowerCase("vi-VN");
-}
-
-export function matchesAuditSearch(row: AuditEntry, query: string): boolean {
-	const needle = normalizeSearch(query.trim());
-	if (!needle) return true;
-	const detail = auditDetailRows(row.detail).flat().join(" ");
-	const searchable = [
-		row.username,
-		actionLabel(row.action),
-		entityLabel(row.entity, row.entityId),
-		row.action,
-		row.entity,
-		row.entityId ?? "",
-		detail,
-	].join(" ");
-	return normalizeSearch(searchable).includes(needle);
-}
-
-function matchesAuditPeriod(
-	row: AuditEntry,
-	from: string,
-	to: string,
-): boolean {
-	const date = localIsoDate(new Date(row.at));
-	return (!from || date >= from) && (!to || date <= to);
-}
-
 function auditTimeParts(value: string): { time: string; date: string } {
 	const formatted = formatDateTime(value);
 	const [time = "", date = ""] = formatted.split(" ");
@@ -320,41 +286,32 @@ export function AuditPage({ isAdmin }: { isAdmin: boolean }) {
 	const [cleanupOpen, setCleanupOpen] = useState(false);
 	const [cleanupBefore, setCleanupBefore] = useState(defaultCleanupDate);
 
+	const loadRequest = useRef(0);
+	// Máy chủ tìm theo từ khóa (cả nhãn tiếng Việt và nội dung chi tiết), lọc
+	// ngày và phân trang trên toàn bộ nhật ký, không chỉ trên vài trăm dòng mới.
 	const load = useCallback(async (filters: AuditFilters, targetPage = 1) => {
+		const requestId = loadRequest.current + 1;
+		loadRequest.current = requestId;
 		setLoading(true);
 		try {
-			setError(null);
-			const query = filters.q?.trim() ?? "";
-			const hasFilters = Boolean(query || filters.from || filters.to);
-			const request = {
+			const result = await auditRepository.list({
+				q: filters.q?.trim() || undefined,
 				from: filters.from,
 				to: filters.to,
-				// Lấy và lọc cục bộ khi có từ khóa: ứng dụng vẫn hiểu nhãn tiếng
-				// Việt và khoảng ngày dù đang kết nối với máy chủ phiên bản cũ.
-				limit: hasFilters ? CLIENT_SEARCH_LIMIT : PAGE_SIZE,
-				offset: hasFilters ? 0 : (targetPage - 1) * PAGE_SIZE,
-			};
-			const result = await auditRepository.list(request);
-			if (hasFilters) {
-				const matched = result.items.filter(
-					(row) =>
-						matchesAuditSearch(row, query) &&
-						matchesAuditPeriod(row, filters.from ?? "", filters.to ?? ""),
-				);
-				setItems(
-					matched.slice((targetPage - 1) * PAGE_SIZE, targetPage * PAGE_SIZE),
-				);
-				setTotal(matched.length);
-			} else {
-				setItems(result.items);
-				setTotal(result.total);
-			}
+				limit: PAGE_SIZE,
+				offset: (targetPage - 1) * PAGE_SIZE,
+			});
+			if (loadRequest.current !== requestId) return;
+			setError(null);
+			setItems(result.items);
+			setTotal(result.total);
 		} catch (cause) {
+			if (loadRequest.current !== requestId) return;
 			setError(
 				cause instanceof Error ? cause.message : "Không tải được nhật ký.",
 			);
 		} finally {
-			setLoading(false);
+			if (loadRequest.current === requestId) setLoading(false);
 		}
 	}, []);
 

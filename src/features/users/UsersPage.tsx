@@ -172,10 +172,18 @@ export function UsersPage({ currentUser }: UsersPageProps) {
 															: "Mở khóa tài khoản"
 													}
 													onClick={async () => {
-														await userRepository.update(user.id, {
-															isActive: !user.isActive,
-														});
-														await load();
+														try {
+															await userRepository.update(user.id, {
+																isActive: !user.isActive,
+															});
+															await load();
+														} catch (cause) {
+															setError(
+																cause instanceof Error
+																	? cause.message
+																	: "Không cập nhật được tài khoản.",
+															);
+														}
 													}}
 												>
 													{user.isActive ? (

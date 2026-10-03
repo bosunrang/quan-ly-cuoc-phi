@@ -79,6 +79,7 @@ export async function api<T>(
 	options: ApiRequestOptions = {},
 ): Promise<T> {
 	let response: Response;
+	const sentToken = Boolean(token);
 	const controller = new AbortController();
 	const timeout = window.setTimeout(
 		() => controller.abort(),
@@ -96,11 +97,15 @@ export async function api<T>(
 		});
 		setConnectionStatus("online");
 	} catch {
-		setConnectionStatus(
-			typeof navigator !== "undefined" && !navigator.onLine
-				? "offline"
-				: "unreachable",
-		);
+		// Hết thời gian chờ nghĩa là máy chủ đang bận xử lý (ví dụ xuất báo cáo
+		// lớn), không phải mất kết nối; không bật dải báo "không kết nối được".
+		if (!controller.signal.aborted) {
+			setConnectionStatus(
+				typeof navigator !== "undefined" && !navigator.onLine
+					? "offline"
+					: "unreachable",
+			);
+		}
 		if (controller.signal.aborted) {
 			throw new ApiError(
 				"Máy chủ đang xử lý lâu hơn dự kiến. Yêu cầu có thể vẫn đang hoàn tất; hãy tải lại trang trước khi thử lại.",
@@ -120,7 +125,9 @@ export async function api<T>(
 	} | null;
 
 	if (!response.ok) {
-		if (response.status === 401 && path !== "/api/login") {
+		// Chỉ coi là "hết phiên" khi yêu cầu có gửi token. Sai mã khôi phục hay
+		// sai mật khẩu ở màn đăng nhập không được làm hiện thông báo hết phiên.
+		if (response.status === 401 && sentToken && path !== "/api/login") {
 			setToken(null);
 			onUnauthorized();
 		}

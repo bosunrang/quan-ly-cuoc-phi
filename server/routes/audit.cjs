@@ -4,6 +4,7 @@ const PAGE = 'audit';
 const MAX_LIMIT = 500;
 const { badRequest, forbidden, isIsoDate } = require('../http.cjs');
 const { writeAudit } = require('../audit.cjs');
+const { normalizeSearchText } = require('../db.cjs');
 const SEARCH_ALIASES = {
   'bao cao': ['report.'],
   'excel': ['report.'],
@@ -110,6 +111,12 @@ function filters(query) {
       .map(([action]) => action);
     const actionPrefixClauses = actionPrefixes.map(() => 'action LIKE ?');
     const actionClauses = actions.map(() => 'action = ?');
+    // Nội dung chi tiết (tên khách, nhà xe…) cũng tìm được, không phân biệt dấu.
+    const detailKey = normalizeSearchText(q);
+    if (detailKey) {
+      actionClauses.push("vn_normalize(COALESCE(audit_log.detail, '')) LIKE ?");
+      actions.push(`%${detailKey}%`);
+    }
     clauses.push(`(audit_log.username LIKE ? ESCAPE '\\' OR vn_normalize(COALESCE(users.full_name, '')) LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\' OR audit_log.entity LIKE ? ESCAPE '\\' OR audit_log.entity_id LIKE ? ESCAPE '\\'${actionPrefixClauses.length ? ` OR ${actionPrefixClauses.join(' OR ')}` : ''}${actionClauses.length ? ` OR ${actionClauses.join(' OR ')}` : ''})`);
     values.push(pattern, normalizedPattern, pattern, pattern, pattern, ...actionPrefixes.map((prefix) => `${prefix}%`), ...actions);
   }

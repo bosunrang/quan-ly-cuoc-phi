@@ -94,13 +94,24 @@ function clientSetupHtml() {
   return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Kết nối máy chủ</title><style>body{margin:0;background:#f4f6f8;color:#172b3a;font:14px system-ui,-apple-system,"Segoe UI",sans-serif}main{padding:24px}h1{margin:0;font-size:20px}p{color:#60758a;line-height:1.5}label{display:grid;gap:7px;font-weight:700}input{height:40px;padding:0 11px;border:1px solid #bdcbd6;border-radius:7px;font:inherit}input:focus{border-color:#008d95;outline:2px solid #d9f3f3}button{margin-top:18px;width:100%;height:40px;border:0;border-radius:7px;background:#087f87;color:white;font:700 14px inherit;cursor:pointer}.error{min-height:20px;margin:8px 0 0;color:#b23a33;font-size:13px}</style></head><body><main><h1>Kết nối máy chủ</h1><p>Máy trạm không lưu SQLite. Nhập địa chỉ của máy chủ trong mạng nội bộ.</p><form id="form"><label>Địa chỉ máy chủ<input id="url" value="http://192.168.1.153:3100" autocomplete="off" autofocus></label><p class="error" id="error"></p><button>Lưu và kết nối</button></form></main><script>const form=document.querySelector('#form');const input=document.querySelector('#url');const error=document.querySelector('#error');form.addEventListener('submit',async event=>{event.preventDefault();const result=await window.clientSetup.saveServerUrl(input.value);if(!result.ok)error.textContent=result.error;});</script></body></html>`;
 }
 
+// Mở "Đổi máy chủ…" lần nữa khi hộp thiết lập đang mở thì dùng lại hộp đó,
+// không đăng ký trùng IPC handler (Electron sẽ ném lỗi).
+let pendingClientSetup = null;
+let clientSetupWindow = null;
+
 function askClientServer() {
-  return new Promise((resolve) => {
+  if (pendingClientSetup) {
+    clientSetupWindow?.focus();
+    return pendingClientSetup;
+  }
+  pendingClientSetup = new Promise((resolve) => {
     let settled = false;
     const finish = (value) => {
       if (settled) return;
       settled = true;
       ipcMain.removeHandler('machine:configure-client');
+      pendingClientSetup = null;
+      clientSetupWindow = null;
       resolve(value);
     };
     const setupWindow = new BrowserWindow({
@@ -111,6 +122,7 @@ function askClientServer() {
         nodeIntegration: false, sandbox: true, webSecurity: true,
       },
     });
+    clientSetupWindow = setupWindow;
     ipcMain.handle('machine:configure-client', (event, rawUrl) => {
       if (event.sender.id !== setupWindow.webContents.id) return { ok: false, error: 'Yêu cầu thiết lập không hợp lệ.' };
       try {
@@ -125,6 +137,7 @@ function askClientServer() {
     setupWindow.on('closed', () => finish(null));
     setupWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(clientSetupHtml())}`);
   });
+  return pendingClientSetup;
 }
 
 async function chooseMachine() {
@@ -235,7 +248,9 @@ function createWindow() {
     printWindow.webContents.on('will-navigate', (event) => event.preventDefault());
     printWindow.webContents.on('will-redirect', (event) => event.preventDefault());
   });
-  const blockForeign = (event, url) => { if (!url.startsWith(origin)) event.preventDefault(); };
+  // So đúng origin: startsWith để lọt http://127.0.0.1:3100@evil.com hoặc cổng 31000.
+  const sameOrigin = (url) => { try { return new URL(url).origin === new URL(origin).origin; } catch { return false; } };
+  const blockForeign = (event, url) => { if (!sameOrigin(url)) event.preventDefault(); };
   mainWindow.webContents.on('will-navigate', blockForeign);
   mainWindow.webContents.on('will-redirect', blockForeign);
   mainWindow.webContents.on('did-fail-load', (_event, _code, description, url, isMainFrame) => {
@@ -325,7 +340,10 @@ app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', async (event) => {
   if (!backend) return;
   event.preventDefault();
-  await stopBackend();
-  app.exit(0);
+  try {
+    await stopBackend();
+  } finally {
+    app.exit(0);
+  }
 });
 app.on('web-contents-created', (_event, contents) => contents.on('will-attach-webview', (event) => event.preventDefault()));

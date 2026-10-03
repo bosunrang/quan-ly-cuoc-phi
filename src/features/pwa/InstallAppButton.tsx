@@ -52,9 +52,14 @@ export function InstallAppButton() {
 			title="Cài ứng dụng"
 			aria-label="Cài ứng dụng vào thiết bị"
 			onClick={async () => {
-				await prompt.prompt();
-				await prompt.userChoice;
-				updatePrompt(null);
+				try {
+					await prompt.prompt();
+					await prompt.userChoice;
+				} catch {
+					// Trình duyệt có thể từ chối hộp thoại cài đặt; không cần báo lỗi.
+				} finally {
+					updatePrompt(null);
+				}
 			}}
 		>
 			<Download size={17} />

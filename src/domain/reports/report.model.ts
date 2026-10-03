@@ -5,7 +5,6 @@ export interface ReportEmployee {
 
 export interface ReportData {
 	employees: ReportEmployee[];
-	years: string[];
 	/** Admin được tổng hợp toàn bộ; máy trạm chỉ có hồ sơ nhân viên của mình. */
 	canReportAll: boolean;
 }
@@ -16,7 +15,7 @@ export interface ReportExport {
 }
 
 export interface PrintableReport {
-	type: "daily" | "annual";
+	type: "daily";
 	sheets: Array<{
 		name: string;
 		columnWidths: number[];

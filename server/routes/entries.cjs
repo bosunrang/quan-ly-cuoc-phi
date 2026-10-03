@@ -88,7 +88,7 @@ function ensureDuplicateReason(db, input, excludedEntryId = 0) {
   const duplicate = db.prepare(
     `SELECT id FROM entries
       WHERE entry_date = ?
-        AND vn_normalize(customer) = ?
+        AND customer_key = ?
         AND id <> ?
       ORDER BY id DESC
       LIMIT 1`,
@@ -347,15 +347,17 @@ function toApi(row, user) {
   };
 }
 
+// Dùng khóa đã lưu sẵn trên phiếu (migration 40), không gọi vn_normalize()
+// cho từng dòng.
 const STANDARD_TRANSPORT_RATE_SELECT = `(
   SELECT rate.transport_fee
     FROM customers customer
     INNER JOIN carriers carrier
-      ON carrier.carrier_key = vn_normalize(e.carrier)
+      ON carrier.carrier_key = e.carrier_key
     INNER JOIN carrier_customer_rates rate
       ON rate.customer_id = customer.id AND rate.carrier_id = carrier.id
-   WHERE customer.customer_key = vn_normalize(e.customer)
-     AND (rate.spec_key = vn_normalize(e.spec) OR rate.is_default = 1)
+   WHERE customer.customer_key = e.customer_key
+     AND (rate.spec_key = e.spec_key OR rate.is_default = 1)
    ORDER BY rate.is_default ASC, rate.id
    LIMIT 1
 ) AS standard_transport_fee`;
@@ -429,15 +431,24 @@ function register(router) {
     const limit = Math.min(Math.max(Number(c.query.limit) || 25, 1), MAX_LIMIT);
     const offset = Math.max(Number(c.query.offset) || 0, 0);
 
+    // Lấy id của trang trước (MATERIALIZED để LIMIT/OFFSET dạng tham số vẫn
+    // chỉ đọc đúng một trang), rồi mới nối bảng và tính giá chuẩn. Nhờ đó các
+    // dòng bị OFFSET bỏ qua không phải tính cột con.
     const rows = c.db
       .prepare(
-      `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name,
-              ${STANDARD_TRANSPORT_RATE_SELECT}
-           FROM entries e JOIN users u ON u.id = e.created_by
-           LEFT JOIN employees ON employees.id = e.employee_id
+      `WITH page AS MATERIALIZED (
+         SELECT e.id FROM entries e
           WHERE ${clause}
           ORDER BY e.entry_date DESC, e.id DESC
-          LIMIT ? OFFSET ?`,
+          LIMIT ? OFFSET ?
+       )
+       SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name,
+              ${STANDARD_TRANSPORT_RATE_SELECT}
+           FROM entries e
+           JOIN users u ON u.id = e.created_by
+           LEFT JOIN employees ON employees.id = e.employee_id
+          WHERE e.id IN (SELECT id FROM page)
+          ORDER BY e.entry_date DESC, e.id DESC`,
       )
       .all(...params, limit, offset);
 
@@ -476,7 +487,7 @@ function register(router) {
     const duplicate = c.db.prepare(
       `SELECT 1 FROM entries
         WHERE entry_date = ?
-          AND vn_normalize(customer) = ?
+          AND customer_key = ?
           AND id <> ?
         LIMIT 1`,
     ).get(entryDate, normalizeSearchText(customer), excludedEntryId);

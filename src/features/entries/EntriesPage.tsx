@@ -9,14 +9,7 @@ import {
 	UserRoundCheck,
 	WalletCards,
 } from "lucide-react";
-import {
-	useCallback,
-	useDeferredValue,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	Entry,
 	EntryFilters,
@@ -30,6 +23,7 @@ import {
 } from "../../domain/entries/entry.model";
 import { entryRepository } from "../../domain/entries/entry.repository";
 import { formatDate, formatMoney, todayIso } from "../../shared/lib/format";
+import { useDebouncedValue } from "../../shared/lib/useDebouncedValue";
 import { Alert } from "../../shared/ui/Alert";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
@@ -58,15 +52,18 @@ export function EntriesPage() {
 	const [editor, setEditor] = useState<EditorState | null>(null);
 	const [removing, setRemoving] = useState<Entry | null>(null);
 	const [draftEntryDate, setDraftEntryDate] = useState(initialEntryDate);
-	const deferredSearch = useDeferredValue(filters.search ?? "");
+	// Chỉ gọi máy chủ khi người dùng ngừng gõ; các bộ lọc khác áp dụng ngay.
+	const debouncedSearch = useDebouncedValue(filters.search ?? "", 250);
 	const listFilters = useMemo<EntryFilters>(
 		() => ({
-			...filters,
-			search: deferredSearch || undefined,
+			from: filters.from,
+			to: filters.to,
+			employeeId: filters.employeeId,
+			search: debouncedSearch.trim() || undefined,
 			limit: String(ENTRY_PAGE_SIZE),
 			offset: String((page - 1) * ENTRY_PAGE_SIZE),
 		}),
-		[deferredSearch, filters, page],
+		[debouncedSearch, filters.employeeId, filters.from, filters.to, page],
 	);
 	const loadRequest = useRef(0);
 	const rememberEntryDate = (entryDate: string) => {

@@ -2,7 +2,7 @@
 
 const { normalizeSearchText, transaction } = require('../db.cjs');
 const { writeAudit } = require('../audit.cjs');
-const { badRequest, isIsoDate } = require('../http.cjs');
+const { IMPORT_MAX_BODY_BYTES, badRequest, isIsoDate } = require('../http.cjs');
 
 const PAGE = 'misa';
 const MAX_ROWS = 25_000;
@@ -257,7 +257,7 @@ function register(router) {
     const fileName = text(c.body.fileName, 'Tên file', 260);
     if (!fileName) throw badRequest('Vui lòng chọn file MISA.');
     return counts(fileName, previewRows(c.db, readRows(c.body.rows)));
-  });
+  }, { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES });
 
   router.post('/api/misa/import', async (c) => {
     c.requirePage(PAGE);
@@ -314,7 +314,7 @@ function register(router) {
     // Nhập thành công thì lần xem tiếp theo phải lấy số tổng quan mới.
     invalidateDefaultOverview(c.db);
     return result;
-  });
+  }, { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES });
 }
 
 module.exports = { register, invalidateDefaultOverview };
