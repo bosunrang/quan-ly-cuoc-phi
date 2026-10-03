@@ -1,4 +1,5 @@
 import {
+	ArchiveRestore,
 	Check,
 	DatabaseBackup,
 	FileDown,
@@ -11,12 +12,21 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type {
 	AppSettings,
+	AutomaticBackupList,
 	DataGroup,
 	SettingsBackup,
 } from "../../domain/settings/settings.model";
 import { settingsRepository } from "../../domain/settings/settings.repository";
+import { formatDate } from "../../shared/lib/format";
+import { Alert } from "../../shared/ui/Alert";
 import { Dialog } from "../../shared/ui/Dialog";
 import { StatusPill } from "../../shared/ui/StatusPill";
+
+function formatFileSize(bytes: number): string {
+	if (bytes >= 1024 * 1024)
+		return `${(bytes / (1024 * 1024)).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} MB`;
+	return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString("vi-VN")} KB`;
+}
 
 interface SettingsPageProps {
 	settings: AppSettings;
@@ -39,6 +49,15 @@ export function SettingsPage({
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 	const [showRestoreDialog, setShowRestoreDialog] = useState(false);
 	const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+	const [automaticBackups, setAutomaticBackups] =
+		useState<AutomaticBackupList | null>(null);
+	const [automaticBackupsError, setAutomaticBackupsError] = useState<
+		string | null
+	>(null);
+	const [showAutomaticRestore, setShowAutomaticRestore] = useState(false);
+	const [selectedAutomaticBackup, setSelectedAutomaticBackup] = useState<
+		string | null
+	>(null);
 	const [companyName, setCompanyName] = useState(settings.companyName);
 	const [companyAddress, setCompanyAddress] = useState(settings.companyAddress);
 	const [displayName, setDisplayName] = useState(settings.displayName);
@@ -121,6 +140,23 @@ export function SettingsPage({
 			}
 		};
 		reader.readAsText(file);
+	};
+
+	const openAutomaticRestore = () => {
+		setShowAutomaticRestore(true);
+		setSelectedAutomaticBackup(null);
+		setAutomaticBackups(null);
+		setAutomaticBackupsError(null);
+		void settingsRepository
+			.automaticBackups()
+			.then(setAutomaticBackups)
+			.catch((error) =>
+				setAutomaticBackupsError(
+					error instanceof Error
+						? error.message
+						: "Không đọc được danh sách bản sao lưu.",
+				),
+			);
 	};
 
 	const toggleDeleteGroup = (group: DataGroup) => {
@@ -341,6 +377,22 @@ export function SettingsPage({
 					</article>
 					<article className="settings-data-card">
 						<div>
+							<h3>Bản sao lưu tự động</h3>
+							<p>
+								Máy chủ tự sao lưu mỗi ngày. Chọn một bản để đưa dữ liệu về thời
+								điểm đó.
+							</p>
+						</div>
+						<button
+							className="button secondary"
+							type="button"
+							onClick={openAutomaticRestore}
+						>
+							<ArchiveRestore size={16} /> Chọn bản sao lưu
+						</button>
+					</article>
+					<article className="settings-data-card">
+						<div>
 							<h3>Mã khôi phục quản trị viên</h3>
 							<p>
 								Tạo mã dùng một lần để đặt lại mật khẩu Admin ngay trên máy
@@ -426,6 +478,77 @@ export function SettingsPage({
 						Tệp <strong>{backupName}</strong> sẽ khôi phục phiếu cước, MISA,
 						danh mục, nhân viên, tính xăng và nhận diện doanh nghiệp. Tài khoản,
 						quyền và nhật ký hoạt động không bị thay đổi.
+					</p>
+				</Dialog>
+			)}
+
+			{showAutomaticRestore && (
+				<Dialog
+					title="Khôi phục bản sao lưu tự động"
+					subtitle="Dữ liệu nghiệp vụ hiện tại sẽ được thay bằng dữ liệu của bản đã chọn. Ứng dụng tự chụp lại dữ liệu hiện tại trước khi khôi phục."
+					confirmLabel="Khôi phục bản này"
+					confirmClassName="danger"
+					confirmDisabled={!selectedAutomaticBackup}
+					className="settings-delete-dialog"
+					onClose={() => setShowAutomaticRestore(false)}
+					onConfirm={async () => {
+						if (!selectedAutomaticBackup) return;
+						await settingsRepository.restoreAutomaticBackup(
+							selectedAutomaticBackup,
+						);
+						setShowAutomaticRestore(false);
+						showNotice("Đã khôi phục bản sao lưu.");
+						window.location.reload();
+					}}
+				>
+					{automaticBackupsError && (
+						<Alert tone="error">{automaticBackupsError}</Alert>
+					)}
+					{!automaticBackups && !automaticBackupsError && (
+						<p className="confirm-message">Đang đọc danh sách bản sao lưu…</p>
+					)}
+					{automaticBackups && !automaticBackups.enabled && (
+						<p className="confirm-message">
+							Máy chủ này không bật sao lưu tự động.
+						</p>
+					)}
+					{automaticBackups?.enabled && automaticBackups.items.length === 0 && (
+						<p className="confirm-message">Chưa có bản sao lưu nào.</p>
+					)}
+					{automaticBackups && automaticBackups.items.length > 0 && (
+						<div className="settings-delete-options settings-backup-options">
+							{automaticBackups.items.map((item) => {
+								const selected = selectedAutomaticBackup === item.fileName;
+								return (
+									<button
+										key={item.fileName}
+										type="button"
+										className={`settings-delete-option ${selected ? "is-selected" : ""}`}
+										aria-pressed={selected}
+										onClick={() => setSelectedAutomaticBackup(item.fileName)}
+									>
+										<span className="settings-delete-check">
+											{selected && <Check size={13} />}
+										</span>
+										<strong>
+											{item.kind === "daily"
+												? `Ngày ${formatDate(item.date)}`
+												: `Trước khi khôi phục · ${formatDate(item.date)} ${item.time ?? ""}`}
+										</strong>
+										<span>
+											{item.kind === "daily"
+												? "Sao lưu hằng ngày"
+												: "Dữ liệu ngay trước một lần khôi phục"}{" "}
+											· {formatFileSize(item.sizeBytes)}
+										</span>
+									</button>
+								);
+							})}
+						</div>
+					)}
+					<p className="settings-delete-note">
+						Tài khoản, phân quyền và nhật ký hoạt động không bị thay đổi. Các
+						máy khác đang mở ứng dụng nên tải lại trang sau khi khôi phục.
 					</p>
 				</Dialog>
 			)}

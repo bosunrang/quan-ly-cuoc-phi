@@ -85,6 +85,7 @@ const detailLabels: Record<string, string> = {
 	isDefault: "Mức cước mặc định",
 	source: "Nguồn giá",
 	fileName: "Tên tệp",
+	safetyBackup: "Bản chụp trước khi khôi phục",
 	requested: "Dòng yêu cầu",
 	inserted: "Đã thêm",
 	duplicates: "Dòng trùng",

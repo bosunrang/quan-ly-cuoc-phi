@@ -45,6 +45,7 @@ const ACTION_SEARCH_TEXT = {
   'settings.update': 'cập nhật cài đặt',
   'settings.recovery_code_generate': 'tạo mã khôi phục',
   'settings.backup_restore': 'khôi phục sao lưu phục hồi dữ liệu',
+  'settings.automatic_backup_restore': 'khôi phục bản sao lưu tự động phục hồi dữ liệu',
   'settings.data_delete': 'xóa dữ liệu dọn dữ liệu',
   'misa.import': 'nhập dữ liệu misa',
   'report.export': 'xuất báo cáo xuất excel',

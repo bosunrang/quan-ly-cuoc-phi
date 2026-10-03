@@ -1,5 +1,10 @@
 import { api } from "../../shared/api/client";
-import type { AppSettings, DataGroup, SettingsBackup } from "./settings.model";
+import type {
+	AppSettings,
+	AutomaticBackupList,
+	DataGroup,
+	SettingsBackup,
+} from "./settings.model";
 
 export const settingsRepository = {
 	get(): Promise<AppSettings> {
@@ -29,6 +34,19 @@ export const settingsRepository = {
 			{
 				timeoutMs: 120_000,
 			},
+		);
+	},
+
+	automaticBackups(): Promise<AutomaticBackupList> {
+		return api<AutomaticBackupList>("GET", "/api/settings/automatic-backups");
+	},
+
+	restoreAutomaticBackup(fileName: string): Promise<{ restored: boolean }> {
+		return api(
+			"POST",
+			"/api/settings/automatic-backups/restore",
+			{ fileName },
+			{ timeoutMs: 300_000 },
 		);
 	},
 

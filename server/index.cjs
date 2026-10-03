@@ -158,6 +158,8 @@ function createApp({
       token,
       pages,
       params: matched.params,
+      // Nơi lưu bản sao lưu tự động (null khi server không bật sao lưu tự động).
+      backups: { dbFile, dir: automaticBackupDir },
       query: Object.fromEntries(url.searchParams),
       body,
       /** Chặn nếu người dùng không được cấp thẻ này. */

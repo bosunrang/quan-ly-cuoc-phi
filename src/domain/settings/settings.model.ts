@@ -28,3 +28,19 @@ export interface SettingsBackup {
 	createdAt: string;
 	data: Record<string, unknown[]>;
 }
+
+/** Bản sao lưu SQLite máy chủ tự tạo. */
+export interface AutomaticBackup {
+	fileName: string;
+	/** daily: bản hằng ngày; before-restore: bản chụp ngay trước một lần khôi phục. */
+	kind: "daily" | "before-restore";
+	date: string;
+	time: string | null;
+	sizeBytes: number;
+	modifiedAt: string;
+}
+
+export interface AutomaticBackupList {
+	enabled: boolean;
+	items: AutomaticBackup[];
+}

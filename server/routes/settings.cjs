@@ -1,10 +1,14 @@
 'use strict';
 
 const { randomBytes } = require('node:crypto');
-const { transaction } = require('../db.cjs');
+const { copyFileSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
+const { openDatabase, transaction } = require('../db.cjs');
 const auth = require('../auth.cjs');
 const { writeAudit } = require('../audit.cjs');
-const { RESTORE_MAX_BODY_BYTES, badRequest } = require('../http.cjs');
+const { createSafetyBackup, listAutomaticBackups } = require('../automatic-backup.cjs');
+const { HttpError, RESTORE_MAX_BODY_BYTES, badRequest } = require('../http.cjs');
 const { invalidateDefaultOverview } = require('./misa.cjs');
 
 const PAGE = 'settings';
@@ -161,6 +165,72 @@ function toApi(row) {
   };
 }
 
+/**
+ * Thay toàn bộ dữ liệu nghiệp vụ bằng `data` (cùng cấu trúc backup JSON) trong
+ * một giao dịch. Tài khoản, quyền và nhật ký giữ nguyên.
+ */
+function restoreData(db, user, data, auditAction, auditDetail) {
+  // Màn đăng nhập đọc dòng cài đặt id = 1; backup thiếu dòng này sẽ làm hỏng
+  // giao diện, nên kiểm tra và áp cùng quy tắc như khi sửa cài đặt.
+  const settingsRows = data.settings;
+  if (!Array.isArray(settingsRows) || settingsRows.length !== 1 || Number(settingsRows[0]?.id) !== 1) {
+    throw badRequest('Backup thiếu thông tin cài đặt của đơn vị.');
+  }
+  const restoredSettings = settingsRows[0];
+  const normalized = {
+    ...data,
+    settings: [{
+      ...restoredSettings,
+      company_name: text(restoredSettings.company_name, 'Tên doanh nghiệp', 200),
+      company_address: text(restoredSettings.company_address, 'Địa chỉ', 400),
+      display_name: text(restoredSettings.display_name, 'Tên hiển thị', 80),
+      tagline: text(restoredSettings.tagline, 'Dòng phụ', 120),
+      logo_data_url: logo(restoredSettings.logo_data_url),
+      updated_at: String(restoredSettings.updated_at || new Date().toISOString()),
+    }],
+  };
+
+  const result = transaction(db, () => withMisaSearchRebuild(db, () => {
+    const knownUserIds = new Set(db.prepare('SELECT id FROM users').all().map((row) => Number(row.id)));
+    clearTables(db, CLEAR_ORDER);
+    for (const name of ['settings', 'customers', 'carriers', 'carrierCustomers', 'carrierRates', 'employees', 'misa', 'entries', 'fuelPrices', 'fuelRecords', 'routeDistances', 'fuelLegs']) {
+      importRows(db, name, normalized[name], user.id, knownUserIds);
+    }
+    writeAudit(db, user, auditAction, 'backup', null, auditDetail);
+    return { restored: true };
+  }));
+  invalidateDefaultOverview(db);
+  return result;
+}
+
+/**
+ * Đọc một bản sao lưu SQLite thành dữ liệu cùng cấu trúc backup JSON. Làm trên
+ * bản sao tạm để migration nâng schema của bản cũ lên phiên bản hiện tại mà
+ * không chạm vào file sao lưu gốc.
+ */
+function readSqliteBackup(file) {
+  const temporary = join(tmpdir(), `cuocphi-restore-${process.pid}-${Date.now()}.sqlite`);
+  copyFileSync(file, temporary);
+  let backupDb;
+  try {
+    backupDb = openDatabase(temporary);
+    return rowsForBackup(backupDb);
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw badRequest(`Không đọc được bản sao lưu: ${error.message}`);
+  } finally {
+    backupDb?.close();
+    for (const suffix of ['', '-wal', '-shm']) rmSync(`${temporary}${suffix}`, { force: true });
+  }
+}
+
+/** Chụp dữ liệu hiện tại trước khi khôi phục, nếu máy chủ có thư mục sao lưu. */
+async function safetyBackup(c) {
+  if (!c.backups?.dir) return null;
+  const result = await createSafetyBackup(c.db, c.backups.dbFile, c.backups.dir);
+  return result.fileName;
+}
+
 function register(router) {
   // Mọi người dùng đã đăng nhập đều đọc được nhận diện chung của ứng dụng.
   router.get('/api/settings', async (c) =>
@@ -243,37 +313,38 @@ function register(router) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw badRequest('Dữ liệu backup không hợp lệ.');
     }
-    // Màn đăng nhập đọc dòng cài đặt id = 1; backup thiếu dòng này sẽ làm hỏng
-    // giao diện, nên kiểm tra và áp cùng quy tắc như khi sửa cài đặt.
-    const settingsRows = data.settings;
-    if (!Array.isArray(settingsRows) || settingsRows.length !== 1 || Number(settingsRows[0]?.id) !== 1) {
-      throw badRequest('Backup thiếu thông tin cài đặt của đơn vị.');
-    }
-    const restoredSettings = settingsRows[0];
-    data.settings = [{
-      ...restoredSettings,
-      company_name: text(restoredSettings.company_name, 'Tên doanh nghiệp', 200),
-      company_address: text(restoredSettings.company_address, 'Địa chỉ', 400),
-      display_name: text(restoredSettings.display_name, 'Tên hiển thị', 80),
-      tagline: text(restoredSettings.tagline, 'Dòng phụ', 120),
-      logo_data_url: logo(restoredSettings.logo_data_url),
-      updated_at: String(restoredSettings.updated_at || new Date().toISOString()),
-    }];
-
-    const result = transaction(c.db, () => withMisaSearchRebuild(c.db, () => {
-      const knownUserIds = new Set(c.db.prepare('SELECT id FROM users').all().map((row) => Number(row.id)));
-      clearTables(c.db, CLEAR_ORDER);
-      for (const name of ['settings', 'customers', 'carriers', 'carrierCustomers', 'carrierRates', 'employees', 'misa', 'entries', 'fuelPrices', 'fuelRecords', 'routeDistances', 'fuelLegs']) {
-        importRows(c.db, name, data[name], c.user.id, knownUserIds);
-      }
-      writeAudit(c.db, c.user, 'settings.backup_restore', 'backup', null, {
-        createdAt: backup.createdAt ?? null,
-      });
-      return { restored: true };
-    }));
-    invalidateDefaultOverview(c.db);
-    return result;
+    const safety = await safetyBackup(c);
+    return restoreData(c.db, c.user, data, 'settings.backup_restore', {
+      createdAt: backup.createdAt ?? null,
+      safetyBackup: safety,
+    });
   }, { page: PAGE, maxBodyBytes: RESTORE_MAX_BODY_BYTES });
+
+  // Bản sao lưu SQLite máy chủ tự tạo mỗi ngày (và trước mỗi lần khôi phục).
+  router.get('/api/settings/automatic-backups', async (c) => {
+    c.requirePage(PAGE);
+    return {
+      enabled: Boolean(c.backups.dir),
+      items: listAutomaticBackups(c.backups.dbFile, c.backups.dir),
+    };
+  });
+
+  router.post('/api/settings/automatic-backups/restore', async (c) => {
+    c.requirePage(PAGE);
+    if (!c.backups.dir) throw badRequest('Máy chủ này không bật sao lưu tự động.');
+    // Chỉ nhận đúng tên file có trong danh sách, không bao giờ ghép đường dẫn
+    // từ dữ liệu gửi lên.
+    const fileName = String(c.body.fileName ?? '');
+    const item = listAutomaticBackups(c.backups.dbFile, c.backups.dir)
+      .find((candidate) => candidate.fileName === fileName);
+    if (!item) throw badRequest('Không tìm thấy bản sao lưu đã chọn.');
+    const data = readSqliteBackup(join(c.backups.dir, item.fileName));
+    const safety = await safetyBackup(c);
+    return restoreData(c.db, c.user, data, 'settings.automatic_backup_restore', {
+      fileName: item.fileName,
+      safetyBackup: safety,
+    });
+  });
 
   router.post('/api/settings/data/delete', async (c) => {
     c.requirePage(PAGE);

@@ -41,6 +41,7 @@ const LABELS: Record<string, string> = {
 	"settings.update": "Cập nhật cài đặt",
 	"settings.recovery_code_generate": "Tạo mã khôi phục",
 	"settings.backup_restore": "Khôi phục sao lưu",
+	"settings.automatic_backup_restore": "Khôi phục bản sao lưu tự động",
 	"settings.data_delete": "Xóa dữ liệu",
 	"login.dev": "Đăng nhập phát triển",
 	"misa.import": "Nhập dữ liệu MISA",
@@ -96,6 +97,7 @@ const TONES: Record<string, Tone> = {
 	"fuel.record.void": "warning",
 	"settings.data_delete": "danger",
 	"settings.backup_restore": "warning",
+	"settings.automatic_backup_restore": "warning",
 	login: "neutral",
 	logout: "neutral",
 };
