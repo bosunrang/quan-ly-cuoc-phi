@@ -28,6 +28,7 @@ import { Alert } from "../../shared/ui/Alert";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
 import { EmptyState, LoadingState } from "../../shared/ui/Panel";
+import { StatusPill } from "../../shared/ui/StatusPill";
 import { EntryDialog } from "./components/EntryDialog";
 
 interface EditorState {
@@ -293,15 +294,15 @@ export function EntriesPage() {
 												<td>{entry.spec || "—"}</td>
 												<td>
 													{entry.billStatus ? (
-														<span
-															className={`status-pill ${
+														<StatusPill
+															tone={
 																entry.billStatus === "Có bill"
-																	? "status-pill-success"
-																	: "status-pill-warning"
-															}`}
+																	? "success"
+																	: "warning"
+															}
 														>
 															{entry.billStatus}
-														</span>
+														</StatusPill>
 													) : (
 														"—"
 													)}

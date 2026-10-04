@@ -34,10 +34,8 @@ function carrierVarianceQuery(from: string, to: string, employeeId: string) {
 		query.set("from", from);
 		query.set("to", to);
 	} else {
-		// Server cũ vẫn yêu cầu ngày; server mới dùng all=1 để bỏ giới hạn ngày.
+		// Không chọn ngày: xem toàn bộ lịch sử.
 		query.set("all", "1");
-		query.set("from", "1900-01-01");
-		query.set("to", "9999-12-31");
 	}
 	return query;
 }
