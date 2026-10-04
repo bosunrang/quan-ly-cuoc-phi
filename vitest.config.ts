@@ -6,6 +6,7 @@ export default defineConfig({
 		environmentOptions: {
 			jsdom: { url: "http://localhost/" },
 		},
-		include: ["tests/**/*.test.ts"],
+		include: ["tests/**/*.test.{ts,tsx}"],
+		setupFiles: ["tests/setup.ts"],
 	},
 });
