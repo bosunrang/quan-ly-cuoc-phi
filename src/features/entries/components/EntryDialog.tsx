@@ -17,6 +17,7 @@ import {
 import { entryRepository } from "../../../domain/entries/entry.repository";
 import { ApiError } from "../../../shared/api/client";
 import { formatDate, formatMoney } from "../../../shared/lib/format";
+import { normalizeText } from "../../../shared/lib/text";
 import { Alert } from "../../../shared/ui/Alert";
 import { DateInput } from "../../../shared/ui/DateInput/DateInput";
 import { Dialog } from "../../../shared/ui/Dialog";
@@ -43,19 +44,11 @@ function savedEmployeeId(
 		: undefined;
 }
 
-function normalizeCustomerSearch(value: string): string {
-	return value
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.replace(/[đĐ]/g, "d")
-		.toLocaleLowerCase("vi-VN");
-}
-
 function rateForSpec(rates: EntryRate[], spec: string): EntryRate | null {
-	const specKey = normalizeCustomerSearch(spec);
+	const specKey = normalizeText(spec);
 	if (!specKey) return null;
 	return (
-		rates.find((item) => normalizeCustomerSearch(item.spec) === specKey) ??
+		rates.find((item) => normalizeText(item.spec) === specKey) ??
 		rates.find((item) => item.isDefault) ??
 		null
 	);
@@ -184,11 +177,11 @@ export function EntryDialog({
 			if (customerRequest.current !== requestId) return;
 			setContext(next);
 			// Ưu tiên mã nhà xe lưu trên phiếu: nhà xe đổi tên vẫn nhận đúng.
-			const carrierKey = normalizeCustomerSearch(initial.carrier.trim());
+			const carrierKey = normalizeText(initial.carrier.trim());
 			const sameCarrier = (item: { id: number; name: string }) =>
 				initial.carrierId
 					? item.id === initial.carrierId
-					: normalizeCustomerSearch(item.name.trim()) === carrierKey;
+					: normalizeText(item.name.trim()) === carrierKey;
 			const linked = next.carriers.find(sameCarrier);
 			const carrier = linked ?? loaded.carriers.find(sameCarrier);
 			if (!carrier) return;
@@ -286,14 +279,14 @@ export function EntryDialog({
 		() =>
 			(options?.customers ?? []).map((customer) => ({
 				customer,
-				searchKey: normalizeCustomerSearch(
+				searchKey: normalizeText(
 					`${customer.name} ${customer.customerCode} ${customer.provinceCity}`,
 				),
 			})),
 		[options?.customers],
 	);
 	const matchingCustomers = useMemo(() => {
-		const query = normalizeCustomerSearch(deferredCustomerSearch.trim());
+		const query = normalizeText(deferredCustomerSearch.trim());
 		return customerSearchIndex
 			.filter((item) => !query || item.searchKey.includes(query))
 			.slice(0, 20)
@@ -304,11 +297,10 @@ export function EntryDialog({
 		[context, options?.carriers],
 	);
 	const matchingCarriers = useMemo(() => {
-		const query = normalizeCustomerSearch(deferredCarrierSearch.trim());
+		const query = normalizeText(deferredCarrierSearch.trim());
 		return carrierOptions
 			.filter(
-				(carrier) =>
-					!query || normalizeCustomerSearch(carrier.name).includes(query),
+				(carrier) => !query || normalizeText(carrier.name).includes(query),
 			)
 			.slice(0, 20);
 	}, [carrierOptions, deferredCarrierSearch]);
@@ -316,10 +308,9 @@ export function EntryDialog({
 	const otherCarriers = matchingCarriers.filter((carrier) => !carrier.isLinked);
 	const rateOptions = useMemo(() => entryRateOptions(rates), [rates]);
 	const matchingRateOptions = useMemo(() => {
-		const query = normalizeCustomerSearch(deferredRateSearch.trim());
+		const query = normalizeText(deferredRateSearch.trim());
 		return rateOptions.filter(
-			(rateOption) =>
-				!query || normalizeCustomerSearch(rateOption.spec).includes(query),
+			(rateOption) => !query || normalizeText(rateOption.spec).includes(query),
 		);
 	}, [deferredRateSearch, rateOptions]);
 	const assignedRateOptions = matchingRateOptions.filter(
@@ -787,8 +778,7 @@ export function EntryDialog({
 										const carrier = event.target.value;
 										const matched = carrierOptions.find(
 											(item) =>
-												normalizeCustomerSearch(item.name) ===
-												normalizeCustomerSearch(carrier),
+												normalizeText(item.name) === normalizeText(carrier),
 										);
 										setCarrierId(null);
 										ratesRequest.current += 1;

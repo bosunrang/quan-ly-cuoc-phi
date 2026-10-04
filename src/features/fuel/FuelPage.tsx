@@ -16,6 +16,7 @@ import {
 	fuelRepository,
 } from "../../domain/fuel/fuel.repository";
 import { formatDate, formatMoney, todayIso } from "../../shared/lib/format";
+import { normalizeText } from "../../shared/lib/text";
 import { Alert } from "../../shared/ui/Alert";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
 import { Dialog } from "../../shared/ui/Dialog";
@@ -79,14 +80,7 @@ const savedDateDraft = (key: string) => {
 	const value = localStorage.getItem(key) ?? "";
 	return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : todayIso();
 };
-const locationKey = (value: string) =>
-	value
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.replace(/[đĐ]/g, "d")
-		.toLocaleLowerCase("vi-VN")
-		.replace(/[^a-z0-9]+/g, " ")
-		.trim();
+const locationKey = normalizeText;
 const LOCATION_MATCH_MIN_LENGTH = 12;
 const sameLocation = (left: string, right: string) =>
 	locationKey(left) === locationKey(right);

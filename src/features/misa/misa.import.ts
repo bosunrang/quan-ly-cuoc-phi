@@ -40,6 +40,11 @@ function normalizeText(value: unknown): string {
 	return String(value ?? "").trim();
 }
 
+/**
+ * Khác normalizeText dùng chung ở chỗ giữ dấu "/" (tiêu đề như "Tỉnh/Thành phố").
+ * Không gộp với hàm chung: khóa nguồn (sourceKey) của các dòng MISA đã lưu được
+ * tạo bằng hàm này, đổi cách chuẩn hóa sẽ làm hỏng việc phát hiện dòng trùng.
+ */
 function normalizeVietnamese(value: unknown): string {
 	return normalizeText(value)
 		.normalize("NFD")

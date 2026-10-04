@@ -93,14 +93,6 @@ const ACTION_SEARCH_TEXT = {
   'carrier.unassign_customer': 'gỡ khách hàng khỏi nhà xe',
   'audit.cleanup': 'dọn nhật ký xóa nhật ký',
 };
-const normalize = (value) =>
-  String(value)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[đĐ]/g, 'd')
-    .toLowerCase()
-    .trim();
-
 function filters(query) {
   const clauses = [];
   const values = [];
@@ -124,21 +116,22 @@ function filters(query) {
   }
   if (q) {
     const pattern = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
-    const normalizedQuery = normalize(q);
-    const normalizedPattern = `%${normalizedQuery.replace(/[%_\\]/g, '\\$&')}%`;
+    const normalizedQuery = normalizeSearchText(q);
+    // Sau chuẩn hóa chỉ còn chữ, số, dấu cách nên không cần thoát ký tự LIKE.
+    // Từ khóa toàn dấu câu thì không còn gì: dùng nguyên văn để không khớp mọi dòng.
+    const normalizedPattern = normalizedQuery ? `%${normalizedQuery}%` : pattern;
     const actionPrefixes = Object.entries(SEARCH_ALIASES)
       .filter(([keyword]) => normalizedQuery.includes(keyword))
       .flatMap(([, prefixes]) => prefixes);
     const actions = Object.entries(ACTION_SEARCH_TEXT)
-      .filter(([, label]) => normalize(label).includes(normalizedQuery))
+      .filter(([, label]) => normalizeSearchText(label).includes(normalizedQuery))
       .map(([action]) => action);
     const actionPrefixClauses = actionPrefixes.map(() => 'action LIKE ?');
     const actionClauses = actions.map(() => 'action = ?');
     // Nội dung chi tiết (tên khách, nhà xe…) cũng tìm được, không phân biệt dấu.
-    const detailKey = normalizeSearchText(q);
-    if (detailKey) {
+    if (normalizedQuery) {
       actionClauses.push("vn_normalize(COALESCE(audit_log.detail, '')) LIKE ?");
-      actions.push(`%${detailKey}%`);
+      actions.push(`%${normalizedQuery}%`);
     }
     clauses.push(
       `(audit_log.username LIKE ? ESCAPE '\\' OR vn_normalize(COALESCE(users.full_name, '')) LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\' OR audit_log.entity LIKE ? ESCAPE '\\' OR audit_log.entity_id LIKE ? ESCAPE '\\'${actionPrefixClauses.length ? ` OR ${actionPrefixClauses.join(' OR ')}` : ''}${actionClauses.length ? ` OR ${actionClauses.join(' OR ')}` : ''})`,

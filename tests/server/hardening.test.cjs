@@ -624,3 +624,22 @@ test('báo cáo chênh lệch nhà xe phân trang, số liệu tổng hợp tín
   const audit = await call('GET', '/api/audit?limit=1', { token });
   assert.equal(audit.data.items[0].detail.rows, 60);
 });
+
+test('tìm nhật ký theo tên người dùng có dấu câu, và từ khóa toàn dấu câu không khớp mọi dòng', async () => {
+  const login = await call('POST', '/api/login', { body: { username: 'admin', password: 'MatKhauAdmin456' } });
+  const token = login.data.token;
+  const me = await call('GET', '/api/me', { token });
+  await call('PATCH', `/api/users/${me.data.user.id}`, { token, body: { fullName: 'Lê Thị B. (Kho)' } });
+  const created = await call('POST', '/api/employees', {
+    token,
+    body: { fullName: 'Nhân viên tìm nhật ký', address: '', isActive: true },
+  });
+  assert.equal(created.status, 200);
+
+  const byName = await call('GET', `/api/audit?q=${encodeURIComponent('Thị B. (Kho)')}`, { token });
+  assert.ok(byName.data.items.some((row) => row.action === 'employee.create'));
+
+  const total = (await call('GET', '/api/audit', { token })).data.total;
+  const punctuation = await call('GET', `/api/audit?q=${encodeURIComponent('!!!')}`, { token });
+  assert.ok(punctuation.data.total < total);
+});
