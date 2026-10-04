@@ -115,15 +115,24 @@ sau này tách ra máy riêng không phải viết lại.
 ## An toàn
 
 - Mật khẩu băm scrypt với salt riêng; token phiên chỉ lưu bản băm SHA-256.
-- Sai mật khẩu 8 lần thì khóa 15 phút. Thông báo lỗi giống nhau cho mọi trường
-  hợp sai, để không lộ tài khoản nào có thật.
+- Sai mật khẩu 8 lần (cùng tài khoản, cùng máy) hoặc 30 lần (một máy, bất kỳ
+  tài khoản) thì khóa 15 phút. Thông báo lỗi và thời gian phản hồi giống nhau
+  cho mọi trường hợp sai, để không lộ tài khoản nào có thật.
+- Tài khoản do Admin tạo hoặc đặt lại mật khẩu phải tự đặt mật khẩu riêng ở
+  lần đăng nhập tới.
 - Đổi mật khẩu hoặc bị khóa tài khoản thì mọi phiên đang mở bị cắt.
 - Token giữ trong `sessionStorage`, không phải `localStorage`: đóng tab là mất.
 - Tự đăng nhập phát triển chỉ nhận yêu cầu loopback trên máy chính; bản Electron
   và `npm run server:secure` không mở đường dẫn này.
 - Electron bật `contextIsolation`, `sandbox`, chặn điều hướng ra ngoài.
-- Server chỉ dùng trong mạng LAN. Mật khẩu truyền dạng HTTP thường, **không
-  được mở cổng này ra Internet**.
+- Server dùng trong mạng LAN. Mật khẩu truyền dạng HTTP thường, **không chuyển
+  cổng (port forwarding) thẳng ra Internet**.
+- Truy cập từ xa chỉ qua **Cloudflare Tunnel** chạy trên máy chính (HTTPS ở
+  phía Cloudflare). Mọi yêu cầu qua tunnel đến từ 127.0.0.1, nên
+  `server/client-address.cjs` lấy IP thật từ `CF-Connecting-IP` (chỉ tin khi
+  yêu cầu đến từ chính máy này) và coi yêu cầu có header proxy là *không phải
+  máy chính*: khôi phục Admin và tự đăng nhập phát triển không dùng được qua
+  tunnel. Nên bật thêm Cloudflare Access để chặn người lạ trước khi tới app.
 
 ## Giới hạn đã biết
 

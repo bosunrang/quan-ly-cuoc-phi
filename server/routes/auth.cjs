@@ -1,6 +1,7 @@
 'use strict';
 
 const auth = require('../auth.cjs');
+const { clientAddress, isLocalRequest } = require('../client-address.cjs');
 const { writeAudit } = require('../audit.cjs');
 const { pagesForUser, PAGES } = require('../permissions.cjs');
 const { badRequest, unauthorized } = require('../http.cjs');
@@ -25,14 +26,6 @@ function publicProfile(db, user) {
   };
 }
 
-function isLoopback(request) {
-  const address = request.socket.remoteAddress ?? '';
-  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
-}
-
-function clientAddress(request) {
-  return request.socket.remoteAddress ?? 'unknown';
-}
 
 function register(router) {
   router.post('/api/login', async (c) => {
@@ -90,7 +83,9 @@ function register(router) {
   // Chỉ máy đang chạy phần mềm mới được dùng mã khôi phục; máy trong LAN
   // không thể đổi mật khẩu quản trị viên qua endpoint này.
   router.post('/api/recover-admin', async (c) => {
-    if (!isLoopback(c.req)) {
+    // Qua Cloudflare Tunnel yêu cầu cũng đến từ 127.0.0.1; chỉ chấp nhận yêu
+    // cầu gõ trực tiếp trên máy chính, không có dấu vết đi qua proxy.
+    if (!isLocalRequest(c.req)) {
       throw unauthorized('Khôi phục chỉ thực hiện được trên máy chính.');
     }
     const username = String(c.body.username ?? '').trim().toLowerCase();
@@ -98,6 +93,13 @@ function register(router) {
     const password = String(c.body.password ?? '');
     const weak = auth.checkPasswordStrength(password);
     if (weak) throw badRequest(weak);
+    // Dùng chung bộ đếm sai với đăng nhập, theo khóa riêng cho việc khôi phục.
+    const attemptName = `recover-admin:${username}`;
+    const address = clientAddress(c.req);
+    const blockedMinutes = auth.loginBlockedFor(attemptName, address);
+    if (blockedMinutes > 0) {
+      throw badRequest(`Sai quá nhiều lần. Vui lòng thử lại sau ${blockedMinutes} phút.`);
+    }
 
     const recovery = c.db
       .prepare('SELECT code_hash, code_salt FROM admin_recovery_code WHERE id = 1')
@@ -106,8 +108,10 @@ function register(router) {
       .prepare('SELECT * FROM users WHERE username = ? AND is_admin = 1 AND is_active = 1')
       .get(username);
     if (!recovery || !user || !auth.verifyPassword(code, recovery.code_hash, recovery.code_salt)) {
+      auth.recordFailedLogin(attemptName, address);
       throw unauthorized('Mã khôi phục hoặc tên quản trị viên không đúng.');
     }
+    auth.clearFailedLogins(attemptName, address);
 
     const { hash, salt } = auth.hashPassword(password);
     c.db.exec('BEGIN');

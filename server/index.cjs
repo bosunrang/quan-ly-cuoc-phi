@@ -8,6 +8,7 @@ const { startAutomaticBackups } = require('./automatic-backup.cjs');
 const auth = require('./auth.cjs');
 const { writeAudit } = require('./audit.cjs');
 const { pagesForUser } = require('./permissions.cjs');
+const { isLocalRequest } = require('./client-address.cjs');
 const {
   createRouter,
   sendJson,
@@ -85,12 +86,7 @@ function createApp({
   // Chỉ dành cho lúc xây dựng giao diện. Bản Electron không bật tùy chọn này.
   if (allowDevLogin) {
     router.post('/api/dev-login', async (c) => {
-      const address = c.req.socket.remoteAddress ?? '';
-      const isLoopback =
-        address === '127.0.0.1' ||
-        address === '::1' ||
-        address === '::ffff:127.0.0.1';
-      if (!isLoopback) {
+      if (!isLocalRequest(c.req)) {
         throw forbidden('Tự động đăng nhập chỉ dùng trên máy chính.');
       }
 

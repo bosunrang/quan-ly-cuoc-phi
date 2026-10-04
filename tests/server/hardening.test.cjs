@@ -394,3 +394,44 @@ test('tài khoản Admin tạo hoặc đặt lại phải tự đổi mật kh�
   });
   assert.equal(adminLogin.data.user.mustChangePassword, false);
 });
+
+test('qua Cloudflare Tunnel: khôi phục Admin bị chặn, khóa đăng nhập theo IP thật', async () => {
+  const viaTunnel = (ip) => ({ 'cf-connecting-ip': ip, 'cf-ray': 'test-ray', 'x-forwarded-for': ip });
+  const post = (path, body, headers = {}) => fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+
+  // Từ Internet (qua tunnel) không dùng được chức năng chỉ dành cho máy chính.
+  const recover = await post(
+    '/api/recover-admin',
+    { username: 'admin', code: 'NAVIVA-sai', password: 'MatKhauMoi123' },
+    viaTunnel('203.0.113.7'),
+  );
+  assert.equal(recover.status, 401);
+  assert.match((await recover.json()).error, /máy chính/);
+
+  // Một người ngoài thử sai nhiều lần chỉ khóa chính IP đó, không khóa cả công ty.
+  for (let index = 0; index < 30; index += 1) {
+    await post('/api/login', { username: `rac-${index}`, password: 'sai-mat-khau' }, viaTunnel('203.0.113.7'));
+  }
+  const attacker = await post('/api/login', { username: 'nhanvienmoi', password: 'MatKhauCap2' }, viaTunnel('203.0.113.7'));
+  assert.equal(attacker.status, 400);
+  const colleague = await post('/api/login', { username: 'nhanvienmoi', password: 'MatKhauCap2' }, viaTunnel('198.51.100.20'));
+  assert.equal(colleague.status, 200);
+  const local = await post('/api/login', { username: 'nhanvienmoi', password: 'MatKhauCap2' });
+  assert.equal(local.status, 200);
+});
+
+test('khôi phục Admin trên máy chính bị giới hạn số lần thử sai', async () => {
+  const attempt = () => fetch(`${baseUrl}/api/recover-admin`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'gioi-han', code: 'NAVIVA-sai', password: 'MatKhauMoi123' }),
+  });
+  for (let index = 0; index < 8; index += 1) assert.equal((await attempt()).status, 401);
+  const blocked = await attempt();
+  assert.equal(blocked.status, 400);
+  assert.match((await blocked.json()).error, /Sai quá nhiều lần/);
+});
