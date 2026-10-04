@@ -94,6 +94,9 @@ function register(router) {
     if (!fullName) throw badRequest('Vui lòng nhập họ tên.');
     const weak = auth.checkPasswordStrength(password);
     if (weak) throw badRequest(weak);
+    // Băm trước (có chờ), rồi kiểm tra trùng tên và ghi liền nhau không chờ,
+    // để hai yêu cầu tạo cùng tên không lọt qua kiểm tra cùng lúc.
+    const { hash, salt } = await auth.hashPassword(password);
 
     const taken = c.db
       .prepare('SELECT 1 FROM users WHERE username = ?')
@@ -102,7 +105,6 @@ function register(router) {
 
     const isAdmin = c.body.isAdmin === true;
     const pages = isAdmin ? [] : sanitizePages(c.body.pages);
-    const { hash, salt } = auth.hashPassword(password);
     const at = new Date().toISOString();
 
     return transaction(c.db, () => {
@@ -178,7 +180,7 @@ function register(router) {
     const weak = auth.checkPasswordStrength(password);
     if (weak) throw badRequest(weak);
 
-    const { hash, salt } = auth.hashPassword(password);
+    const { hash, salt } = await auth.hashPassword(password);
     // Đặt lại hộ người khác thì họ phải đổi ngay ở lần đăng nhập tới, để Admin
     // không biết mật khẩu họ dùng lâu dài. Tự đặt lại cho mình thì không cần.
     const mustChange = target.id === c.user.id ? target.must_change_password : 1;

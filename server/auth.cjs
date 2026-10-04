@@ -2,10 +2,17 @@
 
 const {
   randomBytes,
+  scrypt,
   scryptSync,
   createHash,
   timingSafeEqual,
 } = require('node:crypto');
+const { promisify } = require('node:util');
+
+// scrypt bất đồng bộ chạy trên thread pool của Node: mỗi lần kiểm tra mật khẩu
+// (~50 ms) không chặn các yêu cầu khác, kể cả khi bị dồn dập đăng nhập từ
+// Internet qua tunnel.
+const scryptAsync = promisify(scrypt);
 
 const SCRYPT_KEY_LENGTH = 64;
 const SESSION_HOURS = 12;
@@ -20,7 +27,14 @@ const now = () => new Date().toISOString();
 
 // ---------------------------------------------------------------- mật khẩu
 
-function hashPassword(password) {
+async function hashPassword(password) {
+  const salt = randomBytes(16).toString('hex');
+  const hash = (await scryptAsync(password, salt, SCRYPT_KEY_LENGTH)).toString('hex');
+  return { hash, salt };
+}
+
+/** Chỉ dùng lúc khởi động (tạo Admin đầu tiên), khi chưa phục vụ yêu cầu nào. */
+function hashPasswordSync(password) {
   const salt = randomBytes(16).toString('hex');
   const hash = scryptSync(password, salt, SCRYPT_KEY_LENGTH).toString('hex');
   return { hash, salt };
@@ -31,8 +45,8 @@ function hashPassword(password) {
 const DUMMY_SALT = randomBytes(16).toString('hex');
 const DUMMY_HASH = scryptSync('dummy-password', DUMMY_SALT, SCRYPT_KEY_LENGTH).toString('hex');
 
-function verifyDummyPassword(password) {
-  verifyPassword(password, DUMMY_HASH, DUMMY_SALT);
+async function verifyDummyPassword(password) {
+  await verifyPassword(password, DUMMY_HASH, DUMMY_SALT);
   return false;
 }
 
@@ -43,8 +57,8 @@ function generateReadablePassword(length = 12) {
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
 }
 
-function verifyPassword(password, hash, salt) {
-  const attempt = scryptSync(password, salt, SCRYPT_KEY_LENGTH);
+async function verifyPassword(password, hash, salt) {
+  const attempt = await scryptAsync(password, salt, SCRYPT_KEY_LENGTH);
   const stored = Buffer.from(hash, 'hex');
   // Độ dài khác nhau thì timingSafeEqual ném lỗi, nên kiểm tra trước.
   if (attempt.length !== stored.length) return false;
@@ -190,6 +204,7 @@ function clearFailedLogins(username, address) {
 
 module.exports = {
   hashPassword,
+  hashPasswordSync,
   verifyPassword,
   verifyDummyPassword,
   generateReadablePassword,

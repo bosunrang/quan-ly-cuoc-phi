@@ -42,7 +42,7 @@ function seedFirstAdmin(db) {
   if (Number(existing.count) > 0) return null;
 
   const password = auth.generateReadablePassword();
-  const { hash, salt } = auth.hashPassword(password);
+  const { hash, salt } = auth.hashPasswordSync(password);
   const at = new Date().toISOString();
   db.prepare(
     `INSERT INTO users

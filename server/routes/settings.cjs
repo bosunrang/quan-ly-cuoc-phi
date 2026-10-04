@@ -281,7 +281,7 @@ function register(router) {
   router.post('/api/settings/recovery-code', async (c) => {
     c.requirePage(PAGE);
     const code = `NAVIVA-${randomBytes(9).toString('base64url')}`;
-    const { hash, salt } = auth.hashPassword(code);
+    const { hash, salt } = await auth.hashPassword(code);
     transaction(c.db, () => {
       c.db.prepare(
         `INSERT INTO admin_recovery_code (id, code_hash, code_salt, created_at)

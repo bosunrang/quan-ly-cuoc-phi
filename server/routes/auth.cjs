@@ -55,11 +55,11 @@ function register(router) {
       throw invalid;
     }
     if (!user) {
-      auth.verifyDummyPassword(password);
+      await auth.verifyDummyPassword(password);
       auth.recordFailedLogin(username, address);
       throw invalid;
     }
-    if (!auth.verifyPassword(password, user.password_hash, user.password_salt)) {
+    if (!(await auth.verifyPassword(password, user.password_hash, user.password_salt))) {
       auth.recordFailedLogin(username, address);
       writeAudit(c.db, user, 'login.failed', 'user', user.id);
       throw invalid;
@@ -107,13 +107,13 @@ function register(router) {
     const user = c.db
       .prepare('SELECT * FROM users WHERE username = ? AND is_admin = 1 AND is_active = 1')
       .get(username);
-    if (!recovery || !user || !auth.verifyPassword(code, recovery.code_hash, recovery.code_salt)) {
+    if (!recovery || !user || !(await auth.verifyPassword(code, recovery.code_hash, recovery.code_salt))) {
       auth.recordFailedLogin(attemptName, address);
       throw unauthorized('Mã khôi phục hoặc tên quản trị viên không đúng.');
     }
     auth.clearFailedLogins(attemptName, address);
 
-    const { hash, salt } = auth.hashPassword(password);
+    const { hash, salt } = await auth.hashPassword(password);
     c.db.exec('BEGIN');
     try {
       c.db
@@ -150,18 +150,18 @@ function register(router) {
     const newPassword = String(c.body.newPassword ?? '');
 
     if (
-      !auth.verifyPassword(
+      !(await auth.verifyPassword(
         currentPassword,
         c.user.password_hash,
         c.user.password_salt,
-      )
+      ))
     ) {
       throw badRequest('Mật khẩu hiện tại không đúng.');
     }
     const weak = auth.checkPasswordStrength(newPassword);
     if (weak) throw badRequest(weak);
 
-    const { hash, salt } = auth.hashPassword(newPassword);
+    const { hash, salt } = await auth.hashPassword(newPassword);
     c.db
       .prepare(
         'UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = 0, updated_at = ? WHERE id = ?',
@@ -183,10 +183,10 @@ function register(router) {
     const newPassword = String(c.body.newPassword ?? '');
     const weak = auth.checkPasswordStrength(newPassword);
     if (weak) throw badRequest(weak);
-    if (auth.verifyPassword(newPassword, c.user.password_hash, c.user.password_salt)) {
+    if (await auth.verifyPassword(newPassword, c.user.password_hash, c.user.password_salt)) {
       throw badRequest('Mật khẩu mới phải khác mật khẩu được cấp.');
     }
-    const { hash, salt } = auth.hashPassword(newPassword);
+    const { hash, salt } = await auth.hashPassword(newPassword);
     c.db.prepare(
       'UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = 0, updated_at = ? WHERE id = ?',
     ).run(hash, salt, new Date().toISOString(), c.user.id);
