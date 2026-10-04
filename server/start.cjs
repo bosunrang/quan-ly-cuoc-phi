@@ -9,6 +9,7 @@
 
 const { dirname, join } = require('node:path');
 const { createApp } = require('./index.cjs');
+const { installFileLogging } = require('./file-log.cjs');
 const { companyFromArgs, databaseFileName } = require('./company-profiles.cjs');
 
 const COMPANY = companyFromArgs();
@@ -23,6 +24,7 @@ const ALLOW_DEV_LOGIN = process.argv.includes('--dev-bypass-login');
 
 async function main() {
   const dbFile = process.env.DB_FILE || join(ROOT, 'data', databaseFileName(COMPANY));
+  installFileLogging(join(dirname(dbFile), 'logs'));
   const app = createApp({
     dbFile,
     staticRoot: API_ONLY ? null : join(ROOT, 'dist'),
@@ -39,13 +41,19 @@ async function main() {
 	}
 
   if (app.seeded) {
-    console.log('');
-    console.log('  ===== TÀI KHOẢN ADMIN ĐẦU TIÊN =====');
-    console.log(`  Tên đăng nhập: ${app.seeded.username}`);
-    console.log(`  Mật khẩu:      ${app.seeded.password}`);
-    console.log('  Hãy đổi mật khẩu ngay sau khi đăng nhập.');
-    console.log('  ====================================');
-    console.log('');
+    // In thẳng ra màn hình, không qua console: mật khẩu ban đầu không được
+    // nằm lại trong file log.
+    process.stdout.write([
+      '',
+      '  ===== TÀI KHOẢN ADMIN ĐẦU TIÊN =====',
+      `  Tên đăng nhập: ${app.seeded.username}`,
+      `  Mật khẩu:      ${app.seeded.password}`,
+      '  Hãy đổi mật khẩu ngay sau khi đăng nhập.',
+      '  ====================================',
+      '',
+      '',
+    ].join('\n'));
+    console.log('Đã tạo tài khoản Admin đầu tiên (mật khẩu chỉ hiện trên màn hình).');
   }
 
   const shutdown = () => {

@@ -139,11 +139,17 @@ Lưu ý vận hành:
 - Lần đầu chạy, Windows Firewall sẽ hỏi. Chọn cho phép ở **mạng Private**.
 - Nên đặt IP tĩnh cho máy chính để địa chỉ không đổi.
 - **Sao lưu tự động**: máy chủ tạo một snapshot SQLite mỗi ngày trong thư mục
-  `data/backups` cạnh cơ sở dữ liệu và giữ 14 bản gần nhất. Có thể tiếp tục dùng
-  nút **Xuất backup** trong Cài đặt để lưu thêm một bản ở nơi khác.
+  `data/backups` cạnh cơ sở dữ liệu và giữ 14 bản gần nhất. Khôi phục ngay trong
+  **Cài đặt → Bản sao lưu tự động** (app tự chụp dữ liệu hiện tại trước khi
+  khôi phục). Có thể tiếp tục dùng nút **Xuất backup** để lưu thêm một bản ở
+  nơi khác.
+- **Log lỗi**: ghi theo ngày vào thư mục `logs` của từng công ty, giữ 30 ngày.
+  Mở nhanh bằng chuột phải icon dưới khay → *Mở thư mục log…*. Khi báo lỗi, gửi
+  kèm file log của ngày đó.
 - Khi cần copy thủ công file `cost-app.sqlite` lúc ứng dụng đang chạy, copy cả
   file `-wal` nếu có.
-- Chỉ dùng trong mạng nội bộ. Không mở cổng này ra Internet.
+- Không chuyển cổng (port forwarding) thẳng ra Internet. Truy cập từ xa dùng
+  Cloudflare Tunnel chạy trên máy chính, nên bật thêm Cloudflare Access.
 
 ### Nhiều công ty trên cùng hệ thống
 

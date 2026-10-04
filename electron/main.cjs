@@ -6,6 +6,7 @@ const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { createApp } = require('../server/index.cjs');
+const { installFileLogging } = require('../server/file-log.cjs');
 const { COMPANY_PROFILES } = require('../server/company-profiles.cjs');
 const { isReportPrintPopup } = require('./report-window.cjs');
 
@@ -19,6 +20,7 @@ let origin = '';
 let machine;
 let company;
 let quitting = false;
+let fileLog = null;
 let updateCheckStarted = false;
 
 // Hồ sơ Nam Hưng Việt giữ nguyên thư mục cũ. Các hồ sơ khác được tách thành
@@ -291,6 +293,7 @@ function createTray(port) {
       { label: `Máy chủ: ${origin}`, enabled: false },
       { label: 'Đổi máy chủ…', click: () => void configureClient() },
     ]),
+    ...(fileLog ? [{ label: 'Mở thư mục log…', click: () => void shell.openPath(fileLog.dir) }] : []),
     { type: 'separator' },
     { label: isHost ? 'Thoát (máy nhân viên sẽ mất kết nối)' : 'Thoát', click: () => { quitting = true; app.quit(); } },
   ]));
@@ -314,6 +317,9 @@ app.whenReady().then(async () => {
     mkdirSync(companyDataDirectoryPath, { recursive: true });
     app.setPath('userData', companyDataDirectoryPath);
     if (!app.requestSingleInstanceLock()) return app.quit();
+    // Log theo từng công ty, cạnh dữ liệu của công ty đó.
+    fileLog = installFileLogging(path.join(app.getPath('userData'), 'logs'));
+    console.log(`Khởi động ${company.name} — phiên bản ${app.getVersion()}`);
     machine = readMachineConfig() ?? await chooseMachine();
     if (!machine) return app.quit();
     saveMachineConfig(machine);

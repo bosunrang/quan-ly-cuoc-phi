@@ -174,7 +174,16 @@ function createApp({
   }
 
   const server = http.createServer((req, res) => {
-    handle(req, res).catch((error) => sendError(res, error));
+    handle(req, res).catch((error) => {
+      // Chỉ ghi đường dẫn, bỏ query (có thể chứa từ khóa tìm kiếm của người dùng).
+      const path = String(req.url ?? '').split('?')[0];
+      if (res.headersSent) {
+        console.error('[loi]', `${req.method} ${path}`, error);
+        res.destroy();
+        return;
+      }
+      sendError(res, error, `${req.method} ${path}`);
+    });
   });
 
   return {

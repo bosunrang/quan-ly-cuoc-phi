@@ -82,14 +82,15 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
-function sendError(res, error) {
+/** context: "METHOD /đường-dẫn" để log lỗi máy chủ biết thao tác nào gây ra. */
+function sendError(res, error, context = '') {
   const status = error instanceof HttpError ? error.status : 500;
   const message =
     error instanceof HttpError
       ? error.message
       : 'Máy chủ gặp lỗi khi xử lý yêu cầu.';
   const code = error instanceof HttpError ? error.code : 'INTERNAL_ERROR';
-  if (status >= 500) console.error('[loi]', error);
+  if (status >= 500) console.error('[loi]', context, error);
   sendJson(res, status, { error: message, code });
 }
 
