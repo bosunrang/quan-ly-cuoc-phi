@@ -626,10 +626,15 @@ test('báo cáo chênh lệch nhà xe phân trang, số liệu tổng hợp tín
 });
 
 test('tìm nhật ký theo tên người dùng có dấu câu, và từ khóa toàn dấu câu không khớp mọi dòng', async () => {
-  const login = await call('POST', '/api/login', { body: { username: 'admin', password: 'MatKhauAdmin456' } });
+  const login = await call('POST', '/api/login', {
+    body: { username: 'admin', password: 'MatKhauAdmin456' },
+  });
   const token = login.data.token;
   const me = await call('GET', '/api/me', { token });
-  await call('PATCH', `/api/users/${me.data.user.id}`, { token, body: { fullName: 'Lê Thị B. (Kho)' } });
+  await call('PATCH', `/api/users/${me.data.user.id}`, {
+    token,
+    body: { fullName: 'Lê Thị B. (Kho)' },
+  });
   const created = await call('POST', '/api/employees', {
     token,
     body: { fullName: 'Nhân viên tìm nhật ký', address: '', isActive: true },
