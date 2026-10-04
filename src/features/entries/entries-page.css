@@ -164,10 +164,6 @@
 	font-size: 12px;
 	font-weight: 700;
 }
-.entry-pagination { min-height: 48px; padding: 8px 13px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); background: var(--table-footer-bg); color: var(--muted); font-size: var(--type-caption); font-weight: 650; }
-.entry-pagination button { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--teal); display: grid; place-items: center; cursor: pointer; }
-.entry-pagination button:hover:not(:disabled) { border-color: var(--teal-border); background: var(--surface-accent-faint); }
-.entry-pagination button:disabled { opacity: .4; cursor: not-allowed; }
 
 @media (max-width: 640px) {
 	/* Dành chỗ cho form nhập trên điện thoại; số liệu tổng hợp vẫn có trên desktop. */
@@ -224,15 +220,5 @@
 
 	.entry-list-table-wrap {
 		border-top: 1px solid var(--line);
-	}
-
-	.entry-pagination {
-		justify-content: center;
-		min-height: 56px;
-	}
-
-	.entry-pagination button {
-		width: 36px;
-		height: 36px;
 	}
 }

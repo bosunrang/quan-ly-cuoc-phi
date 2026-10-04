@@ -1,7 +1,5 @@
 import {
 	Building2,
-	ChevronLeft,
-	ChevronRight,
 	MapPinned,
 	Pencil,
 	Plus,
@@ -28,6 +26,7 @@ import {
 import { customerRepository } from "../../domain/customers/customer.repository";
 import { Alert } from "../../shared/ui/Alert";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
+import { Pagination } from "../../shared/ui/Pagination";
 import { EmptyState, LoadingState } from "../../shared/ui/Panel";
 import { CustomerDialog } from "./components/CustomerDialog";
 import { CustomerImportDialog } from "./components/CustomerImportDialog";
@@ -282,34 +281,12 @@ export function CustomersPage() {
 								</table>
 							</div>
 						)}
-						{data.pageCount > 1 && (
-							<nav
-								className="customer-pagination"
-								aria-label="Phân trang khách hàng"
-							>
-								<button
-									type="button"
-									title="Trang trước"
-									disabled={data.page === 1}
-									onClick={() => setPage((current) => Math.max(1, current - 1))}
-								>
-									<ChevronLeft size={16} />
-								</button>
-								<span>
-									Trang {data.page}/{data.pageCount}
-								</span>
-								<button
-									type="button"
-									title="Trang sau"
-									disabled={data.page === data.pageCount}
-									onClick={() =>
-										setPage((current) => Math.min(data.pageCount, current + 1))
-									}
-								>
-									<ChevronRight size={16} />
-								</button>
-							</nav>
-						)}
+						<Pagination
+							label="Phân trang khách hàng"
+							page={data.page}
+							pageCount={data.pageCount}
+							onPageChange={setPage}
+						/>
 					</section>
 				</>
 			)}

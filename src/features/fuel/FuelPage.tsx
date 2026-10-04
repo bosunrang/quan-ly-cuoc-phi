@@ -1,8 +1,6 @@
 import {
 	Bike,
 	CarFront,
-	ChevronLeft,
-	ChevronRight,
 	ClipboardList,
 	Eye,
 	MapPin,
@@ -22,6 +20,7 @@ import { Alert } from "../../shared/ui/Alert";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
 import { Dialog } from "../../shared/ui/Dialog";
 import { MoneyInput } from "../../shared/ui/MoneyInput";
+import { Pagination } from "../../shared/ui/Pagination";
 import { LoadingState } from "../../shared/ui/Panel";
 
 type ExtraCost = { id: string; name: string; amount: number };
@@ -1083,33 +1082,12 @@ export function FuelPage() {
 									);
 								})}
 							</div>
-							{historyPageCount > 1 && (
-								<footer className="fuel-history-pagination">
-									<button
-										type="button"
-										className="button secondary"
-										title="Trang trước"
-										aria-label="Trang trước"
-										disabled={historyPage === 1}
-										onClick={() => setHistoryPage((page) => page - 1)}
-									>
-										<ChevronLeft size={16} />
-									</button>
-									<span>
-										Trang {historyPage} / {historyPageCount}
-									</span>
-									<button
-										type="button"
-										className="button secondary"
-										title="Trang sau"
-										aria-label="Trang sau"
-										disabled={historyPage === historyPageCount}
-										onClick={() => setHistoryPage((page) => page + 1)}
-									>
-										<ChevronRight size={16} />
-									</button>
-								</footer>
-							)}
+							<Pagination
+								label="Phân trang lịch sử tính xăng"
+								page={historyPage}
+								pageCount={historyPageCount}
+								onPageChange={setHistoryPage}
+							/>
 						</>
 					) : (
 						<div className="fuel-history-empty">

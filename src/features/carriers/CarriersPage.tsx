@@ -1,8 +1,6 @@
 import {
 	Building2,
 	Check,
-	ChevronLeft,
-	ChevronRight,
 	Download,
 	Link2,
 	MapPin,
@@ -42,6 +40,7 @@ import { useDebouncedValue } from "../../shared/lib/useDebouncedValue";
 import { downloadXlsx } from "../../shared/lib/xlsx";
 import { Alert } from "../../shared/ui/Alert";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
+import { Pagination } from "../../shared/ui/Pagination";
 import { LoadingState } from "../../shared/ui/Panel";
 import { StatusPill } from "../../shared/ui/StatusPill";
 import { wideCarrierRateExport } from "./carrier-excel.export";
@@ -498,8 +497,8 @@ export function CarriersPage() {
 						)}
 					</div>
 					{visibleCarriers.length > CARRIERS_PER_PAGE && (
-						<CarrierPagination
-							className="carrier-pagination"
+						<Pagination
+							variant="inline"
 							label="Phân trang nhà xe"
 							page={currentCarrierPage}
 							pageCount={carrierPageCount}
@@ -576,8 +575,8 @@ export function CarriersPage() {
 						)}
 					</div>
 					{customerData.pageCount > 1 && (
-						<CarrierPagination
-							className="carrier-customer-pagination"
+						<Pagination
+							variant="inline"
 							label="Phân trang khách hàng để gán"
 							page={currentCustomerPage}
 							pageCount={customerPageCount}
@@ -738,43 +737,5 @@ export function CarriersPage() {
 				/>
 			)}
 		</>
-	);
-}
-
-function CarrierPagination({
-	className,
-	label,
-	page,
-	pageCount,
-	onPageChange,
-}: {
-	className: string;
-	label: string;
-	page: number;
-	pageCount: number;
-	onPageChange: (page: number) => void;
-}) {
-	return (
-		<nav className={className} aria-label={label}>
-			<button
-				type="button"
-				title="Trang trước"
-				disabled={page === 1}
-				onClick={() => onPageChange(Math.max(1, page - 1))}
-			>
-				<ChevronLeft size={16} />
-			</button>
-			<span>
-				Trang {page}/{pageCount}
-			</span>
-			<button
-				type="button"
-				title="Trang sau"
-				disabled={page === pageCount}
-				onClick={() => onPageChange(Math.min(pageCount, page + 1))}
-			>
-				<ChevronRight size={16} />
-			</button>
-		</nav>
 	);
 }

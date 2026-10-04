@@ -59,13 +59,6 @@
 .fuel-route-detail { min-width: 310px; white-space: normal; }
 .fuel-price-report-table tr.is-voided { background: color-mix(in srgb, var(--status-danger-bg) 38%, transparent); }
 .fuel-price-report-money { color: var(--teal); font-weight: 700; }
-.fuel-price-report-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 48px; padding: 8px 12px; border-top: 1px solid var(--line-soft); background: var(--table-footer-bg); }
-.fuel-price-report-pagination .button { width: 32px; min-width: 32px; height: 32px; padding: 0; }
-.fuel-price-report-pagination > span { min-width: 82px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; text-align: center; }
 @media (max-width: 1080px) { .fuel-price-report-header { display: block; } .fuel-price-report-header > .panel-header { border-bottom: 1px solid var(--line); } .fuel-price-report-filters { max-width: none; padding: 16px; } }
 @media (max-width: 900px) { .fuel-price-report-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .fuel-price-report-filters { grid-template-columns: 1fr; } }
-.report-variance-pagination { min-height: 48px; padding: 8px 13px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); background: var(--table-footer-bg); color: var(--muted); font-size: var(--type-caption); font-weight: 650; }
-.report-variance-pagination button { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--teal); display: grid; place-items: center; cursor: pointer; }
-.report-variance-pagination button:hover:not(:disabled) { border-color: var(--teal-border); background: var(--surface-accent-faint); }
-.report-variance-pagination button:disabled { opacity: .4; cursor: not-allowed; }

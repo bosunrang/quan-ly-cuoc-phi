@@ -1,8 +1,6 @@
 import {
 	ArrowDownRight,
 	ArrowUpRight,
-	ChevronLeft,
-	ChevronRight,
 	Download,
 	FileSpreadsheet,
 	Plus,
@@ -23,6 +21,7 @@ import { MoneyInput } from "../../shared/ui/MoneyInput";
 import { EmptyState, LoadingState, PanelHeader } from "../../shared/ui/Panel";
 import { printableReportHtml } from "./print-report";
 import "./reports.css";
+import { Pagination } from "../../shared/ui/Pagination";
 
 type ExtraCost = {
 	id: number;
@@ -578,35 +577,13 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 									</tbody>
 								</table>
 							</div>
-							{variance.pageCount > 1 && (
-								<nav
-									className="report-variance-pagination"
-									aria-label="Phân trang báo cáo chênh lệch"
-								>
-									<button
-										type="button"
-										title="Trang trước"
-										aria-label="Trang trước"
-										disabled={variance.page <= 1}
-										onClick={() => setCarrierPage(variance.page - 1)}
-									>
-										<ChevronLeft size={16} />
-									</button>
-									<span>
-										Trang {variance.page}/{variance.pageCount} ·{" "}
-										{variance.summary.entries} phiếu
-									</span>
-									<button
-										type="button"
-										title="Trang sau"
-										aria-label="Trang sau"
-										disabled={variance.page >= variance.pageCount}
-										onClick={() => setCarrierPage(variance.page + 1)}
-									>
-										<ChevronRight size={16} />
-									</button>
-								</nav>
-							)}
+							<Pagination
+								label="Phân trang báo cáo chênh lệch"
+								page={variance.page}
+								pageCount={variance.pageCount}
+								onPageChange={setCarrierPage}
+								summary={`${variance.summary.entries} phiếu`}
+							/>
 						</>
 					) : (
 						<EmptyState>Không có phiếu chênh lệch cước phù hợp.</EmptyState>

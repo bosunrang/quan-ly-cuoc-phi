@@ -1,10 +1,4 @@
-import {
-	ChevronLeft,
-	ChevronRight,
-	History,
-	Search,
-	Trash2,
-} from "lucide-react";
+import { History, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	type AuditEntry,
@@ -26,6 +20,7 @@ import { Dialog } from "../../shared/ui/Dialog";
 import { EmptyState, LoadingState, PanelHeader } from "../../shared/ui/Panel";
 import { StatusPill } from "../../shared/ui/StatusPill";
 import "./audit.css";
+import { Pagination } from "../../shared/ui/Pagination";
 
 const PAGE_SIZE = 50;
 const defaultCleanupDate = () => {
@@ -456,33 +451,13 @@ export function AuditPage({ isAdmin }: { isAdmin: boolean }) {
 								</tbody>
 							</table>
 						</div>
-						{pageCount > 1 && (
-							<div className="audit-pagination">
-								<button
-									type="button"
-									className="button secondary"
-									title="Trang trước"
-									aria-label="Trang trước"
-									disabled={loading || page === 1}
-									onClick={() => setPage((current) => current - 1)}
-								>
-									<ChevronLeft size={16} />
-								</button>
-								<span>
-									Trang {page} / {pageCount}
-								</span>
-								<button
-									type="button"
-									className="button secondary"
-									title="Trang sau"
-									aria-label="Trang sau"
-									disabled={loading || page === pageCount}
-									onClick={() => setPage((current) => current + 1)}
-								>
-									<ChevronRight size={16} />
-								</button>
-							</div>
-						)}
+						<Pagination
+							label="Phân trang nhật ký"
+							page={page}
+							pageCount={pageCount}
+							onPageChange={setPage}
+							disabled={loading}
+						/>
 					</>
 				)}
 			</section>

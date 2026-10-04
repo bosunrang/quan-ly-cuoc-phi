@@ -1,7 +1,5 @@
 import {
 	CalendarDays,
-	ChevronLeft,
-	ChevronRight,
 	Download,
 	Fuel,
 	MapPin,
@@ -15,6 +13,7 @@ import { Alert } from "../../shared/ui/Alert";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
 import { EmptyState, LoadingState, PanelHeader } from "../../shared/ui/Panel";
 import "./reports.css";
+import { Pagination } from "../../shared/ui/Pagination";
 
 const monthStart = () => `${todayIso().slice(0, 7)}-01`;
 const HISTORY_PAGE_SIZE = 20;
@@ -288,33 +287,12 @@ export function FuelPriceReportPage() {
 								</tbody>
 							</table>
 						</div>
-						{historyPageCount > 1 && (
-							<footer className="fuel-price-report-pagination">
-								<button
-									type="button"
-									className="button secondary"
-									title="Trang trước"
-									aria-label="Trang trước"
-									disabled={historyPage === 1}
-									onClick={() => setHistoryPage((page) => page - 1)}
-								>
-									<ChevronLeft size={16} />
-								</button>
-								<span>
-									Trang {historyPage} / {historyPageCount}
-								</span>
-								<button
-									type="button"
-									className="button secondary"
-									title="Trang sau"
-									aria-label="Trang sau"
-									disabled={historyPage === historyPageCount}
-									onClick={() => setHistoryPage((page) => page + 1)}
-								>
-									<ChevronRight size={16} />
-								</button>
-							</footer>
-						)}
+						<Pagination
+							label="Phân trang báo cáo tiền xăng"
+							page={historyPage}
+							pageCount={historyPageCount}
+							onPageChange={setHistoryPage}
+						/>
 					</>
 				) : (
 					<EmptyState>

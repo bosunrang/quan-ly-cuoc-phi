@@ -70,9 +70,6 @@
 .fuel-history-panel { min-height: 0; }
 .fuel-history-filter { width: 230px; min-width: 230px; margin-left: auto; }
 .fuel-history-filter select { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text-body); font: inherit; font-size: var(--type-meta); font-weight: 400; }
-.fuel-history-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line-soft); background: var(--surface-subtle); }
-.fuel-history-pagination .button { width: 32px; min-width: 32px; height: 32px; padding: 0; }
-.fuel-history-pagination > span { min-width: 68px; color: var(--text-subtle); font-size: var(--type-caption); font-weight: 700; text-align: center; }
 .fuel-section-icon { display: grid; flex: 0 0 auto; width: 38px; height: 38px; place-items: center; border-radius: 10px; background: var(--teal-soft); color: var(--teal); }
 .fuel-section-title { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .fuel-section-title > div { position: relative; top: 2px; min-width: 0; }

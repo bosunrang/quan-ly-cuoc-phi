@@ -226,36 +226,6 @@
 .carrier-assigned-list .carrier-rate-button { color: var(--teal); }
 .carrier-empty { margin: 30px 9px; color: var(--muted); text-align: center; font-size: var(--type-body-sm); }
 
-.carrier-pagination,
-.carrier-customer-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 10px 8px;
-  color: var(--muted);
-  font-size: var(--type-caption);
-  font-weight: 650;
-}
-.carrier-customer-pagination { padding-right: 12px; }
-.carrier-pagination button,
-.carrier-customer-pagination button {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  place-items: center;
-  background: var(--panel);
-  color: var(--teal);
-  cursor: pointer;
-}
-.carrier-pagination button:hover:not(:disabled),
-.carrier-customer-pagination button:hover:not(:disabled) { border-color: var(--teal-border); background: var(--surface-accent-faint); }
-.carrier-pagination button:disabled,
-.carrier-customer-pagination button:disabled { opacity: .4; cursor: not-allowed; }
-
 .carrier-detail-dialog { width: min(720px, 100%); }
 .carrier-detail-dialog .dialog-footer { justify-content: space-between; }
 .carrier-detail-dialog .dialog-footer .button { display: flex; align-items: center; gap: 6px; }

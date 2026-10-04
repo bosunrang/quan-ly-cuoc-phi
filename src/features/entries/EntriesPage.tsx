@@ -1,6 +1,4 @@
 import {
-	ChevronLeft,
-	ChevronRight,
 	Pencil,
 	Plus,
 	Search,
@@ -27,6 +25,7 @@ import { useDebouncedValue } from "../../shared/lib/useDebouncedValue";
 import { Alert } from "../../shared/ui/Alert";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
+import { Pagination } from "../../shared/ui/Pagination";
 import { EmptyState, LoadingState } from "../../shared/ui/Panel";
 import { StatusPill } from "../../shared/ui/StatusPill";
 import { EntryDialog } from "./components/EntryDialog";
@@ -368,37 +367,12 @@ export function EntriesPage() {
 								</tbody>
 							</table>
 						</div>
-						{pageCount > 1 && (
-							<nav
-								className="entry-pagination"
-								aria-label="Phân trang phiếu cước"
-							>
-								<button
-									type="button"
-									title="Trang trước"
-									aria-label="Trang trước"
-									disabled={page === 1}
-									onClick={() => setPage((current) => Math.max(1, current - 1))}
-								>
-									<ChevronLeft size={16} />
-								</button>
-								<span>
-									Trang {page}/{pageCount}
-								</span>
-								<button
-									type="button"
-									className="button secondary"
-									title="Trang sau"
-									aria-label="Trang sau"
-									disabled={page === pageCount}
-									onClick={() =>
-										setPage((current) => Math.min(pageCount, current + 1))
-									}
-								>
-									<ChevronRight size={16} />
-								</button>
-							</nav>
-						)}
+						<Pagination
+							label="Phân trang phiếu cước"
+							page={page}
+							pageCount={pageCount}
+							onPageChange={setPage}
+						/>
 					</>
 				)}
 			</section>
