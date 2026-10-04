@@ -1,6 +1,8 @@
 import {
 	ArrowDownRight,
 	ArrowUpRight,
+	ChevronLeft,
+	ChevronRight,
 	Download,
 	FileSpreadsheet,
 	Plus,
@@ -60,22 +62,6 @@ const download = ({
 	window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 };
 
-function summarizeCarrierVariance(items: CarrierVarianceReport["items"]) {
-	return items.reduce(
-		(summary, item) => {
-			if (item.difference > 0) {
-				summary.overEntries += 1;
-				summary.overAmount += item.difference;
-			} else {
-				summary.underEntries += 1;
-				summary.underAmount += Math.abs(item.difference);
-			}
-			return summary;
-		},
-		{ overEntries: 0, overAmount: 0, underEntries: 0, underAmount: 0 },
-	);
-}
-
 export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	const [from, setFrom] = useState(() =>
 		savedReportDate(REPORT_FROM_DRAFT_KEY),
@@ -85,6 +71,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	const [carrierFrom, setCarrierFrom] = useState("");
 	const [carrierTo, setCarrierTo] = useState("");
 	const [carrierEmployeeId, setCarrierEmployeeId] = useState("");
+	const [carrierPage, setCarrierPage] = useState(1);
 	const [dailyEmployeeId, setDailyEmployeeId] = useState("");
 	const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([
 		{ id: 1, name: "", amount: "", employeeId: "" },
@@ -114,7 +101,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 		// Đổi ngày liên tục: bỏ kết quả của yêu cầu cũ về muộn.
 		let current = true;
 		void reportRepository
-			.carrierVariance(carrierFrom, carrierTo, carrierEmployeeId)
+			.carrierVariance(carrierFrom, carrierTo, carrierEmployeeId, carrierPage)
 			.then((result) => {
 				if (current) setVariance(result);
 			})
@@ -129,7 +116,7 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 		return () => {
 			current = false;
 		};
-	}, [carrierEmployeeId, carrierFrom, carrierTo, section]);
+	}, [carrierEmployeeId, carrierFrom, carrierPage, carrierTo, section]);
 
 	const reportFilters = () => {
 		const ownEmployeeId = String(data?.employees[0]?.id ?? "");
@@ -269,9 +256,12 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	const selectedDailyEmployeeId = reportData.canReportAll
 		? dailyEmployeeId
 		: ownEmployeeId;
-	const carrierSummary = variance
-		? summarizeCarrierVariance(variance.items)
-		: null;
+	const carrierSummary = variance?.summary ?? null;
+	// Đổi bộ lọc thì quay về trang đầu của kết quả mới.
+	const changeCarrierFilter = (apply: () => void) => {
+		setCarrierPage(1);
+		apply();
+	};
 	return (
 		<>
 			{error && <Alert tone="error">{error}</Alert>}
@@ -497,7 +487,11 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 								<span>Nhân viên</span>
 								<select
 									value={carrierEmployeeId}
-									onChange={(event) => setCarrierEmployeeId(event.target.value)}
+									onChange={(event) =>
+										changeCarrierFilter(() =>
+											setCarrierEmployeeId(event.target.value),
+										)
+									}
 								>
 									<option value="">Tất cả nhân viên</option>
 									{variance?.employees.map((employee) => (
@@ -512,7 +506,9 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 								<DateInput
 									value={carrierFrom}
 									ariaLabel="Từ ngày báo cáo nhà xe"
-									onChange={setCarrierFrom}
+									onChange={(value) =>
+										changeCarrierFilter(() => setCarrierFrom(value))
+									}
 								/>
 							</div>
 							<div className="field">
@@ -520,63 +516,98 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 								<DateInput
 									value={carrierTo}
 									ariaLabel="Đến ngày báo cáo nhà xe"
-									onChange={setCarrierTo}
+									onChange={(value) =>
+										changeCarrierFilter(() => setCarrierTo(value))
+									}
 								/>
 							</div>
 						</div>
 					</div>
 					{variance?.items.length ? (
-						<div className="table-scroll report-variance-table">
-							<table>
-								<colgroup>
-									<col className="variance-col-date" />
-									<col className="variance-col-employee" />
-									<col className="variance-col-carrier" />
-									<col className="variance-col-customer" />
-									<col className="variance-col-province" />
-									<col className="variance-col-spec" />
-									<col className="variance-col-money" />
-									<col className="variance-col-money" />
-									<col className="variance-col-money" />
-									<col className="variance-col-note" />
-								</colgroup>
-								<thead>
-									<tr>
-										<th>Ngày</th>
-										<th>Nhân viên</th>
-										<th>Nhà xe</th>
-										<th>Khách hàng</th>
-										<th>Tỉnh/TP</th>
-										<th>Quy cách</th>
-										<th>Giá thiết lập</th>
-										<th>Giá nhập</th>
-										<th>Chênh lệch</th>
-										<th>Ghi chú</th>
-									</tr>
-								</thead>
-								<tbody>
-									{variance.items.map((item) => (
-										<tr key={item.id}>
-											<td>{formatDate(item.entryDate)}</td>
-											<td>{item.employeeName || "—"}</td>
-											<td>{item.carrier}</td>
-											<td title={item.customer}>{item.customer}</td>
-											<td>{item.provinceCity || "—"}</td>
-											<td>{item.spec}</td>
-											<td>{formatMoney(item.standardFee)} đ</td>
-											<td>{formatMoney(item.actualFee)} đ</td>
-											<td
-												className={item.difference > 0 ? "is-over" : "is-under"}
-											>
-												{item.difference > 0 ? "+" : ""}
-												{formatMoney(item.difference)} đ
-											</td>
-											<td>{item.varianceNote || "—"}</td>
+						<>
+							<div className="table-scroll report-variance-table">
+								<table>
+									<colgroup>
+										<col className="variance-col-date" />
+										<col className="variance-col-employee" />
+										<col className="variance-col-carrier" />
+										<col className="variance-col-customer" />
+										<col className="variance-col-province" />
+										<col className="variance-col-spec" />
+										<col className="variance-col-money" />
+										<col className="variance-col-money" />
+										<col className="variance-col-money" />
+										<col className="variance-col-note" />
+									</colgroup>
+									<thead>
+										<tr>
+											<th>Ngày</th>
+											<th>Nhân viên</th>
+											<th>Nhà xe</th>
+											<th>Khách hàng</th>
+											<th>Tỉnh/TP</th>
+											<th>Quy cách</th>
+											<th>Giá thiết lập</th>
+											<th>Giá nhập</th>
+											<th>Chênh lệch</th>
+											<th>Ghi chú</th>
 										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
+									</thead>
+									<tbody>
+										{variance.items.map((item) => (
+											<tr key={item.id}>
+												<td>{formatDate(item.entryDate)}</td>
+												<td>{item.employeeName || "—"}</td>
+												<td>{item.carrier}</td>
+												<td title={item.customer}>{item.customer}</td>
+												<td>{item.provinceCity || "—"}</td>
+												<td>{item.spec}</td>
+												<td>{formatMoney(item.standardFee)} đ</td>
+												<td>{formatMoney(item.actualFee)} đ</td>
+												<td
+													className={
+														item.difference > 0 ? "is-over" : "is-under"
+													}
+												>
+													{item.difference > 0 ? "+" : ""}
+													{formatMoney(item.difference)} đ
+												</td>
+												<td>{item.varianceNote || "—"}</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+							{variance.pageCount > 1 && (
+								<nav
+									className="report-variance-pagination"
+									aria-label="Phân trang báo cáo chênh lệch"
+								>
+									<button
+										type="button"
+										title="Trang trước"
+										aria-label="Trang trước"
+										disabled={variance.page <= 1}
+										onClick={() => setCarrierPage(variance.page - 1)}
+									>
+										<ChevronLeft size={16} />
+									</button>
+									<span>
+										Trang {variance.page}/{variance.pageCount} ·{" "}
+										{variance.summary.entries} phiếu
+									</span>
+									<button
+										type="button"
+										title="Trang sau"
+										aria-label="Trang sau"
+										disabled={variance.page >= variance.pageCount}
+										onClick={() => setCarrierPage(variance.page + 1)}
+									>
+										<ChevronRight size={16} />
+									</button>
+								</nav>
+							)}
+						</>
 					) : (
 						<EmptyState>Không có phiếu chênh lệch cước phù hợp.</EmptyState>
 					)}

@@ -265,7 +265,10 @@ function reportData(db, input) {
   return { entries, fuels, fuelLegsByRecordId, employees, company };
 }
 
-function carrierVariance(db, input) {
+/** Nguồn dữ liệu chung của báo cáo chênh lệch: phiếu có cước khác giá thiết lập. */
+const CARRIER_VARIANCE_PAGE_SIZE = 50;
+
+function carrierVarianceSource(input) {
   const where = ['e.transport_fee <> r.transport_fee'];
   const params = [];
   if (!input.all) {
@@ -273,17 +276,8 @@ function carrierVariance(db, input) {
     params.push(input.from, input.to);
   }
   if (input.employeeId) { where.push('e.employee_id = ?'); params.push(input.employeeId); }
-  return db.prepare(
-    `SELECT e.id, e.entry_date, em.full_name AS employee_name,
-       ca.name AS carrier, cu.customer_name AS customer,
-       COALESCE((
-         SELECT province_city FROM misa_rows
-          WHERE customer_key = cu.customer_key AND province_city <> ''
-          ORDER BY document_date DESC, id DESC LIMIT 1
-       ), '') AS province_city, e.spec,
-       r.transport_fee AS standard_fee, e.transport_fee AS actual_fee,
-       e.transport_fee - r.transport_fee AS difference, e.rate_variance_note
-     FROM entries e
+  return {
+    sql: `FROM entries e
      LEFT JOIN employees em ON em.id = e.employee_id
      INNER JOIN customers cu ON cu.id = e.customer_id
      INNER JOIN carriers ca ON ca.id = e.carrier_id
@@ -294,9 +288,38 @@ function carrierVariance(db, input) {
         ORDER BY is_default ASC, id
         LIMIT 1
      )
-     WHERE ${where.join(' AND ')}
-     ORDER BY ca.name COLLATE NOCASE, cu.customer_name COLLATE NOCASE, e.entry_date ASC, e.id ASC`,
-  ).all(...params).map((row) => ({
+     WHERE ${where.join(' AND ')}`,
+    params,
+  };
+}
+
+/**
+ * Các dòng chênh lệch, sắp theo nhà xe → khách hàng → ngày. Có `page` thì chỉ
+ * lấy một trang; tỉnh/thành (tra trong MISA) chỉ tính cho các dòng của trang đó.
+ */
+function carrierVariance(db, input, page = null) {
+  const source = carrierVarianceSource(input);
+  const paging = page ? 'LIMIT ? OFFSET ?' : '';
+  return db.prepare(
+    `WITH rows AS MATERIALIZED (
+       SELECT e.id, e.entry_date, em.full_name AS employee_name,
+         ca.name AS carrier, cu.customer_name AS customer, cu.customer_key,
+         e.spec, r.transport_fee AS standard_fee, e.transport_fee AS actual_fee,
+         e.transport_fee - r.transport_fee AS difference, e.rate_variance_note,
+         ROW_NUMBER() OVER (
+           ORDER BY ca.name COLLATE NOCASE, cu.customer_name COLLATE NOCASE, e.entry_date ASC, e.id ASC
+         ) AS position
+       ${source.sql}
+       ORDER BY position
+       ${paging}
+     )
+     SELECT rows.*, COALESCE((
+         SELECT province_city FROM misa_rows
+          WHERE misa_rows.customer_key = rows.customer_key AND province_city <> ''
+          ORDER BY document_date DESC, id DESC LIMIT 1
+       ), '') AS province_city
+       FROM rows ORDER BY position`,
+  ).all(...source.params, ...(page ? [page.limit, page.offset] : [])).map((row) => ({
     id: Number(row.id), employeeName: row.employee_name || '',
     carrier: row.carrier, customer: row.customer,
     entryDate: row.entry_date,
@@ -305,6 +328,30 @@ function carrierVariance(db, input) {
     standardFee: Number(row.standard_fee), difference: Number(row.difference),
     varianceNote: entryVarianceNote(row),
   }));
+}
+
+/** Số liệu tổng hợp trên toàn bộ kết quả lọc, không phụ thuộc trang đang xem. */
+function carrierVarianceSummary(db, input) {
+  const source = carrierVarianceSource(input);
+  const row = db.prepare(
+    `SELECT COUNT(*) AS entries,
+       COALESCE(SUM(e.transport_fee - r.transport_fee), 0) AS difference,
+       COALESCE(SUM(e.transport_fee > r.transport_fee), 0) AS over_entries,
+       COALESCE(SUM(CASE WHEN e.transport_fee > r.transport_fee
+         THEN e.transport_fee - r.transport_fee ELSE 0 END), 0) AS over_amount,
+       COALESCE(SUM(e.transport_fee < r.transport_fee), 0) AS under_entries,
+       COALESCE(SUM(CASE WHEN e.transport_fee < r.transport_fee
+         THEN r.transport_fee - e.transport_fee ELSE 0 END), 0) AS under_amount
+     ${source.sql}`,
+  ).get(...source.params);
+  return {
+    entries: Number(row.entries),
+    difference: Number(row.difference),
+    overEntries: Number(row.over_entries),
+    overAmount: Number(row.over_amount),
+    underEntries: Number(row.under_entries),
+    underAmount: Number(row.under_amount),
+  };
 }
 
 const formatDate = (value) => `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
@@ -1219,15 +1266,21 @@ function register(router) {
     c.requirePage(CARRIER_PAGE);
     if (!canSeeEveryone(c.user)) throw badRequest('Bạn không có quyền xem báo cáo tổng hợp.');
     const input = filters(c.query, true);
-    const items = carrierVariance(c.db, input);
+    // Phân trang để bảng không phải hiển thị hàng nghìn dòng một lúc; số liệu
+    // tổng hợp vẫn tính trên toàn bộ kết quả. Xuất Excel vẫn đủ mọi dòng.
+    const summary = carrierVarianceSummary(c.db, input);
+    const pageSize = Math.min(Math.max(Number(c.query.pageSize) || CARRIER_VARIANCE_PAGE_SIZE, 1), 500);
+    const pageCount = Math.max(1, Math.ceil(summary.entries / pageSize));
+    const page = Math.min(Math.max(Number(c.query.page) || 1, 1), pageCount);
+    const items = carrierVariance(c.db, input, { limit: pageSize, offset: (page - 1) * pageSize });
     const employees = c.db.prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE').all();
     return {
       employees: employees.map((item) => ({ id: item.id, fullName: item.full_name })),
       items,
-      summary: {
-        entries: items.length,
-        difference: items.reduce((sum, item) => sum + item.difference, 0),
-      },
+      summary,
+      page,
+      pageCount,
+      pageSize,
     };
   });
   router.get('/api/reports/carrier-variance/export', async (c) => {

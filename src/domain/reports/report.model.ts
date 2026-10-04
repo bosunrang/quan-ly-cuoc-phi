@@ -51,7 +51,18 @@ export interface CarrierVarianceReport {
 		difference: number;
 		varianceNote: string;
 	}>;
-	summary: { entries: number; difference: number };
+	/** Tính trên toàn bộ kết quả lọc, không chỉ trang đang xem. */
+	summary: {
+		entries: number;
+		difference: number;
+		overEntries: number;
+		overAmount: number;
+		underEntries: number;
+		underAmount: number;
+	};
+	page: number;
+	pageCount: number;
+	pageSize: number;
 }
 
 export interface FuelHistoryReport {

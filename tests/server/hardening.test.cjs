@@ -435,3 +435,48 @@ test('khôi phục Admin trên máy chính bị giới hạn số lần thử sa
   assert.equal(blocked.status, 400);
   assert.match((await blocked.json()).error, /Sai quá nhiều lần/);
 });
+
+test('báo cáo chênh lệch nhà xe phân trang, số liệu tổng hợp tính trên toàn bộ', async () => {
+  const me = await call('POST', '/api/login', { body: { username: 'admin', password: 'MatKhauAdmin456' } });
+  const token = me.data.token;
+  const customer = await call('POST', '/api/customers', { token, body: { customerName: 'Khách Phân Trang' } });
+  const carrier = await call('POST', '/api/carriers', { token, body: { name: 'Xe Phân Trang' } });
+  await call('PATCH', `/api/carriers/${carrier.data.id}/customers`, { token, body: { customerIds: [customer.data.id] } });
+  await call('POST', `/api/carriers/${carrier.data.id}/customers/${customer.data.id}/rates`, {
+    token,
+    body: { isDefault: true, transportFee: 100000, gateFee: 0, note: '' },
+  });
+  // 55 phiếu cao hơn giá thiết lập 1.000 đ và 5 phiếu thấp hơn 2.000 đ.
+  for (let index = 0; index < 60; index += 1) {
+    const over = index < 55;
+    const created = await call('POST', '/api/entries', {
+      token,
+      body: {
+        entryDate: '2026-11-02', customer: 'Khách Phân Trang', customerId: customer.data.id,
+        carrier: 'Xe Phân Trang', carrierId: carrier.data.id, spec: 'Tất cả',
+        transportFee: over ? 101000 : 98000, rateVarianceNote: over ? 'Phụ phí' : '',
+        note: `Hàng ${index}`, billStatus: 'Có bill', employeeId,
+      },
+    });
+    assert.equal(created.status, 200);
+  }
+  const range = 'from=2026-11-01&to=2026-11-30';
+  const first = await call('GET', `/api/reports/carrier-variance?${range}`, { token });
+  assert.equal(first.status, 200);
+  assert.equal(first.data.items.length, 50);
+  assert.equal(first.data.pageCount, 2);
+  assert.deepEqual(first.data.summary, {
+    entries: 60, difference: 55_000 - 10_000,
+    overEntries: 55, overAmount: 55_000, underEntries: 5, underAmount: 10_000,
+  });
+  const second = await call('GET', `/api/reports/carrier-variance?${range}&page=2`, { token });
+  assert.equal(second.data.items.length, 10);
+  const ids = new Set([...first.data.items, ...second.data.items].map((item) => item.id));
+  assert.equal(ids.size, 60, 'hai trang không trùng và không sót dòng');
+
+  // Xuất Excel vẫn đủ mọi dòng, không bị giới hạn theo trang.
+  const exported = await call('GET', `/api/reports/carrier-variance/export?${range}`, { token });
+  assert.equal(exported.status, 200);
+  const audit = await call('GET', '/api/audit?limit=1', { token });
+  assert.equal(audit.data.items[0].detail.rows, 60);
+});

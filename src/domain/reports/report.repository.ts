@@ -77,8 +77,10 @@ export const reportRepository = {
 		from: string,
 		to: string,
 		employeeId = "",
+		page = 1,
 	): Promise<CarrierVarianceReport> => {
 		const query = carrierVarianceQuery(from, to, employeeId);
+		query.set("page", String(page));
 		return api("GET", `/api/reports/carrier-variance?${query}`);
 	},
 	exportCarrierVariance: (
