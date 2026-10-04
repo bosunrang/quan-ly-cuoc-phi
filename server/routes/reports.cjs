@@ -474,7 +474,8 @@ function set(ws, cell, value, style) {
   ws[cell] = { t: type, v: value, s: style };
 }
 function merge(ws, range) {
-  (ws['!merges'] ??= []).push(XLSX.utils.decode_range(range));
+  ws['!merges'] ??= [];
+  ws['!merges'].push(XLSX.utils.decode_range(range));
 }
 function wrappedTextLineCount(value, columnWidth) {
   const charactersPerLine = Math.max(8, Math.floor(columnWidth - 2));
@@ -819,7 +820,7 @@ function dailyDetailRows(deliveries, fuels) {
       }
     });
     if (!dayRows.length) dayRows.push({ delivery: null, fuelLeg: null, fuelLegSpan: 1 });
-    dayRows.forEach((row, index) =>
+    dayRows.forEach((row, index) => {
       rows.push({
         ...row,
         fuelRow: index === 0 ? fuelRow : null,
@@ -827,8 +828,8 @@ function dailyDetailRows(deliveries, fuels) {
         dayNumber: index === 0 ? firstDelivery.dayNumber : null,
         entryDate: index === 0 ? firstDelivery.entryDate : null,
         daySpan: index === 0 ? dayRows.length : null,
-      }),
-    );
+      });
+    });
   }
   remainingFuels.forEach((fuelRow) => {
     const legs = fuelRow.legs?.length
@@ -841,7 +842,7 @@ function dailyDetailRows(deliveries, fuels) {
             extraCosts: fuelRow.extraCosts || [],
           },
         ];
-    legs.forEach((fuelLeg, index) =>
+    legs.forEach((fuelLeg, index) => {
       rows.push({
         delivery: null,
         fuelLeg,
@@ -849,8 +850,8 @@ function dailyDetailRows(deliveries, fuels) {
         fuelRow: index === 0 ? fuelRow : null,
         fuelSpan: legs.length,
         daySpan: null,
-      }),
-    );
+      });
+    });
   });
   return rows.length ? rows : [{ delivery: null, fuelRow: null, fuelSpan: 1 }];
 }
@@ -933,9 +934,9 @@ function dailySheet(data, input, employee, extras) {
   merge(ws, 'A8:R8');
   set(ws, 'A9', `Nhân viên phụ trách: ${employee.full_name}`, companyInfo);
   merge(ws, 'A9:R9');
-  DAILY_REPORT_HEADERS.forEach((value, index) =>
-    set(ws, XLSX.utils.encode_cell({ r: 10, c: index }), value, dailyHeading),
-  );
+  DAILY_REPORT_HEADERS.forEach((value, index) => {
+    set(ws, XLSX.utils.encode_cell({ r: 10, c: index }), value, dailyHeading);
+  });
 
   const detailRows = details.length;
   const detailStartRow = 12;
@@ -1218,9 +1219,9 @@ function dailySummarySheet(data, input, employees, extras) {
     'Tiền xăng',
     'Chi phí khác',
     'Tổng cộng',
-  ].forEach((value, index) =>
-    set(ws, XLSX.utils.encode_cell({ r: 9, c: index }), value, summaryHeading),
-  );
+  ].forEach((value, index) => {
+    set(ws, XLSX.utils.encode_cell({ r: 9, c: index }), value, summaryHeading);
+  });
   rows.forEach((row, index) => {
     const values = [
       index + 1,
@@ -1231,14 +1232,14 @@ function dailySummarySheet(data, input, employees, extras) {
       row.other + row.fuelOther + row.extra,
       row.totalPayment,
     ];
-    values.forEach((value, column) =>
+    values.forEach((value, column) => {
       set(
         ws,
         XLSX.utils.encode_cell({ r: 10 + index, c: column }),
         value,
         column === 0 ? summaryCentered : column === 1 ? summaryBaseStyle : summaryMoney,
-      ),
-    );
+      );
+    });
   });
   const totalRow = 10 + rows.length;
   const totals = rows.reduce(
@@ -1258,11 +1259,13 @@ function dailySummarySheet(data, input, employees, extras) {
   set(ws, XLSX.utils.encode_cell({ r: totalRow, c: 0 }), 'TỔNG CỘNG', totalStyle);
   set(ws, XLSX.utils.encode_cell({ r: totalRow, c: 1 }), '', totalStyle);
   merge(ws, `A${totalRow + 1}:B${totalRow + 1}`);
-  [totals.transport, totals.gate, totals.fuel, totals.extra, totals.total].forEach((value, index) =>
-    set(ws, XLSX.utils.encode_cell({ r: totalRow, c: index + 2 }), value, {
-      ...summaryMoney,
-      font: { name: 'Times New Roman', sz: 12, bold: true },
-    }),
+  [totals.transport, totals.gate, totals.fuel, totals.extra, totals.total].forEach(
+    (value, index) => {
+      set(ws, XLSX.utils.encode_cell({ r: totalRow, c: index + 2 }), value, {
+        ...summaryMoney,
+        font: { name: 'Times New Roman', sz: 12, bold: true },
+      });
+    },
   );
   const grandTotalRow = totalRow + 2;
   set(ws, XLSX.utils.encode_cell({ r: grandTotalRow, c: 4 }), 'TỔNG THANH TOÁN', totalStyle);
@@ -1275,21 +1278,6 @@ function dailySummarySheet(data, input, employees, extras) {
   ws['!rows'] = [{ hpt: 18 }, { hpt: 18 }, {}, { hpt: 24 }];
   ws['!ref'] = `A1:G${grandTotalRow + 1}`;
   return ws;
-}
-
-function fuelDetailItems(data, employeeId) {
-  return data.fuels
-    .filter((fuel) => fuel.employee_id === employeeId)
-    .map((fuel) => ({
-      id: Number(fuel.id),
-      periodFrom: fuel.period_from,
-      periodTo: fuel.period_to,
-      distanceKm: Number(fuel.distance_km),
-      vehicleType: fuel.vehicle_type || '',
-      fuelPrice: Number(fuel.fuel_price),
-      totalFee: Number(fuel.total_fee),
-      legs: data.fuelLegsByRecordId.get(fuel.id) || [],
-    }));
 }
 
 function fuelHistorySheet(items, input, employeeName, company) {
@@ -1344,7 +1332,9 @@ function fuelHistorySheet(items, input, employeeName, company) {
   set(ws, 'A5', `Địa chỉ: ${company.company_address || ''}`, metaStyle);
   set(ws, 'A6', `Nhân viên: ${employeeName}`, metaStyle);
   ['STT', 'Kỳ tính', 'Điểm đi', 'Điểm đến', 'Phương tiện', 'Km', 'Giá xăng', 'Tổng tiền'].forEach(
-    (value, index) => set(ws, XLSX.utils.encode_cell({ r: 7, c: index }), value, headerStyle),
+    (value, index) => {
+      set(ws, XLSX.utils.encode_cell({ r: 7, c: index }), value, headerStyle);
+    },
   );
 
   let row = 8;
@@ -1464,7 +1454,7 @@ function fuelHistorySheet(items, input, employeeName, company) {
 function uniqueSheetName(name, used) {
   const base =
     String(name || 'Chưa gán nhân viên')
-      .replace(/[\\/?*\[\]:]/g, ' ')
+      .replace(/[\\/?*[\]:]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 31) || 'Chưa gán nhân viên';
@@ -1537,7 +1527,9 @@ function carrierVarianceSheet(items, input) {
     'Giá nhập',
     'Chênh lệch',
     'Ghi chú',
-  ].forEach((value, index) => set(ws, XLSX.utils.encode_cell({ r: 3, c: index }), value, heading));
+  ].forEach((value, index) => {
+    set(ws, XLSX.utils.encode_cell({ r: 3, c: index }), value, heading);
+  });
   items.forEach((item, index) => {
     const values = [
       index + 1,
@@ -1552,7 +1544,7 @@ function carrierVarianceSheet(items, input) {
       item.difference,
       item.varianceNote,
     ];
-    values.forEach((value, column) =>
+    values.forEach((value, column) => {
       set(
         ws,
         XLSX.utils.encode_cell({ r: 4 + index, c: column }),
@@ -1562,8 +1554,8 @@ function carrierVarianceSheet(items, input) {
           : [7, 8, 9].includes(column)
             ? money
             : baseStyle,
-      ),
-    );
+      );
+    });
   });
   const totalRow = 4 + items.length;
   const totalDifference = items.reduce((sum, item) => sum + item.difference, 0);
