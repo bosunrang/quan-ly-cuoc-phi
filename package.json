@@ -16,7 +16,7 @@
     "server:winbio": "node server/start.cjs --company=winbio",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
-    "lint": "biome check src tests vite.config.ts vitest.config.ts --error-on-warnings",
+    "lint": "biome check src tests server electron tools vite.config.ts vitest.config.ts --error-on-warnings",
     "check:server": "node --check electron/main.cjs && node --check electron/preload.cjs && node --check electron/setup-preload.cjs && node --check server/start.cjs && node --check server/index.cjs && node --check server/http.cjs && node --check server/auth.cjs && node --check server/automatic-backup.cjs",
     "test": "vitest run",
     "test:server": "node --test tests/server/automatic-backup.test.cjs tests/server/security.test.cjs tests/server/foundation.test.cjs tests/server/fuel.calculation.test.cjs tests/server/fuel.records.test.cjs tests/server/fuel.routes.test.cjs tests/server/fuel.online-prices.test.cjs tests/server/report-window.test.cjs tests/server/hardening.test.cjs tests/server/automatic-restore.test.cjs tests/server/file-log.test.cjs",

@@ -85,18 +85,16 @@ function readEntryInput(body) {
  * Vẫn cho phép lưu khi có giải trình, không xét danh sách mặt hàng.
  */
 function ensureDuplicateReason(db, input, excludedEntryId = 0) {
-  const duplicate = db.prepare(
-    `SELECT id FROM entries
+  const duplicate = db
+    .prepare(
+      `SELECT id FROM entries
       WHERE entry_date = ?
         AND customer_key = ?
         AND id <> ?
       ORDER BY id DESC
       LIMIT 1`,
-  ).get(
-    input.entryDate,
-    normalizeSearchText(input.customer),
-    excludedEntryId,
-  );
+    )
+    .get(input.entryDate, normalizeSearchText(input.customer), excludedEntryId);
   if (!duplicate) {
     input.duplicateReason = '';
     return;
@@ -115,9 +113,9 @@ function ensureStaffDuplicateReason(db, user, input, excludedEntryId = 0) {
 
 function readEmployeeId(db, user, value) {
   if (!canSeeEveryone(user)) {
-    const employee = db.prepare(
-      'SELECT id FROM employees WHERE user_id = ? AND is_active = 1',
-    ).get(user.id);
+    const employee = db
+      .prepare('SELECT id FROM employees WHERE user_id = ? AND is_active = 1')
+      .get(user.id);
     if (!employee) {
       throw badRequest('Tài khoản này chưa được liên kết với nhân viên đang hoạt động.');
     }
@@ -135,9 +133,12 @@ function readEmployeeId(db, user, value) {
 
 function customerForEntry(db, body, customerName) {
   const requestedId = Number(body.customerId);
-  const customer = Number.isInteger(requestedId) && requestedId > 0
-    ? db.prepare('SELECT * FROM customers WHERE id = ?').get(requestedId)
-    : db.prepare('SELECT * FROM customers WHERE customer_key = ?').get(normalizeSearchText(customerName));
+  const customer =
+    Number.isInteger(requestedId) && requestedId > 0
+      ? db.prepare('SELECT * FROM customers WHERE id = ?').get(requestedId)
+      : db
+          .prepare('SELECT * FROM customers WHERE customer_key = ?')
+          .get(normalizeSearchText(customerName));
   if (!customer) return null;
   if (normalizeSearchText(customer.customer_name) !== normalizeSearchText(customerName)) {
     throw badRequest('Khách hàng không khớp với dữ liệu đã chọn.');
@@ -148,9 +149,12 @@ function customerForEntry(db, body, customerName) {
 /** Nhà xe của phiếu: theo mã đã chọn trên form, hoặc theo tên khi chưa có mã. */
 function carrierForEntry(db, body, carrierName) {
   const requestedId = Number(body.carrierId);
-  const carrier = Number.isInteger(requestedId) && requestedId > 0
-    ? db.prepare('SELECT id, name FROM carriers WHERE id = ?').get(requestedId)
-    : db.prepare('SELECT id, name FROM carriers WHERE carrier_key = ?').get(normalizeSearchText(carrierName));
+  const carrier =
+    Number.isInteger(requestedId) && requestedId > 0
+      ? db.prepare('SELECT id, name FROM carriers WHERE id = ?').get(requestedId)
+      : db
+          .prepare('SELECT id, name FROM carriers WHERE carrier_key = ?')
+          .get(normalizeSearchText(carrierName));
   if (!carrier) return null;
   if (normalizeSearchText(carrier.name) !== normalizeSearchText(carrierName)) {
     throw badRequest('Nhà xe không khớp với dữ liệu đã chọn.');
@@ -164,22 +168,26 @@ function standardTransportRate(db, body, input) {
   const carrier = carrierForEntry(db, body, input.carrier);
   if (!carrier) return null;
   const specKey = normalizeSearchText(input.spec);
-  return db.prepare(
-    `SELECT transport_fee
+  return (
+    db
+      .prepare(
+        `SELECT transport_fee
        FROM carrier_customer_rates
       WHERE customer_id = ? AND carrier_id = ?
         AND (spec_key = ? OR is_default = 1)
       ORDER BY CASE WHEN spec_key = ? THEN 0 ELSE 1 END, id
       LIMIT 1`,
-  ).get(customer.id, carrier.id, specKey, specKey) ?? null;
+      )
+      .get(customer.id, carrier.id, specKey, specKey) ?? null
+  );
 }
 
 function ensureVarianceReason(db, body, input) {
-	// Khi người dùng chủ động lưu lại bảng cước, mức vừa nhập sẽ trở thành giá chuẩn.
-	if (body.saveCarrierRate === true) {
-		input.rateVarianceNote = '';
-		return;
-	}
+  // Khi người dùng chủ động lưu lại bảng cước, mức vừa nhập sẽ trở thành giá chuẩn.
+  if (body.saveCarrierRate === true) {
+    input.rateVarianceNote = '';
+    return;
+  }
   const rate = standardTransportRate(db, body, input);
   if (!rate) return;
   if (input.transportFee <= Number(rate.transport_fee)) {
@@ -209,15 +217,17 @@ function ensureStaffUsesConfiguredRate(db, user, body, input) {
     throw badRequest('Vui lòng chọn khách hàng và nhà xe có bảng cước đã thiết lập.');
   }
   const specKey = normalizeSearchText(input.spec);
-  const configuredRate = db.prepare(
-    `SELECT 1 FROM carrier_customer_rates rate
+  const configuredRate = db
+    .prepare(
+      `SELECT 1 FROM carrier_customer_rates rate
        INNER JOIN carrier_customers assignment
          ON assignment.customer_id = rate.customer_id
         AND assignment.carrier_id = rate.carrier_id
       WHERE rate.customer_id = ? AND rate.carrier_id = ?
         AND (rate.spec_key = ? OR (rate.is_default = 1 AND ? = 'tat ca'))
       LIMIT 1`,
-  ).get(customer.id, carrier.id, specKey, specKey);
+    )
+    .get(customer.id, carrier.id, specKey, specKey);
   if (!configuredRate) {
     throw badRequest('Quy cách chưa được quản trị viên thiết lập cho khách hàng và nhà xe này.');
   }
@@ -231,10 +241,12 @@ function saveCarrierRate(db, user, customerId, carrierId, input, at) {
   const isDefault = normalizeSearchText(input.spec) === 'tat ca';
   const spec = isDefault ? 'Tất cả' : input.spec;
   const specKey = isDefault ? DEFAULT_SPEC_KEY : normalizeSearchText(spec);
-  const before = db.prepare(
-    `SELECT * FROM carrier_customer_rates
+  const before = db
+    .prepare(
+      `SELECT * FROM carrier_customer_rates
       WHERE carrier_id = ? AND customer_id = ? AND spec_key = ?`,
-  ).get(carrierId, customerId, specKey);
+    )
+    .get(carrierId, customerId, specKey);
   db.prepare(
     `INSERT INTO carrier_customer_rates
        (carrier_id, customer_id, spec, spec_key, is_default, transport_fee, gate_fee, note, created_at, updated_at)
@@ -246,13 +258,22 @@ function saveCarrierRate(db, user, customerId, carrierId, input, at) {
        gate_fee = excluded.gate_fee,
        updated_at = excluded.updated_at`,
   ).run(
-    carrierId, customerId, spec, specKey, Number(isDefault),
-    input.transportFee, input.gateFee, at, at,
+    carrierId,
+    customerId,
+    spec,
+    specKey,
+    Number(isDefault),
+    input.transportFee,
+    input.gateFee,
+    at,
+    at,
   );
-  const rate = db.prepare(
-    `SELECT * FROM carrier_customer_rates
+  const rate = db
+    .prepare(
+      `SELECT * FROM carrier_customer_rates
       WHERE carrier_id = ? AND customer_id = ? AND spec_key = ?`,
-  ).get(carrierId, customerId, specKey);
+    )
+    .get(carrierId, customerId, specKey);
   writeAudit(
     db,
     user,
@@ -294,13 +315,16 @@ function syncCustomerDelivery(db, user, body, input, at) {
   const carrier = ensureCustomerCarrier(db, customer.id, input.carrier, at);
 
   const recipients = appendRecipient(customer.recipient, input.recipient);
-  db.prepare(
-    `UPDATE customers SET recipient = ?, updated_at = ? WHERE id = ?`,
-  ).run(recipients, at, customer.id);
+  db.prepare(`UPDATE customers SET recipient = ?, updated_at = ? WHERE id = ?`).run(
+    recipients,
+    at,
+    customer.id,
+  );
   const carriers = refreshCustomerCarrier(db, customer.id, at);
-  const rate = body.saveCarrierRate === true && carrier
-    ? saveCarrierRate(db, user, customer.id, carrier.id, input, at)
-    : null;
+  const rate =
+    body.saveCarrierRate === true && carrier
+      ? saveCarrierRate(db, user, customer.id, carrier.id, input, at)
+      : null;
   return { customerId: customer.id, carrierId: carrier?.id ?? null, carriers, recipients, rate };
 }
 
@@ -340,9 +364,8 @@ function toApi(row, user) {
     spec: row.spec,
     ticketFee: row.ticket_fee,
     transportFee: row.transport_fee,
-    standardTransportFee: row.standard_transport_fee == null
-      ? null
-      : Number(row.standard_transport_fee),
+    standardTransportFee:
+      row.standard_transport_fee == null ? null : Number(row.standard_transport_fee),
     gateFee: row.gate_fee,
     otherFeeName: row.other_fee_name,
     otherFee: row.other_fee,
@@ -404,9 +427,9 @@ function register(router) {
     // Nhân viên xem mọi phiếu được giao cho hồ sơ nhân viên của mình, kể cả
     // phiếu do Admin nhập hộ. Quyền sửa/xóa vẫn chỉ dựa vào người tạo phiếu.
     if (!canSeeEveryone(c.user)) {
-      const employee = c.db.prepare(
-        'SELECT id FROM employees WHERE user_id = ? AND is_active = 1',
-      ).get(c.user.id);
+      const employee = c.db
+        .prepare('SELECT id FROM employees WHERE user_id = ? AND is_active = 1')
+        .get(c.user.id);
       where.push('e.employee_id = ?');
       params.push(employee?.id ?? -1);
     } else if (c.query.createdBy) {
@@ -452,7 +475,7 @@ function register(router) {
     // dòng bị OFFSET bỏ qua không phải tính cột con.
     const rows = c.db
       .prepare(
-      `WITH page AS MATERIALIZED (
+        `WITH page AS MATERIALIZED (
          SELECT e.id FROM entries e
           WHERE ${clause}
           ORDER BY e.entry_date DESC, e.id DESC
@@ -500,20 +523,23 @@ function register(router) {
     ) {
       return { duplicate: false };
     }
-    const duplicate = c.db.prepare(
-      `SELECT 1 FROM entries
+    const duplicate = c.db
+      .prepare(
+        `SELECT 1 FROM entries
         WHERE entry_date = ?
           AND customer_key = ?
           AND id <> ?
         LIMIT 1`,
-    ).get(entryDate, normalizeSearchText(customer), excludedEntryId);
+      )
+      .get(entryDate, normalizeSearchText(customer), excludedEntryId);
     return { duplicate: Boolean(duplicate) };
   });
 
   router.get('/api/entries/form-options', async (c) => {
     c.requirePage(PAGE);
-    const customers = c.db.prepare(
-      `SELECT customers.id, customers.customer_name,
+    const customers = c.db
+      .prepare(
+        `SELECT customers.id, customers.customer_name,
               COALESCE(NULLIF(customers.customer_code, ''), (
                 SELECT customer_code FROM misa_rows
                  WHERE misa_rows.customer_key = customers.customer_key
@@ -538,18 +564,23 @@ function register(router) {
               ) AS province_city
          FROM customers
         ORDER BY customers.customer_name COLLATE NOCASE, customers.id`,
-    ).all();
-    const employees = c.db.prepare(
-      `SELECT employees.id, employees.user_id, employees.full_name
+      )
+      .all();
+    const employees = c.db
+      .prepare(
+        `SELECT employees.id, employees.user_id, employees.full_name
        FROM employees
        WHERE employees.is_active = 1
        ORDER BY employees.full_name COLLATE NOCASE, employees.id`,
-    ).all();
-    const carriers = c.db.prepare(
-      `SELECT id, name FROM carriers
+      )
+      .all();
+    const carriers = c.db
+      .prepare(
+        `SELECT id, name FROM carriers
        WHERE is_active = 1
        ORDER BY name COLLATE NOCASE, id`,
-    ).all();
+      )
+      .all();
     return {
       currentUserId: c.user.id,
       currentUserName: c.user.full_name,
@@ -572,14 +603,16 @@ function register(router) {
     const customerId = Number(c.query.customerId);
     const customer = c.db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
     if (!customer) throw notFound('Không tìm thấy khách hàng.');
-    const carriers = c.db.prepare(
-      `SELECT carriers.id, carriers.name
+    const carriers = c.db
+      .prepare(
+        `SELECT carriers.id, carriers.name
        FROM carrier_customers INNER JOIN carriers ON carriers.id = carrier_customers.carrier_id
        WHERE carrier_customers.customer_id = ? AND carriers.is_active = 1
        ORDER BY carriers.name COLLATE NOCASE, carriers.id`,
-    ).all(customer.id);
-    const preferred = carriers.find((carrier) =>
-      normalizeSearchText(carrier.name) === normalizeSearchText(customer.carrier),
+      )
+      .all(customer.id);
+    const preferred = carriers.find(
+      (carrier) => normalizeSearchText(carrier.name) === normalizeSearchText(customer.carrier),
     );
     return {
       customer: {
@@ -589,7 +622,7 @@ function register(router) {
         address: customer.address,
       },
       carriers,
-	  recipients: recipientList(customer.recipient),
+      recipients: recipientList(customer.recipient),
       defaultCarrierId: preferred?.id ?? (carriers.length === 1 ? carriers[0].id : null),
     };
   });
@@ -599,23 +632,24 @@ function register(router) {
     const customerId = Number(c.query.customerId);
     const endDate = String(c.query.endDate ?? '').trim();
     if (!isIsoDate(endDate)) throw badRequest('Ngày gửi không hợp lệ.');
-    const customer = c.db.prepare(
-      'SELECT customer_name, customer_code FROM customers WHERE id = ?',
-    ).get(customerId);
+    const customer = c.db
+      .prepare('SELECT customer_name, customer_code FROM customers WHERE id = ?')
+      .get(customerId);
     if (!customer) throw notFound('Không tìm thấy khách hàng.');
-    const readRowsBy = (column, value) => c.db.prepare(
-      `SELECT document_date, product_name, SUM(quantity_sold) AS quantity
+    const readRowsBy = (column, value) =>
+      c.db
+        .prepare(
+          `SELECT document_date, product_name, SUM(quantity_sold) AS quantity
        FROM misa_rows
        WHERE document_date BETWEEN ? AND ? AND ${column} = ? COLLATE NOCASE
          AND vn_normalize(product_name) <> 'nhiet ke'
        GROUP BY document_date, product_name
        ORDER BY document_date DESC, product_name COLLATE NOCASE`,
-    ).all(dateOffset(endDate, -19), endDate, value);
+        )
+        .all(dateOffset(endDate, -19), endDate, value);
     // Mã khách hàng là khóa liên kết ổn định với MISA. Chỉ quay về
     // so khớp tên cho dữ liệu cũ/chưa có mã, hoặc khi mã chưa tồn tại trong MISA.
-    let rows = customer.customer_code
-      ? readRowsBy('customer_code', customer.customer_code)
-      : [];
+    let rows = customer.customer_code ? readRowsBy('customer_code', customer.customer_code) : [];
     if (!rows.length) {
       rows = readRowsBy('customer_key', normalizeSearchText(customer.customer_name));
     }
@@ -632,7 +666,9 @@ function register(router) {
         documentCode,
         items,
         totalQuantity: items.reduce((total, item) => total + item.quantity, 0),
-        note: items.map((item) => `${formatQuantity(item.quantity)} ${shortProductName(item.productName)}`).join(' + '),
+        note: items
+          .map((item) => `${formatQuantity(item.quantity)} ${shortProductName(item.productName)}`)
+          .join(' + '),
       })),
     };
   });
@@ -641,33 +677,41 @@ function register(router) {
     c.requirePage(PAGE);
     const customerId = Number(c.query.customerId);
     const carrierId = Number(c.query.carrierId);
-    const assigned = c.db.prepare(
-      'SELECT 1 FROM carrier_customers WHERE carrier_id = ? AND customer_id = ?',
-    ).get(carrierId, customerId);
+    const assigned = c.db
+      .prepare('SELECT 1 FROM carrier_customers WHERE carrier_id = ? AND customer_id = ?')
+      .get(carrierId, customerId);
     if (!assigned) throw badRequest('Nhà xe chưa được gán cho khách hàng này.');
-    const rows = c.db.prepare(
-      `SELECT id, spec, is_default, transport_fee, gate_fee, note
+    const rows = c.db
+      .prepare(
+        `SELECT id, spec, is_default, transport_fee, gate_fee, note
        FROM carrier_customer_rates WHERE carrier_id = ? AND customer_id = ?
        ORDER BY is_default ASC, spec COLLATE NOCASE, id`,
-    ).all(carrierId, customerId);
-    return { items: rows.map((row) => ({
-      id: row.id, spec: row.spec, isDefault: Boolean(row.is_default),
-      transportFee: row.transport_fee, gateFee: row.gate_fee, note: row.note,
-    })) };
+      )
+      .all(carrierId, customerId);
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        spec: row.spec,
+        isDefault: Boolean(row.is_default),
+        transportFee: row.transport_fee,
+        gateFee: row.gate_fee,
+        note: row.note,
+      })),
+    };
   });
 
   router.post('/api/entries', async (c) => {
     c.requirePage(PAGE);
-	ensureCarrierRateSavingPermission(c.user, c.body);
+    ensureCarrierRateSavingPermission(c.user, c.body);
     const input = readEntryInput(c.body);
     const employeeId = readEmployeeId(c.db, c.user, c.body.employeeId);
-	ensureStaffUsesConfiguredRate(c.db, c.user, c.body, input);
+    ensureStaffUsesConfiguredRate(c.db, c.user, c.body, input);
     ensureVarianceReason(c.db, c.body, input);
     const at = new Date().toISOString();
 
     return transaction(c.db, () => {
-		ensureStaffDuplicateReason(c.db, c.user, input);
-		const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, at);
+      ensureStaffDuplicateReason(c.db, c.user, input);
+      const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, at);
       const catalog = catalogIdsForEntry(c.db, c.body, input, delivery);
       const result = c.db
         .prepare(
@@ -703,7 +747,7 @@ function register(router) {
           at,
         );
       const id = Number(result.lastInsertRowid);
-		writeAudit(c.db, c.user, 'entry.create', 'entry', id, { ...input, employeeId, delivery });
+      writeAudit(c.db, c.user, 'entry.create', 'entry', id, { ...input, employeeId, delivery });
       const row = c.db
         .prepare(
           `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name,
@@ -718,17 +762,17 @@ function register(router) {
 
   router.patch('/api/entries/:id', async (c) => {
     c.requirePage(PAGE);
-	ensureCarrierRateSavingPermission(c.user, c.body);
+    ensureCarrierRateSavingPermission(c.user, c.body);
     const before = loadOwned(c.db, c.user, Number(c.params.id));
     const input = readEntryInput(c.body);
-	ensureStaffUsesConfiguredRate(c.db, c.user, c.body, input);
+    ensureStaffUsesConfiguredRate(c.db, c.user, c.body, input);
     const employeeId = canSeeEveryone(c.user)
       ? readEmployeeId(c.db, c.user, c.body.employeeId)
       : before.employee_id;
     ensureVarianceReason(c.db, c.body, input);
     return transaction(c.db, () => {
-		ensureStaffDuplicateReason(c.db, c.user, input, before.id);
-		const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, new Date().toISOString());
+      ensureStaffDuplicateReason(c.db, c.user, input, before.id);
+      const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, new Date().toISOString());
       const catalog = catalogIdsForEntry(c.db, c.body, input, delivery);
       c.db
         .prepare(
@@ -766,7 +810,7 @@ function register(router) {
       writeAudit(c.db, c.user, 'entry.update', 'entry', before.id, {
         before: toApi(before, c.user),
         after: input,
-		delivery,
+        delivery,
       });
       const row = c.db
         .prepare(

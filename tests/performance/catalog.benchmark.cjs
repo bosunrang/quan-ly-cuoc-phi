@@ -44,9 +44,7 @@ function seedCatalog(db) {
        (username, password_hash, password_salt, full_name, is_admin, is_active, created_at, updated_at)
      VALUES (?, 'benchmark', 'benchmark', ?, 0, 1, ?, ?)`,
   );
-  const insertPage = db.prepare(
-    'INSERT INTO user_pages (user_id, page_key) VALUES (?, ?)',
-  );
+  const insertPage = db.prepare('INSERT INTO user_pages (user_id, page_key) VALUES (?, ?)');
   const insertEmployee = db.prepare(
     `INSERT INTO employees
        (full_name, address, user_id, is_active, search_text, created_at, updated_at)
@@ -81,7 +79,7 @@ function seedCatalog(db) {
       const userId = index <= USER_COUNT ? index + 1 : null;
       insertEmployee.run(
         `Nhân viên ${index}`,
-		`Địa chỉ ${index % 20}`,
+        `Địa chỉ ${index % 20}`,
         userId,
         `nhan vien ${index} khu vuc ${index % 20}`,
         at,
@@ -154,7 +152,12 @@ async function main() {
     const profile = await prepareSeededAdmin(baseUrl, app.seeded);
     const measurements = await Promise.all([
       measure(baseUrl, profile.token, 'Khách hàng: trang 50', '/api/customers?page=1&limit=50'),
-      measure(baseUrl, profile.token, 'Khách hàng: tìm kiếm', '/api/customers?search=khach%20hang%201200&page=1&limit=50'),
+      measure(
+        baseUrl,
+        profile.token,
+        'Khách hàng: tìm kiếm',
+        '/api/customers?search=khach%20hang%201200&page=1&limit=50',
+      ),
       measure(baseUrl, profile.token, 'Nhà xe', '/api/carriers'),
       measure(baseUrl, profile.token, 'Nhân viên', '/api/employees?search=nhan%20vien'),
       measure(baseUrl, profile.token, 'Tài khoản và quyền', '/api/users'),

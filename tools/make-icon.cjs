@@ -52,8 +52,7 @@ function pixel(x, y) {
       Math.abs(y - (boxTop + boxBottom) / 2) < stroke * 0.7) &&
     x > boxLeft - stroke &&
     x < boxRight + stroke;
-  const onSeam =
-    Math.abs(x - cx) < stroke * 0.7 && y > boxTop && y < (boxTop + boxBottom) / 2;
+  const onSeam = Math.abs(x - cx) < stroke * 0.7 && y > boxTop && y < (boxTop + boxBottom) / 2;
 
   return onVertical || onHorizontal || onSeam ? FG : BG;
 }

@@ -34,9 +34,7 @@ function companyFromArgs(args = process.argv) {
 }
 
 function databaseFileName(profile) {
-  return profile.usesLegacyDataDirectory
-    ? 'cost-app.sqlite'
-    : `cost-app-${profile.id}.sqlite`;
+  return profile.usesLegacyDataDirectory ? 'cost-app.sqlite' : `cost-app-${profile.id}.sqlite`;
 }
 
 module.exports = {

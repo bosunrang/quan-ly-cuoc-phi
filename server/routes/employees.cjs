@@ -65,20 +65,24 @@ function register(router) {
   router.get('/api/employees', async (c) => {
     c.requirePage(PAGE);
     const search = normalizeSearchText(String(c.query.search ?? '').slice(0, 150));
-    const rows = c.db.prepare(
-      `SELECT employees.*, users.username
+    const rows = c.db
+      .prepare(
+        `SELECT employees.*, users.username
        FROM employees
        LEFT JOIN users ON users.id = employees.user_id
        WHERE employees.search_text LIKE ?
        ORDER BY employees.is_active DESC, employees.full_name COLLATE NOCASE, employees.id`,
-    ).all(`%${search}%`);
-    const summary = c.db.prepare(
-      `SELECT COUNT(*) AS count,
+      )
+      .all(`%${search}%`);
+    const summary = c.db
+      .prepare(
+        `SELECT COUNT(*) AS count,
               SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active_count,
               SUM(CASE WHEN user_id IS NOT NULL THEN 1 ELSE 0 END) AS linked_user_count,
               SUM(CASE WHEN address <> '' THEN 1 ELSE 0 END) AS address_count
        FROM employees`,
-    ).get();
+      )
+      .get();
     return {
       items: rows.map(toApi),
       count: Number(summary.count),
@@ -94,9 +98,19 @@ function register(router) {
     const at = new Date().toISOString();
     return transaction(c.db, () => {
       ensureUser(c.db, input.userId);
-      const result = c.db.prepare(
-        'INSERT INTO employees (full_name, address, user_id, is_active, search_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).run(input.fullName, input.address, input.userId, Number(input.isActive), input.searchText, at, at);
+      const result = c.db
+        .prepare(
+          'INSERT INTO employees (full_name, address, user_id, is_active, search_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          input.fullName,
+          input.address,
+          input.userId,
+          Number(input.isActive),
+          input.searchText,
+          at,
+          at,
+        );
       const row = load(c.db, Number(result.lastInsertRowid));
       writeAudit(c.db, c.user, 'employee.create', 'employee', row.id, toApi(row));
       return toApi(row);
@@ -109,11 +123,24 @@ function register(router) {
     const input = readInput(c.body);
     return transaction(c.db, () => {
       ensureUser(c.db, input.userId, before.id);
-      c.db.prepare(
-        'UPDATE employees SET full_name = ?, address = ?, user_id = ?, is_active = ?, search_text = ?, updated_at = ? WHERE id = ?',
-      ).run(input.fullName, input.address, input.userId, Number(input.isActive), input.searchText, new Date().toISOString(), before.id);
+      c.db
+        .prepare(
+          'UPDATE employees SET full_name = ?, address = ?, user_id = ?, is_active = ?, search_text = ?, updated_at = ? WHERE id = ?',
+        )
+        .run(
+          input.fullName,
+          input.address,
+          input.userId,
+          Number(input.isActive),
+          input.searchText,
+          new Date().toISOString(),
+          before.id,
+        );
       const after = load(c.db, before.id);
-      writeAudit(c.db, c.user, 'employee.update', 'employee', before.id, { before: toApi(before), after: toApi(after) });
+      writeAudit(c.db, c.user, 'employee.update', 'employee', before.id, {
+        before: toApi(before),
+        after: toApi(after),
+      });
       return toApi(after);
     });
   });
@@ -121,11 +148,13 @@ function register(router) {
   router.delete('/api/employees/:id', async (c) => {
     c.requirePage(PAGE);
     const row = load(c.db, Number(c.params.id));
-    const references = c.db.prepare(
-      `SELECT
+    const references = c.db
+      .prepare(
+        `SELECT
         (SELECT COUNT(*) FROM entries WHERE employee_id = ?) +
         (SELECT COUNT(*) FROM fuel_records WHERE employee_id = ?) AS count`,
-    ).get(row.id, row.id);
+      )
+      .get(row.id, row.id);
     if (Number(references.count) > 0) {
       throw badRequest(
         'Nhân viên này đã có phiếu cước hoặc lịch sử tính xăng. Hãy khóa nhân viên để giữ lịch sử.',

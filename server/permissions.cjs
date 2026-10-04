@@ -120,15 +120,11 @@ function isValidPageKey(key) {
  */
 function pagesForUser(db, user) {
   if (user.is_admin) return PAGES.map((page) => page.key);
-  const rows = db
-    .prepare('SELECT page_key FROM user_pages WHERE user_id = ?')
-    .all(user.id);
+  const rows = db.prepare('SELECT page_key FROM user_pages WHERE user_id = ?').all(user.id);
   // Lọc lại theo registry: thẻ đã gỡ khỏi app thì không còn hiệu lực.
   return rows
     .map((row) => row.page_key)
-    .filter(
-      (key) => PAGE_KEYS.has(key) && !PAGES.find((p) => p.key === key).adminOnly,
-    );
+    .filter((key) => PAGE_KEYS.has(key) && !PAGES.find((p) => p.key === key).adminOnly);
 }
 
 function canAccess(pages, key) {

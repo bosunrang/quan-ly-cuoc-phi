@@ -126,7 +126,9 @@ async function main() {
       { endpoint: 'MISA lọc tỉnh', milliseconds: byProvince.milliseconds },
       { endpoint: 'MISA tìm kiếm FTS', milliseconds: searched.milliseconds },
     ]);
-    console.log(`Dataset: ${TOTAL_ROWS.toLocaleString('vi-VN')} dòng / ${MONTH_COUNT} tháng; tạo dữ liệu: ${seedMilliseconds} ms.`);
+    console.log(
+      `Dataset: ${TOTAL_ROWS.toLocaleString('vi-VN')} dòng / ${MONTH_COUNT} tháng; tạo dữ liệu: ${seedMilliseconds} ms.`,
+    );
   } finally {
     await app.close();
     rmSync(workDir, { recursive: true, force: true });

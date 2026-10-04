@@ -13,7 +13,12 @@ test('đọc giá xăng từ dữ liệu Petrolimex chính thức', async () => 
       ok: true,
       json: async () => ({
         Objects: [
-          { Title: 'Xăng E10 RON 95-III', Zone1Price: 20_220, Zone2Price: 20_620, LastModified: '2026-09-17T08:00:00Z' },
+          {
+            Title: 'Xăng E10 RON 95-III',
+            Zone1Price: 20_220,
+            Zone2Price: 20_620,
+            LastModified: '2026-09-17T08:00:00Z',
+          },
           { Title: 'Dầu Diesel', Zone1Price: 0, Zone2Price: 0 },
         ],
       }),

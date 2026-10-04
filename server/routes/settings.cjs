@@ -15,18 +15,196 @@ const PAGE = 'settings';
 const MAX_LOGO_LENGTH = 1_500_000;
 
 const BACKUP_TABLES = {
-  settings: { table: 'app_settings', columns: ['id', 'company_name', 'company_address', 'display_name', 'tagline', 'logo_data_url', 'motorcycle_consumption_liters', 'motorcycle_base_km', 'truck_consumption_liters', 'truck_base_km', 'updated_at'] },
-  misa: { table: 'misa_rows', columns: ['id', 'document_date', 'customer_name', 'address', 'quantity_sold', 'province_city', 'source_key', 'source_file', 'imported_by', 'imported_at', 'product_name', 'document_code', 'customer_key', 'customer_code'] },
-  customers: { table: 'customers', columns: ['id', 'customer_name', 'customer_code', 'carrier', 'recipient', 'address', 'customer_key', 'search_text', 'created_at', 'updated_at'] },
-  carriers: { table: 'carriers', columns: ['id', 'name', 'contact', 'phone', 'address', 'delivery_point', 'is_active', 'carrier_key', 'created_at', 'updated_at', 'schedule', 'note'] },
-  carrierCustomers: { table: 'carrier_customers', columns: ['carrier_id', 'customer_id', 'assigned_at'] },
-  carrierRates: { table: 'carrier_customer_rates', columns: ['id', 'carrier_id', 'customer_id', 'spec', 'spec_key', 'is_default', 'transport_fee', 'gate_fee', 'note', 'created_at', 'updated_at'] },
-  employees: { table: 'employees', columns: ['id', 'full_name', 'user_id', 'is_active', 'search_text', 'created_at', 'updated_at', 'address'] },
-  entries: { table: 'entries', columns: ['id', 'entry_date', 'customer', 'carrier', 'recipient', 'address', 'spec', 'ticket_fee', 'transport_fee', 'gate_fee', 'other_fee_name', 'other_fee', 'note', 'general_note', 'created_by', 'created_at', 'updated_at', 'misa_document_date', 'misa_document_code', 'employee_id', 'rate_variance_note', 'duplicate_reason', 'bill_status', 'customer_id', 'carrier_id'] },
-  fuelPrices: { table: 'fuel_prices', columns: ['id', 'effective_date', 'fuel_type', 'region', 'price', 'source', 'created_by', 'created_at', 'updated_at'] },
-  fuelRecords: { table: 'fuel_records', columns: ['id', 'entry_date', 'employee_id', 'distance_km', 'consumption_liters', 'consumption_base_km', 'fuel_type', 'region', 'vehicle_type', 'fuel_price', 'total_fee', 'extra_costs', 'note', 'created_by', 'created_at', 'period_from', 'period_to', 'updated_at', 'finalized_at', 'finalized_by', 'voided_at', 'voided_by', 'void_reason', 'status'] },
-  routeDistances: { table: 'route_distances', columns: ['id', 'from_name', 'to_name', 'from_key', 'to_key', 'distance_km', 'source', 'updated_at'] },
-  fuelLegs: { table: 'fuel_record_legs', columns: ['id', 'fuel_record_id', 'sequence_no', 'from_name', 'to_name', 'distance_km'] },
+  settings: {
+    table: 'app_settings',
+    columns: [
+      'id',
+      'company_name',
+      'company_address',
+      'display_name',
+      'tagline',
+      'logo_data_url',
+      'motorcycle_consumption_liters',
+      'motorcycle_base_km',
+      'truck_consumption_liters',
+      'truck_base_km',
+      'updated_at',
+    ],
+  },
+  misa: {
+    table: 'misa_rows',
+    columns: [
+      'id',
+      'document_date',
+      'customer_name',
+      'address',
+      'quantity_sold',
+      'province_city',
+      'source_key',
+      'source_file',
+      'imported_by',
+      'imported_at',
+      'product_name',
+      'document_code',
+      'customer_key',
+      'customer_code',
+    ],
+  },
+  customers: {
+    table: 'customers',
+    columns: [
+      'id',
+      'customer_name',
+      'customer_code',
+      'carrier',
+      'recipient',
+      'address',
+      'customer_key',
+      'search_text',
+      'created_at',
+      'updated_at',
+    ],
+  },
+  carriers: {
+    table: 'carriers',
+    columns: [
+      'id',
+      'name',
+      'contact',
+      'phone',
+      'address',
+      'delivery_point',
+      'is_active',
+      'carrier_key',
+      'created_at',
+      'updated_at',
+      'schedule',
+      'note',
+    ],
+  },
+  carrierCustomers: {
+    table: 'carrier_customers',
+    columns: ['carrier_id', 'customer_id', 'assigned_at'],
+  },
+  carrierRates: {
+    table: 'carrier_customer_rates',
+    columns: [
+      'id',
+      'carrier_id',
+      'customer_id',
+      'spec',
+      'spec_key',
+      'is_default',
+      'transport_fee',
+      'gate_fee',
+      'note',
+      'created_at',
+      'updated_at',
+    ],
+  },
+  employees: {
+    table: 'employees',
+    columns: [
+      'id',
+      'full_name',
+      'user_id',
+      'is_active',
+      'search_text',
+      'created_at',
+      'updated_at',
+      'address',
+    ],
+  },
+  entries: {
+    table: 'entries',
+    columns: [
+      'id',
+      'entry_date',
+      'customer',
+      'carrier',
+      'recipient',
+      'address',
+      'spec',
+      'ticket_fee',
+      'transport_fee',
+      'gate_fee',
+      'other_fee_name',
+      'other_fee',
+      'note',
+      'general_note',
+      'created_by',
+      'created_at',
+      'updated_at',
+      'misa_document_date',
+      'misa_document_code',
+      'employee_id',
+      'rate_variance_note',
+      'duplicate_reason',
+      'bill_status',
+      'customer_id',
+      'carrier_id',
+    ],
+  },
+  fuelPrices: {
+    table: 'fuel_prices',
+    columns: [
+      'id',
+      'effective_date',
+      'fuel_type',
+      'region',
+      'price',
+      'source',
+      'created_by',
+      'created_at',
+      'updated_at',
+    ],
+  },
+  fuelRecords: {
+    table: 'fuel_records',
+    columns: [
+      'id',
+      'entry_date',
+      'employee_id',
+      'distance_km',
+      'consumption_liters',
+      'consumption_base_km',
+      'fuel_type',
+      'region',
+      'vehicle_type',
+      'fuel_price',
+      'total_fee',
+      'extra_costs',
+      'note',
+      'created_by',
+      'created_at',
+      'period_from',
+      'period_to',
+      'updated_at',
+      'finalized_at',
+      'finalized_by',
+      'voided_at',
+      'voided_by',
+      'void_reason',
+      'status',
+    ],
+  },
+  routeDistances: {
+    table: 'route_distances',
+    columns: [
+      'id',
+      'from_name',
+      'to_name',
+      'from_key',
+      'to_key',
+      'distance_km',
+      'source',
+      'updated_at',
+    ],
+  },
+  fuelLegs: {
+    table: 'fuel_record_legs',
+    columns: ['id', 'fuel_record_id', 'sequence_no', 'from_name', 'to_name', 'distance_km'],
+  },
 };
 
 const GROUPS = {
@@ -39,8 +217,18 @@ const GROUPS = {
 };
 
 const CLEAR_ORDER = [
-  'fuelLegs', 'fuelRecords', 'fuelPrices', 'routeDistances', 'entries',
-  'carrierRates', 'carrierCustomers', 'carriers', 'customers', 'misa', 'employees', 'settings',
+  'fuelLegs',
+  'fuelRecords',
+  'fuelPrices',
+  'routeDistances',
+  'entries',
+  'carrierRates',
+  'carrierCustomers',
+  'carriers',
+  'customers',
+  'misa',
+  'employees',
+  'settings',
 ];
 
 function clearTables(db, names) {
@@ -54,9 +242,11 @@ function clearTables(db, names) {
  * cả việc bỏ trigger.
  */
 function withMisaSearchRebuild(db, work) {
-  const triggers = db.prepare(
-    "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'misa_rows'",
-  ).all();
+  const triggers = db
+    .prepare(
+      "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'misa_rows'",
+    )
+    .all();
   for (const trigger of triggers) db.exec(`DROP TRIGGER "${trigger.name}"`);
   const result = work();
   db.exec('DELETE FROM misa_search');
@@ -96,7 +286,8 @@ function importRows(db, name, rows, userId, knownUserIds) {
         value[column] = userId;
       }
     }
-    if (name === 'employees' && value.user_id !== null && !knownUserIds.has(Number(value.user_id))) value.user_id = null;
+    if (name === 'employees' && value.user_id !== null && !knownUserIds.has(Number(value.user_id)))
+      value.user_id = null;
     // Backup phiên bản 1 trước khi có ghi chú chênh lệch vẫn khôi phục được.
     if (name === 'entries') value.rate_variance_note ??= '';
     // Backup cũ chưa có ghi chú tự do vẫn khôi phục được.
@@ -127,7 +318,7 @@ function importRows(db, name, rows, userId, knownUserIds) {
       value.truck_base_km ??= 100;
     }
     if (name === 'fuelRecords') {
-	  value.extra_costs ??= '[]';
+      value.extra_costs ??= '[]';
       value.updated_at ??= value.created_at ?? new Date().toISOString();
       value.status ??= 'active';
       value.void_reason ??= '';
@@ -178,33 +369,59 @@ function restoreData(db, user, data, auditAction, auditDetail) {
   // Màn đăng nhập đọc dòng cài đặt id = 1; backup thiếu dòng này sẽ làm hỏng
   // giao diện, nên kiểm tra và áp cùng quy tắc như khi sửa cài đặt.
   const settingsRows = data.settings;
-  if (!Array.isArray(settingsRows) || settingsRows.length !== 1 || Number(settingsRows[0]?.id) !== 1) {
+  if (
+    !Array.isArray(settingsRows) ||
+    settingsRows.length !== 1 ||
+    Number(settingsRows[0]?.id) !== 1
+  ) {
     throw badRequest('Backup thiếu thông tin cài đặt của đơn vị.');
   }
   const restoredSettings = settingsRows[0];
   const normalized = {
     ...data,
-    settings: [{
-      ...restoredSettings,
-      company_name: text(restoredSettings.company_name, 'Tên doanh nghiệp', 200),
-      company_address: text(restoredSettings.company_address, 'Địa chỉ', 400),
-      display_name: text(restoredSettings.display_name, 'Tên hiển thị', 80),
-      tagline: text(restoredSettings.tagline, 'Dòng phụ', 120),
-      logo_data_url: logo(restoredSettings.logo_data_url),
-      updated_at: String(restoredSettings.updated_at || new Date().toISOString()),
-    }],
+    settings: [
+      {
+        ...restoredSettings,
+        company_name: text(restoredSettings.company_name, 'Tên doanh nghiệp', 200),
+        company_address: text(restoredSettings.company_address, 'Địa chỉ', 400),
+        display_name: text(restoredSettings.display_name, 'Tên hiển thị', 80),
+        tagline: text(restoredSettings.tagline, 'Dòng phụ', 120),
+        logo_data_url: logo(restoredSettings.logo_data_url),
+        updated_at: String(restoredSettings.updated_at || new Date().toISOString()),
+      },
+    ],
   };
 
-  const result = transaction(db, () => withMisaSearchRebuild(db, () => {
-    const knownUserIds = new Set(db.prepare('SELECT id FROM users').all().map((row) => Number(row.id)));
-    clearTables(db, CLEAR_ORDER);
-    for (const name of ['settings', 'customers', 'carriers', 'carrierCustomers', 'carrierRates', 'employees', 'misa', 'entries', 'fuelPrices', 'fuelRecords', 'routeDistances', 'fuelLegs']) {
-      importRows(db, name, normalized[name], user.id, knownUserIds);
-    }
-    linkEntriesToCatalog(db);
-    writeAudit(db, user, auditAction, 'backup', null, auditDetail);
-    return { restored: true };
-  }));
+  const result = transaction(db, () =>
+    withMisaSearchRebuild(db, () => {
+      const knownUserIds = new Set(
+        db
+          .prepare('SELECT id FROM users')
+          .all()
+          .map((row) => Number(row.id)),
+      );
+      clearTables(db, CLEAR_ORDER);
+      for (const name of [
+        'settings',
+        'customers',
+        'carriers',
+        'carrierCustomers',
+        'carrierRates',
+        'employees',
+        'misa',
+        'entries',
+        'fuelPrices',
+        'fuelRecords',
+        'routeDistances',
+        'fuelLegs',
+      ]) {
+        importRows(db, name, normalized[name], user.id, knownUserIds);
+      }
+      linkEntriesToCatalog(db);
+      writeAudit(db, user, auditAction, 'backup', null, auditDetail);
+      return { restored: true };
+    }),
+  );
   invalidateDefaultOverview(db);
   return result;
 }
@@ -243,39 +460,43 @@ function register(router) {
     toApi(c.db.prepare('SELECT * FROM app_settings WHERE id = 1').get()),
   );
 
-  router.patch('/api/settings', async (c) => {
-    c.requirePage(PAGE);
-    const settings = {
-      companyName: text(c.body.companyName, 'Tên doanh nghiệp', 200),
-      companyAddress: text(c.body.companyAddress, 'Địa chỉ', 400),
-      displayName: text(c.body.displayName, 'Tên hiển thị', 80),
-      tagline: text(c.body.tagline, 'Dòng phụ', 120),
-      logoDataUrl: logo(c.body.logoDataUrl),
-    };
+  router.patch(
+    '/api/settings',
+    async (c) => {
+      c.requirePage(PAGE);
+      const settings = {
+        companyName: text(c.body.companyName, 'Tên doanh nghiệp', 200),
+        companyAddress: text(c.body.companyAddress, 'Địa chỉ', 400),
+        displayName: text(c.body.displayName, 'Tên hiển thị', 80),
+        tagline: text(c.body.tagline, 'Dòng phụ', 120),
+        logoDataUrl: logo(c.body.logoDataUrl),
+      };
 
-    return transaction(c.db, () => {
-      c.db
-        .prepare(
-          `UPDATE app_settings SET
+      return transaction(c.db, () => {
+        c.db
+          .prepare(
+            `UPDATE app_settings SET
              company_name = ?, company_address = ?, display_name = ?,
              tagline = ?, logo_data_url = ?, updated_at = ?
            WHERE id = 1`,
-        )
-        .run(
-          settings.companyName,
-          settings.companyAddress,
-          settings.displayName,
-          settings.tagline,
-          settings.logoDataUrl,
-          new Date().toISOString(),
-        );
-      writeAudit(c.db, c.user, 'settings.update', 'settings', 1, {
-        ...settings,
-        logoDataUrl: settings.logoDataUrl ? '[image]' : null,
+          )
+          .run(
+            settings.companyName,
+            settings.companyAddress,
+            settings.displayName,
+            settings.tagline,
+            settings.logoDataUrl,
+            new Date().toISOString(),
+          );
+        writeAudit(c.db, c.user, 'settings.update', 'settings', 1, {
+          ...settings,
+          logoDataUrl: settings.logoDataUrl ? '[image]' : null,
+        });
+        return settings;
       });
-      return settings;
-    });
-  }, { page: PAGE, maxBodyBytes: 4 * 1024 * 1024 });
+    },
+    { page: PAGE, maxBodyBytes: 4 * 1024 * 1024 },
+  );
 
   // Mã chỉ hiện đúng một lần để người quản trị cất ở nơi an toàn.
   router.post('/api/settings/recovery-code', async (c) => {
@@ -283,14 +504,16 @@ function register(router) {
     const code = `NAVIVA-${randomBytes(9).toString('base64url')}`;
     const { hash, salt } = await auth.hashPassword(code);
     transaction(c.db, () => {
-      c.db.prepare(
-        `INSERT INTO admin_recovery_code (id, code_hash, code_salt, created_at)
+      c.db
+        .prepare(
+          `INSERT INTO admin_recovery_code (id, code_hash, code_salt, created_at)
          VALUES (1, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            code_hash = excluded.code_hash,
            code_salt = excluded.code_salt,
            created_at = excluded.created_at`,
-      ).run(hash, salt, new Date().toISOString());
+        )
+        .run(hash, salt, new Date().toISOString());
       writeAudit(c.db, c.user, 'settings.recovery_code_generate', 'security', 1);
     });
     return { code };
@@ -306,25 +529,29 @@ function register(router) {
     };
   });
 
-  router.post('/api/settings/backup/restore', async (c) => {
-    c.requirePage(PAGE);
-    const backup = c.body.backup;
-    if (!backup || typeof backup !== 'object' || Array.isArray(backup)) {
-      throw badRequest('Tệp backup không hợp lệ.');
-    }
-    if (backup.format !== 'cuocphi-backup' || backup.version !== 1 || !backup.data) {
-      throw badRequest('Tệp này không phải backup tương thích của Cước phí.');
-    }
-    const data = backup.data;
-    if (!data || typeof data !== 'object' || Array.isArray(data)) {
-      throw badRequest('Dữ liệu backup không hợp lệ.');
-    }
-    const safety = await safetyBackup(c);
-    return restoreData(c.db, c.user, data, 'settings.backup_restore', {
-      createdAt: backup.createdAt ?? null,
-      safetyBackup: safety,
-    });
-  }, { page: PAGE, maxBodyBytes: RESTORE_MAX_BODY_BYTES });
+  router.post(
+    '/api/settings/backup/restore',
+    async (c) => {
+      c.requirePage(PAGE);
+      const backup = c.body.backup;
+      if (!backup || typeof backup !== 'object' || Array.isArray(backup)) {
+        throw badRequest('Tệp backup không hợp lệ.');
+      }
+      if (backup.format !== 'cuocphi-backup' || backup.version !== 1 || !backup.data) {
+        throw badRequest('Tệp này không phải backup tương thích của Cước phí.');
+      }
+      const data = backup.data;
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw badRequest('Dữ liệu backup không hợp lệ.');
+      }
+      const safety = await safetyBackup(c);
+      return restoreData(c.db, c.user, data, 'settings.backup_restore', {
+        createdAt: backup.createdAt ?? null,
+        safetyBackup: safety,
+      });
+    },
+    { page: PAGE, maxBodyBytes: RESTORE_MAX_BODY_BYTES },
+  );
 
   // Bản sao lưu SQLite máy chủ tự tạo mỗi ngày (và trước mỗi lần khôi phục).
   router.get('/api/settings/automatic-backups', async (c) => {
@@ -341,8 +568,9 @@ function register(router) {
     // Chỉ nhận đúng tên file có trong danh sách, không bao giờ ghép đường dẫn
     // từ dữ liệu gửi lên.
     const fileName = String(c.body.fileName ?? '');
-    const item = listAutomaticBackups(c.backups.dbFile, c.backups.dir)
-      .find((candidate) => candidate.fileName === fileName);
+    const item = listAutomaticBackups(c.backups.dbFile, c.backups.dir).find(
+      (candidate) => candidate.fileName === fileName,
+    );
     if (!item) throw badRequest('Không tìm thấy bản sao lưu đã chọn.');
     const data = readSqliteBackup(join(c.backups.dir, item.fileName));
     const safety = await safetyBackup(c);
@@ -366,14 +594,21 @@ function register(router) {
       // xăng vẫn được giữ, nhưng không còn trỏ đến danh mục nhân viên đã xóa.
       if (selected.includes('employees')) {
         detachedEmployeeLinks.entries = Number(
-          c.db.prepare('UPDATE entries SET employee_id = NULL WHERE employee_id IS NOT NULL').run().changes,
+          c.db.prepare('UPDATE entries SET employee_id = NULL WHERE employee_id IS NOT NULL').run()
+            .changes,
         );
         detachedEmployeeLinks.fuelRecords = Number(
-          c.db.prepare('UPDATE fuel_records SET employee_id = NULL WHERE employee_id IS NOT NULL').run().changes,
+          c.db
+            .prepare('UPDATE fuel_records SET employee_id = NULL WHERE employee_id IS NOT NULL')
+            .run().changes,
         );
       }
       const tables = new Set(selected.flatMap((name) => GROUPS[name]));
-      const clear = () => clearTables(c.db, CLEAR_ORDER.filter((name) => tables.has(name)));
+      const clear = () =>
+        clearTables(
+          c.db,
+          CLEAR_ORDER.filter((name) => tables.has(name)),
+        );
       if (tables.has('misa')) withMisaSearchRebuild(c.db, clear);
       else clear();
       writeAudit(c.db, c.user, 'settings.data_delete', 'data', null, {

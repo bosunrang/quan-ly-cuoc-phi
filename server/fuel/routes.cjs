@@ -169,7 +169,11 @@ async function estimateRoute({ db, from, to, vietmapApiKey }) {
     .prepare('SELECT distance_km FROM route_distances WHERE from_key = ? AND to_key = ?')
     .get(toKey, fromKey);
   if (reverseSaved) {
-    return { km: reverseSaved.distance_km, source: 'Chặng ngược đã lưu trong ứng dụng', estimated: false };
+    return {
+      km: reverseSaved.distance_km,
+      source: 'Chặng ngược đã lưu trong ứng dụng',
+      estimated: false,
+    };
   }
   if (!vietmapApiKey) {
     throw new Error('Chưa cấu hình VIETMAP_API_KEY trên máy chủ.');

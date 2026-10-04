@@ -19,24 +19,29 @@ function ensureCarrier(db, name, at) {
   const key = normalizeSearchText(name);
   let carrier = db.prepare('SELECT id, name FROM carriers WHERE carrier_key = ?').get(key);
   if (!carrier) {
-    const result = db.prepare(
-      `INSERT INTO carriers
+    const result = db
+      .prepare(
+        `INSERT INTO carriers
          (name, contact, phone, address, is_active, carrier_key, schedule, note, created_at, updated_at)
        VALUES (?, '', '', '', 1, ?, '', '', ?, ?)`,
-    ).run(name, key, at, at);
+      )
+      .run(name, key, at, at);
     carrier = { id: Number(result.lastInsertRowid), name };
   }
   return carrier;
 }
 
 function linkedCarrierNames(db, customerId) {
-  return db.prepare(
-    `SELECT carriers.name
+  return db
+    .prepare(
+      `SELECT carriers.name
        FROM carrier_customers
        INNER JOIN carriers ON carriers.id = carrier_customers.carrier_id
       WHERE carrier_customers.customer_id = ?
       ORDER BY carriers.name COLLATE NOCASE, carriers.id`,
-  ).all(customerId).map((row) => row.name);
+    )
+    .all(customerId)
+    .map((row) => row.name);
 }
 
 function ensureCustomerCarrier(db, customerId, name, at) {
@@ -72,18 +77,16 @@ function replaceCustomerCarriers(db, customerId, value, at) {
 
 /** Sao chép danh sách liên kết chuẩn về trường hiển thị và chỉ mục tìm kiếm của khách hàng. */
 function refreshCustomerCarrier(db, customerId, at) {
-	const customer = db.prepare(
-		'SELECT customer_name, customer_code, address FROM customers WHERE id = ?',
-  ).get(customerId);
+  const customer = db
+    .prepare('SELECT customer_name, customer_code, address FROM customers WHERE id = ?')
+    .get(customerId);
   if (!customer) return [];
   const names = linkedCarrierNames(db, customerId);
   const carrier = names.join(', ');
-  db.prepare(
-    `UPDATE customers SET carrier = ?, search_text = ?, updated_at = ? WHERE id = ?`,
-  ).run(
+  db.prepare(`UPDATE customers SET carrier = ?, search_text = ?, updated_at = ? WHERE id = ?`).run(
     carrier,
-		normalizeSearchText(
-			`${customer.customer_name} ${customer.customer_code} ${carrier} ${customer.address}`,
+    normalizeSearchText(
+      `${customer.customer_name} ${customer.customer_code} ${carrier} ${customer.address}`,
     ),
     at,
     customerId,

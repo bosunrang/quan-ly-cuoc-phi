@@ -30,9 +30,7 @@ function escapeRegex(value) {
 }
 
 function pruneBackups(backupDir, databaseName, retention = DEFAULT_RETENTION) {
-  const pattern = new RegExp(
-    `^${escapeRegex(databaseName)}-\\d{4}-\\d{2}-\\d{2}\\.sqlite$`,
-  );
+  const pattern = new RegExp(`^${escapeRegex(databaseName)}-\\d{4}-\\d{2}-\\d{2}\\.sqlite$`);
   const files = readdirSync(backupDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && pattern.test(entry.name))
     .map((entry) => {
@@ -52,10 +50,7 @@ async function createAutomaticBackup(
 ) {
   mkdirSync(backupDir, { recursive: true });
   const databaseName = basename(dbFile, extname(dbFile));
-  const destination = join(
-    backupDir,
-    `${databaseName}-${localDateStamp(date)}.sqlite`,
-  );
+  const destination = join(backupDir, `${databaseName}-${localDateStamp(date)}.sqlite`);
   if (existsSync(destination)) {
     pruneBackups(backupDir, databaseName, retention);
     return { created: false, path: destination };

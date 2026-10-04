@@ -46,12 +46,10 @@ class HttpError extends Error {
 }
 
 const badRequest = (message) => new HttpError(400, message);
-const unauthorized = (message = 'Bạn cần đăng nhập lại.') =>
-  new HttpError(401, message);
+const unauthorized = (message = 'Bạn cần đăng nhập lại.') => new HttpError(401, message);
 const forbidden = (message = 'Bạn không có quyền thực hiện việc này.') =>
   new HttpError(403, message);
-const notFound = (message = 'Không tìm thấy dữ liệu.') =>
-  new HttpError(404, message);
+const notFound = (message = 'Không tìm thấy dữ liệu.') => new HttpError(404, message);
 const conflict = (message) => new HttpError(409, message, 'CONFLICT');
 
 /** Kiểm tra ngày lịch thực, không chỉ đúng hình thức YYYY-MM-DD. */
@@ -85,10 +83,7 @@ function sendJson(res, status, payload) {
 /** context: "METHOD /đường-dẫn" để log lỗi máy chủ biết thao tác nào gây ra. */
 function sendError(res, error, context = '') {
   const status = error instanceof HttpError ? error.status : 500;
-  const message =
-    error instanceof HttpError
-      ? error.message
-      : 'Máy chủ gặp lỗi khi xử lý yêu cầu.';
+  const message = error instanceof HttpError ? error.message : 'Máy chủ gặp lỗi khi xử lý yêu cầu.';
   const code = error instanceof HttpError ? error.code : 'INTERNAL_ERROR';
   if (status >= 500) console.error('[loi]', context, error);
   sendJson(res, status, { error: message, code });
@@ -181,7 +176,7 @@ const MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
-	'.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -201,10 +196,7 @@ function serveStatic(root, pathname, res) {
     sendError(res, notFound());
     return true;
   }
-  const relative = normalize(decoded).replace(
-    /^([/\\])+/,
-    '',
-  );
+  const relative = normalize(decoded).replace(/^([/\\])+/, '');
   if (relative.split(sep).includes('..')) {
     sendError(res, notFound());
     return true;
@@ -218,18 +210,19 @@ function serveStatic(root, pathname, res) {
 
   const type = MIME[extname(file).toLowerCase()] ?? 'application/octet-stream';
   const isHtml = type.startsWith('text/html');
-	const isPwaMetadata = file.endsWith('sw.js') || file.endsWith('manifest.webmanifest');
+  const isPwaMetadata = file.endsWith('sw.js') || file.endsWith('manifest.webmanifest');
   res.writeHead(200, {
     'content-type': type,
-		...SECURITY_HEADERS,
-		...(isHtml ? { 'content-security-policy': CONTENT_SECURITY_POLICY } : {}),
-		'cache-control': isHtml || isPwaMetadata
-			? 'no-cache'
-			// Vite gắn mã băm vào tên file trong /assets, nên có thể cache lâu dài.
-			: relative.startsWith(`assets${sep}`)
-				? 'public, max-age=31536000, immutable'
-				: 'public, max-age=3600',
-		...(file.endsWith('sw.js') ? { 'service-worker-allowed': '/' } : {}),
+    ...SECURITY_HEADERS,
+    ...(isHtml ? { 'content-security-policy': CONTENT_SECURITY_POLICY } : {}),
+    'cache-control':
+      isHtml || isPwaMetadata
+        ? 'no-cache'
+        : // Vite gắn mã băm vào tên file trong /assets, nên có thể cache lâu dài.
+          relative.startsWith(`assets${sep}`)
+          ? 'public, max-age=31536000, immutable'
+          : 'public, max-age=3600',
+    ...(file.endsWith('sw.js') ? { 'service-worker-allowed': '/' } : {}),
   });
   // Lỗi đọc file (bị khóa/thay trong lúc cập nhật) không được làm sập tiến trình.
   createReadStream(file)

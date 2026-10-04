@@ -79,7 +79,12 @@ test('body thường bị giới hạn 1 MB; body lớn bị chặn quyền trư
 
   const user = await call('POST', '/api/users', {
     token: adminToken,
-    body: { username: 'nhanvientq', fullName: 'Nhân viên Tổng quan', password: 'MatKhau123', pages: ['dashboard'] },
+    body: {
+      username: 'nhanvientq',
+      fullName: 'Nhân viên Tổng quan',
+      password: 'MatKhau123',
+      pages: ['dashboard'],
+    },
   });
   assert.equal(user.status, 200);
   const linked = await call('PATCH', `/api/employees/${employeeId}`, {
@@ -89,9 +94,11 @@ test('body thường bị giới hạn 1 MB; body lớn bị chặn quyền trư
   assert.equal(linked.status, 200);
   // Luồng bắt đổi mật khẩu được kiểm tra ở test riêng phía dưới.
   app.db.prepare("UPDATE users SET must_change_password = 0 WHERE username = 'nhanvientq'").run();
-  staffToken = (await call('POST', '/api/login', {
-    body: { username: 'nhanvientq', password: 'MatKhau123' },
-  })).data.token;
+  staffToken = (
+    await call('POST', '/api/login', {
+      body: { username: 'nhanvientq', password: 'MatKhau123' },
+    })
+  ).data.token;
 
   const restore = await call('POST', '/api/settings/backup/restore', {
     token: staffToken,
@@ -114,10 +121,15 @@ test('khôi phục backup bắt buộc có đúng một dòng cài đặt hợp 
 
   const badLogo = structuredClone(backup.data);
   badLogo.data.settings[0].logo_data_url = 'javascript:alert(1)';
-  assert.equal((await call('POST', '/api/settings/backup/restore', {
-    token: adminToken,
-    body: { backup: badLogo },
-  })).status, 400);
+  assert.equal(
+    (
+      await call('POST', '/api/settings/backup/restore', {
+        token: adminToken,
+        body: { backup: badLogo },
+      })
+    ).status,
+    400,
+  );
 
   const restored = await call('POST', '/api/settings/backup/restore', {
     token: adminToken,
@@ -175,16 +187,28 @@ test('đổi tên khách hàng/nhà xe vẫn giữ giá chuẩn và báo cáo ch
   assert.equal(entry.status, 200);
   assert.equal(entry.data.standardTransportFee, 200000);
 
-  assert.equal((await call('PATCH', `/api/customers/${customer.data.id}`, {
-    token: adminToken,
-    body: { customerName: 'Khách Tên Mới', carrier: 'Xe Đổi Tên' },
-  })).status, 200);
-  assert.equal((await call('PATCH', `/api/carriers/${carrier.data.id}`, {
-    token: adminToken,
-    body: { name: 'Xe Tên Mới', isActive: true },
-  })).status, 200);
+  assert.equal(
+    (
+      await call('PATCH', `/api/customers/${customer.data.id}`, {
+        token: adminToken,
+        body: { customerName: 'Khách Tên Mới', carrier: 'Xe Đổi Tên' },
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await call('PATCH', `/api/carriers/${carrier.data.id}`, {
+        token: adminToken,
+        body: { name: 'Xe Tên Mới', isActive: true },
+      })
+    ).status,
+    200,
+  );
 
-  const list = await call('GET', '/api/entries?from=2026-08-02&to=2026-08-02', { token: adminToken });
+  const list = await call('GET', '/api/entries?from=2026-08-02&to=2026-08-02', {
+    token: adminToken,
+  });
   const saved = list.data.items.find((item) => item.id === entry.data.id);
   assert.equal(saved.customer, 'Khách Đổi Tên', 'chữ trên phiếu giữ nguyên lịch sử');
   assert.equal(saved.standardTransportFee, 200000);
@@ -201,11 +225,9 @@ test('đổi tên khách hàng/nhà xe vẫn giữ giá chuẩn và báo cáo ch
 });
 
 test('Tổng quan của nhân viên gồm cả phiếu Admin nhập hộ cho hồ sơ của họ', async () => {
-  const dashboard = await call(
-    'GET',
-    '/api/dashboard?from=2026-08-01&to=2026-08-31',
-    { token: staffToken },
-  );
+  const dashboard = await call('GET', '/api/dashboard?from=2026-08-01&to=2026-08-31', {
+    token: staffToken,
+  });
   assert.equal(dashboard.status, 200);
   assert.equal(dashboard.data.scope, 'own');
   assert.equal(dashboard.data.summary.entries, 1);
@@ -213,9 +235,13 @@ test('Tổng quan của nhân viên gồm cả phiếu Admin nhập hộ cho h�
 });
 
 test('tìm nhật ký trên máy chủ theo nhãn tiếng Việt và nội dung chi tiết', async () => {
-  const byLabel = await call('GET', `/api/audit?q=${encodeURIComponent('xoa khach hang')}`, { token: adminToken });
+  const byLabel = await call('GET', `/api/audit?q=${encodeURIComponent('xoa khach hang')}`, {
+    token: adminToken,
+  });
   assert.equal(byLabel.status, 200);
-  const byDetail = await call('GET', `/api/audit?q=${encodeURIComponent('Hàng cồng kềnh')}`, { token: adminToken });
+  const byDetail = await call('GET', `/api/audit?q=${encodeURIComponent('Hàng cồng kềnh')}`, {
+    token: adminToken,
+  });
   assert.equal(byDetail.status, 200);
   assert.ok(byDetail.data.items.some((row) => row.action === 'entry.create'));
   assert.equal(byDetail.data.total, byDetail.data.items.length);
@@ -235,19 +261,28 @@ test('khôi phục backup dựng lại chỉ mục tìm kiếm MISA và giữ tr
   });
   assert.equal(imported.status, 200);
   const backup = await call('GET', '/api/settings/backup', { token: adminToken });
-  assert.equal((await call('POST', '/api/settings/backup/restore', {
-    token: adminToken,
-    body: { backup: backup.data },
-  })).status, 200);
+  assert.equal(
+    (
+      await call('POST', '/api/settings/backup/restore', {
+        token: adminToken,
+        body: { backup: backup.data },
+      })
+    ).status,
+    200,
+  );
 
-  const afterRestore = await call('GET', `/api/misa?search=${encodeURIComponent('hong phuc')}`, { token: adminToken });
+  const afterRestore = await call('GET', `/api/misa?search=${encodeURIComponent('hong phuc')}`, {
+    token: adminToken,
+  });
   assert.equal(afterRestore.data.count, 1);
 
   await call('POST', '/api/misa/import', {
     token: adminToken,
     body: { fileName: 'misa-2.xlsx', rows: [misaRow('k2', 'Phòng khám An Khang')] },
   });
-  const newImport = await call('GET', `/api/misa?search=${encodeURIComponent('an khang')}`, { token: adminToken });
+  const newImport = await call('GET', `/api/misa?search=${encodeURIComponent('an khang')}`, {
+    token: adminToken,
+  });
   assert.equal(newImport.data.count, 1);
 
   const cleared = await call('POST', '/api/settings/data/delete', {
@@ -255,7 +290,9 @@ test('khôi phục backup dựng lại chỉ mục tìm kiếm MISA và giữ tr
     body: { groups: ['misa'] },
   });
   assert.equal(cleared.status, 200);
-  const afterDelete = await call('GET', `/api/misa?search=${encodeURIComponent('an khang')}`, { token: adminToken });
+  const afterDelete = await call('GET', `/api/misa?search=${encodeURIComponent('an khang')}`, {
+    token: adminToken,
+  });
   assert.equal(afterDelete.data.count, 0);
 });
 
@@ -272,8 +309,14 @@ test('báo cáo năm đã bỏ: máy chủ từ chối loại báo cáo annual',
 });
 
 test('phiếu lưu mã khách hàng/nhà xe: sửa phiếu cũ sau khi đổi tên vẫn đúng', async () => {
-  const customer = await call('POST', '/api/customers', { token: adminToken, body: { customerName: 'Khách Mã Cũ' } });
-  const carrier = await call('POST', '/api/carriers', { token: adminToken, body: { name: 'Xe Mã Cũ' } });
+  const customer = await call('POST', '/api/customers', {
+    token: adminToken,
+    body: { customerName: 'Khách Mã Cũ' },
+  });
+  const carrier = await call('POST', '/api/carriers', {
+    token: adminToken,
+    body: { name: 'Xe Mã Cũ' },
+  });
   await call('PATCH', `/api/carriers/${carrier.data.id}/customers`, {
     token: adminToken,
     body: { customerIds: [customer.data.id] },
@@ -285,9 +328,16 @@ test('phiếu lưu mã khách hàng/nhà xe: sửa phiếu cũ sau khi đổi t�
   const entry = await call('POST', '/api/entries', {
     token: adminToken,
     body: {
-      entryDate: '2026-08-05', customer: 'Khách Mã Cũ', customerId: customer.data.id,
-      carrier: 'Xe Mã Cũ', carrierId: carrier.data.id, spec: 'Tất cả', transportFee: 100000,
-      note: 'Hàng', billStatus: 'Có bill', employeeId,
+      entryDate: '2026-08-05',
+      customer: 'Khách Mã Cũ',
+      customerId: customer.data.id,
+      carrier: 'Xe Mã Cũ',
+      carrierId: carrier.data.id,
+      spec: 'Tất cả',
+      transportFee: 100000,
+      note: 'Hàng',
+      billStatus: 'Có bill',
+      employeeId,
     },
   });
   assert.equal(entry.status, 200);
@@ -307,9 +357,17 @@ test('phiếu lưu mã khách hàng/nhà xe: sửa phiếu cũ sau khi đổi t�
   const edited = await call('PATCH', `/api/entries/${entry.data.id}`, {
     token: adminToken,
     body: {
-      entryDate: '2026-08-05', customer: 'Khách Mã Mới', customerId: customer.data.id,
-      carrier: 'Xe Mã Mới', carrierId: carrier.data.id, spec: 'Tất cả', transportFee: 120000,
-      rateVarianceNote: 'Tăng giá', note: 'Hàng', billStatus: 'Có bill', employeeId,
+      entryDate: '2026-08-05',
+      customer: 'Khách Mã Mới',
+      customerId: customer.data.id,
+      carrier: 'Xe Mã Mới',
+      carrierId: carrier.data.id,
+      spec: 'Tất cả',
+      transportFee: 120000,
+      rateVarianceNote: 'Tăng giá',
+      note: 'Hàng',
+      billStatus: 'Có bill',
+      employeeId,
     },
   });
   assert.equal(edited.status, 200);
@@ -321,9 +379,15 @@ test('phiếu lưu mã khách hàng/nhà xe: sửa phiếu cũ sau khi đổi t�
   const mismatch = await call('PATCH', `/api/entries/${entry.data.id}`, {
     token: adminToken,
     body: {
-      entryDate: '2026-08-05', customer: 'Khách Khác', customerId: customer.data.id,
-      carrier: 'Xe Mã Mới', spec: 'Tất cả', transportFee: 100000,
-      note: 'Hàng', billStatus: 'Có bill', employeeId,
+      entryDate: '2026-08-05',
+      customer: 'Khách Khác',
+      customerId: customer.data.id,
+      carrier: 'Xe Mã Mới',
+      spec: 'Tất cả',
+      transportFee: 100000,
+      note: 'Hàng',
+      billStatus: 'Có bill',
+      employeeId,
     },
   });
   assert.equal(mismatch.status, 400);
@@ -333,19 +397,33 @@ test('phiếu của khách chưa có trong danh mục tự nối khi danh mục 
   const entry = await call('POST', '/api/entries', {
     token: adminToken,
     body: {
-      entryDate: '2026-08-06', customer: 'Khách Vãng Lai', carrier: 'Xe Vãng Lai',
-      spec: 'Tất cả', transportFee: 50000, note: 'Hàng', billStatus: 'Có bill', employeeId,
+      entryDate: '2026-08-06',
+      customer: 'Khách Vãng Lai',
+      carrier: 'Xe Vãng Lai',
+      spec: 'Tất cả',
+      transportFee: 50000,
+      note: 'Hàng',
+      billStatus: 'Có bill',
+      employeeId,
     },
   });
   assert.equal(entry.status, 200);
   assert.equal(entry.data.customerId, null);
 
-  const customer = await call('POST', '/api/customers', { token: adminToken, body: { customerName: 'Khách Vãng Lai' } });
-  const listed = async () => (await call('GET', '/api/entries?from=2026-08-06&to=2026-08-06', { token: adminToken }))
-    .data.items.find((item) => item.id === entry.data.id);
+  const customer = await call('POST', '/api/customers', {
+    token: adminToken,
+    body: { customerName: 'Khách Vãng Lai' },
+  });
+  const listed = async () =>
+    (
+      await call('GET', '/api/entries?from=2026-08-06&to=2026-08-06', { token: adminToken })
+    ).data.items.find((item) => item.id === entry.data.id);
   assert.equal((await listed()).customerId, customer.data.id);
 
-  assert.equal((await call('DELETE', `/api/customers/${customer.data.id}`, { token: adminToken })).status, 200);
+  assert.equal(
+    (await call('DELETE', `/api/customers/${customer.data.id}`, { token: adminToken })).status,
+    200,
+  );
   const afterDelete = await listed();
   assert.equal(afterDelete.customer, 'Khách Vãng Lai');
   assert.equal(afterDelete.customerId, null);
@@ -354,41 +432,70 @@ test('phiếu của khách chưa có trong danh mục tự nối khi danh mục 
 test('tài khoản Admin tạo hoặc đặt lại phải tự đổi mật khẩu trước khi dùng', async () => {
   const created = await call('POST', '/api/users', {
     token: adminToken,
-    body: { username: 'nhanvienmoi', fullName: 'Nhân viên mới', password: 'MatKhauCap1', pages: ['entries'] },
+    body: {
+      username: 'nhanvienmoi',
+      fullName: 'Nhân viên mới',
+      password: 'MatKhauCap1',
+      pages: ['entries'],
+    },
   });
   assert.equal(created.status, 200);
   assert.equal(created.data.mustChangePassword, true);
 
-  const first = await call('POST', '/api/login', { body: { username: 'nhanvienmoi', password: 'MatKhauCap1' } });
+  const first = await call('POST', '/api/login', {
+    body: { username: 'nhanvienmoi', password: 'MatKhauCap1' },
+  });
   assert.equal(first.status, 200);
   assert.equal(first.data.user.mustChangePassword, true);
   assert.equal((await call('GET', '/api/entries', { token: first.data.token })).status, 403);
 
   // Không được giữ nguyên mật khẩu Admin đã cấp.
-  assert.equal((await call('POST', '/api/me/initial-password', {
-    token: first.data.token,
-    body: { newPassword: 'MatKhauCap1' },
-  })).status, 400);
-  assert.equal((await call('POST', '/api/me/initial-password', {
-    token: first.data.token,
-    body: { newPassword: 'MatKhauRieng1' },
-  })).status, 200);
+  assert.equal(
+    (
+      await call('POST', '/api/me/initial-password', {
+        token: first.data.token,
+        body: { newPassword: 'MatKhauCap1' },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await call('POST', '/api/me/initial-password', {
+        token: first.data.token,
+        body: { newPassword: 'MatKhauRieng1' },
+      })
+    ).status,
+    200,
+  );
   assert.equal((await call('GET', '/api/entries', { token: first.data.token })).status, 200);
 
   // Admin đặt lại mật khẩu hộ: lại phải đổi ở lần đăng nhập tới.
-  assert.equal((await call('POST', `/api/users/${created.data.id}/password`, {
-    token: adminToken,
-    body: { password: 'MatKhauCap2' },
-  })).status, 200);
-  const again = await call('POST', '/api/login', { body: { username: 'nhanvienmoi', password: 'MatKhauCap2' } });
+  assert.equal(
+    (
+      await call('POST', `/api/users/${created.data.id}/password`, {
+        token: adminToken,
+        body: { password: 'MatKhauCap2' },
+      })
+    ).status,
+    200,
+  );
+  const again = await call('POST', '/api/login', {
+    body: { username: 'nhanvienmoi', password: 'MatKhauCap2' },
+  });
   assert.equal(again.data.user.mustChangePassword, true);
 
   // Admin tự đặt lại mật khẩu của chính mình thì không bị bắt đổi lại.
   const me = await call('GET', '/api/me', { token: adminToken });
-  assert.equal((await call('POST', `/api/users/${me.data.user.id}/password`, {
-    token: adminToken,
-    body: { password: 'MatKhauAdmin456' },
-  })).status, 200);
+  assert.equal(
+    (
+      await call('POST', `/api/users/${me.data.user.id}/password`, {
+        token: adminToken,
+        body: { password: 'MatKhauAdmin456' },
+      })
+    ).status,
+    200,
+  );
   const adminLogin = await call('POST', '/api/login', {
     body: { username: me.data.user.username, password: 'MatKhauAdmin456' },
   });
@@ -396,12 +503,17 @@ test('tài khoản Admin tạo hoặc đặt lại phải tự đổi mật kh�
 });
 
 test('qua Cloudflare Tunnel: khôi phục Admin bị chặn, khóa đăng nhập theo IP thật', async () => {
-  const viaTunnel = (ip) => ({ 'cf-connecting-ip': ip, 'cf-ray': 'test-ray', 'x-forwarded-for': ip });
-  const post = (path, body, headers = {}) => fetch(`${baseUrl}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
-    body: JSON.stringify(body),
+  const viaTunnel = (ip) => ({
+    'cf-connecting-ip': ip,
+    'cf-ray': 'test-ray',
+    'x-forwarded-for': ip,
   });
+  const post = (path, body, headers = {}) =>
+    fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
 
   // Từ Internet (qua tunnel) không dùng được chức năng chỉ dành cho máy chính.
   const recover = await post(
@@ -414,22 +526,35 @@ test('qua Cloudflare Tunnel: khôi phục Admin bị chặn, khóa đăng nhập
 
   // Một người ngoài thử sai nhiều lần chỉ khóa chính IP đó, không khóa cả công ty.
   for (let index = 0; index < 30; index += 1) {
-    await post('/api/login', { username: `rac-${index}`, password: 'sai-mat-khau' }, viaTunnel('203.0.113.7'));
+    await post(
+      '/api/login',
+      { username: `rac-${index}`, password: 'sai-mat-khau' },
+      viaTunnel('203.0.113.7'),
+    );
   }
-  const attacker = await post('/api/login', { username: 'nhanvienmoi', password: 'MatKhauCap2' }, viaTunnel('203.0.113.7'));
+  const attacker = await post(
+    '/api/login',
+    { username: 'nhanvienmoi', password: 'MatKhauCap2' },
+    viaTunnel('203.0.113.7'),
+  );
   assert.equal(attacker.status, 400);
-  const colleague = await post('/api/login', { username: 'nhanvienmoi', password: 'MatKhauCap2' }, viaTunnel('198.51.100.20'));
+  const colleague = await post(
+    '/api/login',
+    { username: 'nhanvienmoi', password: 'MatKhauCap2' },
+    viaTunnel('198.51.100.20'),
+  );
   assert.equal(colleague.status, 200);
   const local = await post('/api/login', { username: 'nhanvienmoi', password: 'MatKhauCap2' });
   assert.equal(local.status, 200);
 });
 
 test('khôi phục Admin trên máy chính bị giới hạn số lần thử sai', async () => {
-  const attempt = () => fetch(`${baseUrl}/api/recover-admin`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: 'gioi-han', code: 'NAVIVA-sai', password: 'MatKhauMoi123' }),
-  });
+  const attempt = () =>
+    fetch(`${baseUrl}/api/recover-admin`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'gioi-han', code: 'NAVIVA-sai', password: 'MatKhauMoi123' }),
+    });
   for (let index = 0; index < 8; index += 1) assert.equal((await attempt()).status, 401);
   const blocked = await attempt();
   assert.equal(blocked.status, 400);
@@ -437,11 +562,19 @@ test('khôi phục Admin trên máy chính bị giới hạn số lần thử sa
 });
 
 test('báo cáo chênh lệch nhà xe phân trang, số liệu tổng hợp tính trên toàn bộ', async () => {
-  const me = await call('POST', '/api/login', { body: { username: 'admin', password: 'MatKhauAdmin456' } });
+  const me = await call('POST', '/api/login', {
+    body: { username: 'admin', password: 'MatKhauAdmin456' },
+  });
   const token = me.data.token;
-  const customer = await call('POST', '/api/customers', { token, body: { customerName: 'Khách Phân Trang' } });
+  const customer = await call('POST', '/api/customers', {
+    token,
+    body: { customerName: 'Khách Phân Trang' },
+  });
   const carrier = await call('POST', '/api/carriers', { token, body: { name: 'Xe Phân Trang' } });
-  await call('PATCH', `/api/carriers/${carrier.data.id}/customers`, { token, body: { customerIds: [customer.data.id] } });
+  await call('PATCH', `/api/carriers/${carrier.data.id}/customers`, {
+    token,
+    body: { customerIds: [customer.data.id] },
+  });
   await call('POST', `/api/carriers/${carrier.data.id}/customers/${customer.data.id}/rates`, {
     token,
     body: { isDefault: true, transportFee: 100000, gateFee: 0, note: '' },
@@ -452,10 +585,17 @@ test('báo cáo chênh lệch nhà xe phân trang, số liệu tổng hợp tín
     const created = await call('POST', '/api/entries', {
       token,
       body: {
-        entryDate: '2026-11-02', customer: 'Khách Phân Trang', customerId: customer.data.id,
-        carrier: 'Xe Phân Trang', carrierId: carrier.data.id, spec: 'Tất cả',
-        transportFee: over ? 101000 : 98000, rateVarianceNote: over ? 'Phụ phí' : '',
-        note: `Hàng ${index}`, billStatus: 'Có bill', employeeId,
+        entryDate: '2026-11-02',
+        customer: 'Khách Phân Trang',
+        customerId: customer.data.id,
+        carrier: 'Xe Phân Trang',
+        carrierId: carrier.data.id,
+        spec: 'Tất cả',
+        transportFee: over ? 101000 : 98000,
+        rateVarianceNote: over ? 'Phụ phí' : '',
+        note: `Hàng ${index}`,
+        billStatus: 'Có bill',
+        employeeId,
       },
     });
     assert.equal(created.status, 200);
@@ -466,8 +606,12 @@ test('báo cáo chênh lệch nhà xe phân trang, số liệu tổng hợp tín
   assert.equal(first.data.items.length, 50);
   assert.equal(first.data.pageCount, 2);
   assert.deepEqual(first.data.summary, {
-    entries: 60, difference: 55_000 - 10_000,
-    overEntries: 55, overAmount: 55_000, underEntries: 5, underAmount: 10_000,
+    entries: 60,
+    difference: 55_000 - 10_000,
+    overEntries: 55,
+    overAmount: 55_000,
+    underEntries: 5,
+    underAmount: 10_000,
   });
   const second = await call('GET', `/api/reports/carrier-variance?${range}&page=2`, { token });
   assert.equal(second.data.items.length, 10);

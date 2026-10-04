@@ -5,6 +5,10 @@
       "src/**/*.ts",
       "src/**/*.tsx",
       "tests/**/*.ts",
+      "tests/**/*.cjs",
+      "server/**/*.cjs",
+      "electron/**/*.cjs",
+      "tools/**/*.cjs",
       "vite.config.ts",
       "vitest.config.ts"
     ]
@@ -21,5 +25,12 @@
         "noExplicitAny": "error"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["server/**", "electron/**", "tools/**", "tests/**/*.cjs"],
+      "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+      "javascript": { "formatter": { "quoteStyle": "single" } }
+    }
+  ]
 }

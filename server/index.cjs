@@ -58,12 +58,7 @@ function bearerToken(req) {
   return header.startsWith('Bearer ') ? header.slice(7).trim() : null;
 }
 
-function createApp({
-  dbFile,
-  staticRoot,
-  allowDevLogin = false,
-  automaticBackupDir = null,
-}) {
+function createApp({ dbFile, staticRoot, allowDevLogin = false, automaticBackupDir = null }) {
   const db = openDatabase(dbFile);
   const seeded = seedFirstAdmin(db);
   let backupScheduler = null;
@@ -91,9 +86,7 @@ function createApp({
       }
 
       const user = c.db
-        .prepare(
-          'SELECT * FROM users WHERE is_admin = 1 AND is_active = 1 ORDER BY id LIMIT 1',
-        )
+        .prepare('SELECT * FROM users WHERE is_admin = 1 AND is_active = 1 ORDER BY id LIMIT 1')
         .get();
       if (!user) throw unauthorized('Chưa có tài khoản Admin hoạt động.');
 
@@ -196,11 +189,7 @@ function createApp({
         server.listen(port, host, () => {
           server.removeListener('error', reject);
           if (automaticBackupDir && !backupScheduler) {
-            backupScheduler = startAutomaticBackups(
-              db,
-              dbFile,
-              automaticBackupDir,
-            );
+            backupScheduler = startAutomaticBackups(db, dbFile, automaticBackupDir);
           }
           resolve(server.address());
         });

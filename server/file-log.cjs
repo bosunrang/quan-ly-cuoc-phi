@@ -6,12 +6,7 @@
  * Giữ nguyên hành vi in ra console; chỉ ghi thêm một bản vào file.
  */
 
-const {
-  createWriteStream,
-  mkdirSync,
-  readdirSync,
-  unlinkSync,
-} = require('node:fs');
+const { createWriteStream, mkdirSync, readdirSync, unlinkSync } = require('node:fs');
 const { join } = require('node:path');
 const { format } = require('node:util');
 
@@ -38,7 +33,11 @@ function pruneLogs(dir, retention, currentFile) {
 
 function installFileLogging(
   dir,
-  { retention = DEFAULT_RETENTION_DAYS, maxBytesPerDay = MAX_BYTES_PER_DAY, now = () => new Date() } = {},
+  {
+    retention = DEFAULT_RETENTION_DAYS,
+    maxBytesPerDay = MAX_BYTES_PER_DAY,
+    now = () => new Date(),
+  } = {},
 ) {
   mkdirSync(dir, { recursive: true });
   const original = { log: console.log, warn: console.warn, error: console.error };
@@ -72,7 +71,9 @@ function installFileLogging(
       written += Buffer.byteLength(line);
       if (written > maxBytesPerDay) {
         capped = true;
-        stream.write(`${at.toISOString()} [WARN] Đã đạt giới hạn dung lượng log trong ngày; bỏ qua phần còn lại.\n`);
+        stream.write(
+          `${at.toISOString()} [WARN] Đã đạt giới hạn dung lượng log trong ngày; bỏ qua phần còn lại.\n`,
+        );
         return;
       }
       stream.write(line);

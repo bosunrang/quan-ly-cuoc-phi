@@ -2,18 +2,16 @@
 
 const { badRequest, isIsoDate } = require('../http.cjs');
 
-const FUEL_TYPES = [
-  'Xăng E10',
-  'Xăng RON 95-III',
-  'Xăng E5 RON 92',
-  'Dầu Diesel 0.05S',
-];
+const FUEL_TYPES = ['Xăng E10', 'Xăng RON 95-III', 'Xăng E5 RON 92', 'Dầu Diesel 0.05S'];
 const FUEL_REGIONS = new Set(['region1', 'region2']);
 const VEHICLE_TYPES = new Set(['motorcycle', 'truck']);
 const MAX_ROUTE_LEGS = 50;
 const MAX_EXTRA_COSTS = 20;
 
-const cleanText = (value, max = 100) => String(value ?? '').trim().slice(0, max);
+const cleanText = (value, max = 100) =>
+  String(value ?? '')
+    .trim()
+    .slice(0, max);
 
 function nonNegativeNumber(value, field, integer = false) {
   const result = Number(value);
@@ -69,12 +67,11 @@ function fuelRecordInput(body) {
   if (rawLegs.length > MAX_ROUTE_LEGS) {
     throw badRequest(`Lộ trình chỉ hỗ trợ tối đa ${MAX_ROUTE_LEGS} chặng.`);
   }
-  const legs = rawLegs
-      .map((leg) => ({
-        from: cleanText(leg?.from, 500),
-        to: cleanText(leg?.to, 500),
-        km: nonNegativeNumber(leg?.km, 'Quãng đường'),
-      }));
+  const legs = rawLegs.map((leg) => ({
+    from: cleanText(leg?.from, 500),
+    to: cleanText(leg?.to, 500),
+    km: nonNegativeNumber(leg?.km, 'Quãng đường'),
+  }));
   if (legs.some((leg) => !leg.from || !leg.to || leg.km <= 0)) {
     throw badRequest('Mỗi chặng cần có điểm đi, điểm đến và số km lớn hơn 0.');
   }
@@ -94,7 +91,10 @@ function fuelRecordInput(body) {
     if (!name || amount <= 0) {
       throw badRequest('Mỗi chi phí khác cần có tên và số tiền lớn hơn 0.');
     }
-    if (item?.legIndex !== undefined && (!Number.isInteger(legIndex) || legIndex < 0 || legIndex >= legs.length)) {
+    if (
+      item?.legIndex !== undefined &&
+      (!Number.isInteger(legIndex) || legIndex < 0 || legIndex >= legs.length)
+    ) {
       throw badRequest('Chặng của chi phí khác không hợp lệ.');
     }
     return item?.legIndex === undefined ? { name, amount } : { name, amount, legIndex };
@@ -112,7 +112,7 @@ function fuelRecordInput(body) {
     consumptionBaseKm,
     legs,
     distanceKm,
-	  extraCosts,
+    extraCosts,
     fuelPrice: nonNegativeNumber(body.fuelPrice, 'Giá xăng', true),
     fuelType: cleanText(body.fuelType) || FUEL_TYPES[0],
     region: FUEL_REGIONS.has(region) ? region : 'region1',
@@ -122,8 +122,7 @@ function fuelRecordInput(body) {
 
 function calculateFuelTotal(input) {
   const fuelFee = Math.round(
-    (input.distanceKm * input.consumptionLiters * input.fuelPrice) /
-      input.consumptionBaseKm,
+    (input.distanceKm * input.consumptionLiters * input.fuelPrice) / input.consumptionBaseKm,
   );
   return fuelFee + (input.extraCosts ?? []).reduce((sum, item) => sum + item.amount, 0);
 }

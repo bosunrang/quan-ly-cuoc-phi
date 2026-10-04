@@ -58,7 +58,7 @@ function normalizeRow(row) {
     documentCode,
     customerCode,
     customerName,
-		customerKey: normalizeSearchText(customerName),
+    customerKey: normalizeSearchText(customerName),
     address,
     productName,
     quantitySold: Number.isFinite(quantitySold) ? quantitySold : null,
@@ -70,15 +70,17 @@ function normalizeRow(row) {
 }
 
 function existingRowsBySourceKey(db, rows) {
-  const keys = [...new Set(
-    rows.filter((row) => row.status === 'ready').map((row) => row.sourceKey),
-  )];
+  const keys = [
+    ...new Set(rows.filter((row) => row.status === 'ready').map((row) => row.sourceKey)),
+  ];
   const existing = new Map();
   for (let offset = 0; offset < keys.length; offset += SQLITE_PARAMETER_CHUNK) {
     const batch = keys.slice(offset, offset + SQLITE_PARAMETER_CHUNK);
     const placeholders = batch.map(() => '?').join(', ');
     for (const row of db
-      .prepare(`SELECT source_key, product_name, customer_code FROM misa_rows WHERE source_key IN (${placeholders})`)
+      .prepare(
+        `SELECT source_key, product_name, customer_code FROM misa_rows WHERE source_key IN (${placeholders})`,
+      )
       .all(...batch)) {
       existing.set(row.source_key, {
         productName: row.product_name,
@@ -107,9 +109,10 @@ function previewRows(db, sourceRows) {
       ) {
         return {
           ...row,
-          reason: !previous.customerCode && row.customerCode
-            ? 'Bổ sung mã khách hàng'
-            : 'Bổ sung tên mặt hàng',
+          reason:
+            !previous.customerCode && row.customerCode
+              ? 'Bổ sung mã khách hàng'
+              : 'Bổ sung tên mặt hàng',
         };
       }
       return { ...row, status: 'duplicate', reason: 'Dòng đã tồn tại' };
@@ -184,16 +187,18 @@ function register(router) {
     c.requirePage(PAGE);
     const where = ['1 = 1'];
     const params = [];
-    const search = String(c.query.search ?? '').trim().slice(0, 100);
-    const province = String(c.query.province ?? '').trim().slice(0, 150);
+    const search = String(c.query.search ?? '')
+      .trim()
+      .slice(0, 100);
+    const province = String(c.query.province ?? '')
+      .trim()
+      .slice(0, 150);
     if (search) {
-	  const expression = searchExpression(search);
-	  if (expression) {
-		where.push(
-		  'misa_rows.id IN (SELECT rowid FROM misa_search WHERE misa_search MATCH ?)',
-		);
-		params.push(expression);
-	  }
+      const expression = searchExpression(search);
+      if (expression) {
+        where.push('misa_rows.id IN (SELECT rowid FROM misa_search WHERE misa_search MATCH ?)');
+        params.push(expression);
+      }
     }
     if (province) {
       where.push('province_city = ?');
@@ -210,9 +215,7 @@ function register(router) {
       defaultOverview = readDefaultOverview(c.db);
       defaultOverviewByDatabase.set(c.db, defaultOverview);
     }
-    const overview = isDefaultQuery
-      ? defaultOverview
-      : readOverview(c.db, clause, params);
+    const overview = isDefaultQuery ? defaultOverview : readOverview(c.db, clause, params);
     const count = overview.count;
     const pageCount = Math.max(1, Math.ceil(count / pageSize));
     const page = Math.min(requestedPage, pageCount);
@@ -252,26 +255,32 @@ function register(router) {
     };
   });
 
-  router.post('/api/misa/preview', async (c) => {
-    c.requirePage(PAGE);
-    const fileName = text(c.body.fileName, 'Tên file', 260);
-    if (!fileName) throw badRequest('Vui lòng chọn file MISA.');
-    return counts(fileName, previewRows(c.db, readRows(c.body.rows)));
-  }, { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES });
+  router.post(
+    '/api/misa/preview',
+    async (c) => {
+      c.requirePage(PAGE);
+      const fileName = text(c.body.fileName, 'Tên file', 260);
+      if (!fileName) throw badRequest('Vui lòng chọn file MISA.');
+      return counts(fileName, previewRows(c.db, readRows(c.body.rows)));
+    },
+    { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES },
+  );
 
-  router.post('/api/misa/import', async (c) => {
-    c.requirePage(PAGE);
-    const fileName = text(c.body.fileName, 'Tên file', 260);
-    const rows = readRows(c.body.rows).map(normalizeRow);
-    if (!fileName) throw badRequest('Vui lòng chọn file MISA.');
-    if (rows.some((row) => row.status === 'skipped')) {
-      throw badRequest('Dữ liệu nhập còn dòng không hợp lệ.');
-    }
-    const importedAt = new Date().toISOString();
+  router.post(
+    '/api/misa/import',
+    async (c) => {
+      c.requirePage(PAGE);
+      const fileName = text(c.body.fileName, 'Tên file', 260);
+      const rows = readRows(c.body.rows).map(normalizeRow);
+      if (!fileName) throw badRequest('Vui lòng chọn file MISA.');
+      if (rows.some((row) => row.status === 'skipped')) {
+        throw badRequest('Dữ liệu nhập còn dòng không hợp lệ.');
+      }
+      const importedAt = new Date().toISOString();
 
-    const result = transaction(c.db, () => {
-      const insert = c.db.prepare(
-        `INSERT INTO misa_rows
+      const result = transaction(c.db, () => {
+        const insert = c.db.prepare(
+          `INSERT INTO misa_rows
           (document_date, document_code, customer_code, customer_name, customer_key, address, product_name, quantity_sold, province_city,
             source_key, source_file, imported_by, imported_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -283,38 +292,40 @@ function register(router) {
            imported_at = excluded.imported_at
          WHERE (misa_rows.product_name = '' AND excluded.product_name <> '')
             OR (misa_rows.customer_code = '' AND excluded.customer_code <> '')`,
-      );
-      let inserted = 0;
-      for (const row of rows) {
-        const result = insert.run(
-          row.documentDate,
-          row.documentCode,
-          row.customerCode,
-          row.customerName,
-		  row.customerKey,
-          row.address,
-          row.productName,
-          row.quantitySold,
-          row.provinceCity,
-          row.sourceKey,
-          fileName,
-          c.user.id,
-          importedAt,
         );
-        inserted += Number(result.changes);
-      }
-      const duplicates = rows.length - inserted;
-      writeAudit(c.db, c.user, 'misa.import', 'misa', fileName, {
-        requested: rows.length,
-        inserted,
-        duplicates,
+        let inserted = 0;
+        for (const row of rows) {
+          const result = insert.run(
+            row.documentDate,
+            row.documentCode,
+            row.customerCode,
+            row.customerName,
+            row.customerKey,
+            row.address,
+            row.productName,
+            row.quantitySold,
+            row.provinceCity,
+            row.sourceKey,
+            fileName,
+            c.user.id,
+            importedAt,
+          );
+          inserted += Number(result.changes);
+        }
+        const duplicates = rows.length - inserted;
+        writeAudit(c.db, c.user, 'misa.import', 'misa', fileName, {
+          requested: rows.length,
+          inserted,
+          duplicates,
+        });
+        return { inserted, duplicates };
       });
-      return { inserted, duplicates };
-    });
-    // Nhập thành công thì lần xem tiếp theo phải lấy số tổng quan mới.
-    invalidateDefaultOverview(c.db);
-    return result;
-  }, { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES });
+      // Nhập thành công thì lần xem tiếp theo phải lấy số tổng quan mới.
+      invalidateDefaultOverview(c.db);
+      return result;
+    },
+    { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES },
+  );
 }
 
 module.exports = { register, invalidateDefaultOverview };

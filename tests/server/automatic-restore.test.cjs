@@ -31,8 +31,8 @@ async function call(method, path, { token, body } = {}) {
 }
 
 const customerNames = async () =>
-  (await call('GET', '/api/customers?page=1&limit=50', { token: adminToken }))
-    .data.items.map((item) => item.customerName)
+  (await call('GET', '/api/customers?page=1&limit=50', { token: adminToken })).data.items
+    .map((item) => item.customerName)
     .sort();
 
 before(async () => {
@@ -108,21 +108,37 @@ test('chỉ nhận đúng tên file trong danh sách, không nhận đường d�
     assert.equal(result.status, 400, fileName);
   }
   // Không có tệp tạm nào bị bỏ lại trong thư mục sao lưu.
-  assert.equal(readdirSync(backupDir).some((name) => name.includes('.tmp-')), false);
+  assert.equal(
+    readdirSync(backupDir).some((name) => name.includes('.tmp-')),
+    false,
+  );
 });
 
 test('nhân viên không xem hay khôi phục được bản sao lưu', async () => {
   const user = await call('POST', '/api/users', {
     token: adminToken,
-    body: { username: 'nhanvien', fullName: 'Nhân viên', password: 'MatKhau123', pages: ['entries'] },
+    body: {
+      username: 'nhanvien',
+      fullName: 'Nhân viên',
+      password: 'MatKhau123',
+      pages: ['entries'],
+    },
   });
   assert.equal(user.status, 200);
   const staff = await call('POST', '/api/login', {
     body: { username: 'nhanvien', password: 'MatKhau123' },
   });
-  assert.equal((await call('GET', '/api/settings/automatic-backups', { token: staff.data.token })).status, 403);
-  assert.equal((await call('POST', '/api/settings/automatic-backups/restore', {
-    token: staff.data.token,
-    body: { fileName: 'x' },
-  })).status, 403);
+  assert.equal(
+    (await call('GET', '/api/settings/automatic-backups', { token: staff.data.token })).status,
+    403,
+  );
+  assert.equal(
+    (
+      await call('POST', '/api/settings/automatic-backups/restore', {
+        token: staff.data.token,
+        body: { fileName: 'x' },
+      })
+    ).status,
+    403,
+  );
 });

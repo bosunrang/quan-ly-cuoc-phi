@@ -27,7 +27,10 @@ test('lỗi máy chủ được ghi ra file log theo ngày, kèm thao tác gây 
       await log.close();
     });
     const content = readFileSync(join(dir, 'app-2026-10-04.log'), 'utf8');
-    assert.match(content, /\[ERROR\] \[loi\] GET \/api\/reports\/export Error: Hỏng khi xuất báo cáo/);
+    assert.match(
+      content,
+      /\[ERROR\] \[loi\] GET \/api\/reports\/export Error: Hỏng khi xuất báo cáo/,
+    );
     assert.match(content, /at /, 'phải có stack trace để tra lỗi');
     assert.match(content, /\[INFO\] Đã tạo backup tự động/);
   } finally {
@@ -52,7 +55,12 @@ test('chỉ giữ số ngày log quy định và chặn log tràn trong một ng
       await log.close();
     });
     const files = readdirSync(dir).sort();
-    assert.deepEqual(files, ['app-2026-09-08.log', 'app-2026-09-09.log', 'app-2026-10-04.log', 'ghi-chu.txt']);
+    assert.deepEqual(files, [
+      'app-2026-09-08.log',
+      'app-2026-09-09.log',
+      'app-2026-10-04.log',
+      'ghi-chu.txt',
+    ]);
     const today = readFileSync(join(dir, 'app-2026-10-04.log'), 'utf8');
     assert.ok(Buffer.byteLength(today) < 500);
     assert.match(today, /Đã đạt giới hạn dung lượng log/);

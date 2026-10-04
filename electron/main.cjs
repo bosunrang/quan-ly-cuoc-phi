@@ -1,6 +1,16 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, session, shell, nativeImage } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  Tray,
+  dialog,
+  ipcMain,
+  session,
+  shell,
+  nativeImage,
+} = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
@@ -31,9 +41,7 @@ app.enableSandbox();
 
 function companyDataDirectory(profile) {
   const base = path.join(app.getPath('appData'), USER_DATA_DIRECTORY);
-  return profile.usesLegacyDataDirectory
-    ? base
-    : path.join(base, 'profiles', profile.id);
+  return profile.usesLegacyDataDirectory ? base : path.join(base, 'profiles', profile.id);
 }
 
 async function chooseCompany() {
@@ -67,7 +75,9 @@ function configPath() {
 
 function normalizeServerUrl(value) {
   let url;
-  try { url = new URL(String(value).trim()); } catch {
+  try {
+    url = new URL(String(value).trim());
+  } catch {
     throw new Error('Địa chỉ máy chủ chưa đúng. Ví dụ: http://192.168.1.153:3100');
   }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
@@ -80,7 +90,8 @@ function readMachineConfig() {
   try {
     const value = JSON.parse(readFileSync(configPath(), 'utf8'));
     if (value?.role === 'host') return { role: 'host' };
-    if (value?.role === 'client') return { role: 'client', serverUrl: normalizeServerUrl(value.serverUrl) };
+    if (value?.role === 'client')
+      return { role: 'client', serverUrl: normalizeServerUrl(value.serverUrl) };
   } catch {
     // Chưa có cấu hình hoặc tệp cũ không hợp lệ: hỏi lại người dùng.
   }
@@ -117,16 +128,25 @@ function askClientServer() {
       resolve(value);
     };
     const setupWindow = new BrowserWindow({
-      width: 460, height: 310, resizable: false, minimizable: false, maximizable: false,
-      autoHideMenuBar: true, icon: ICON,
+      width: 460,
+      height: 310,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      autoHideMenuBar: true,
+      icon: ICON,
       webPreferences: {
-        preload: path.join(__dirname, 'setup-preload.cjs'), contextIsolation: true,
-        nodeIntegration: false, sandbox: true, webSecurity: true,
+        preload: path.join(__dirname, 'setup-preload.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        webSecurity: true,
       },
     });
     clientSetupWindow = setupWindow;
     ipcMain.handle('machine:configure-client', (event, rawUrl) => {
-      if (event.sender.id !== setupWindow.webContents.id) return { ok: false, error: 'Yêu cầu thiết lập không hợp lệ.' };
+      if (event.sender.id !== setupWindow.webContents.id)
+        return { ok: false, error: 'Yêu cầu thiết lập không hợp lệ.' };
       try {
         const serverUrl = normalizeServerUrl(rawUrl);
         finish(serverUrl);
@@ -144,9 +164,15 @@ function askClientServer() {
 
 async function chooseMachine() {
   const selected = await dialog.showMessageBox({
-    type: 'question', title: 'Thiết lập máy', message: 'Máy này sẽ làm nhiệm vụ gì?',
-    detail: 'Máy chủ lưu SQLite và phục vụ các máy trong mạng. Máy trạm chỉ kết nối tới máy chủ, không tạo dữ liệu riêng.',
-    buttons: ['Máy chủ', 'Máy trạm', 'Thoát'], defaultId: 0, cancelId: 2, noLink: true,
+    type: 'question',
+    title: 'Thiết lập máy',
+    message: 'Máy này sẽ làm nhiệm vụ gì?',
+    detail:
+      'Máy chủ lưu SQLite và phục vụ các máy trong mạng. Máy trạm chỉ kết nối tới máy chủ, không tạo dữ liệu riêng.',
+    buttons: ['Máy chủ', 'Máy trạm', 'Thoát'],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true,
   });
   if (selected.response === 2) return null;
   if (selected.response === 0) return { role: 'host' };
@@ -200,33 +226,50 @@ function setupAutoUpdate() {
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.on('error', (error) => console.warn('Không thể kiểm tra cập nhật:', error.message));
   autoUpdater.on('update-downloaded', () => {
-    dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: 'Đã tải bản cập nhật',
-      message: 'Bản cập nhật mới đã sẵn sàng.',
-      detail: 'Chọn “Cài đặt ngay” để đóng ứng dụng và cập nhật. Hoặc chọn “Để sau” để tiếp tục làm việc.',
-      buttons: ['Cài đặt ngay', 'Để sau'],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-    }).then((result) => {
-      if (result.response === 0) void installDownloadedUpdate();
-    });
+    dialog
+      .showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Đã tải bản cập nhật',
+        message: 'Bản cập nhật mới đã sẵn sàng.',
+        detail:
+          'Chọn “Cài đặt ngay” để đóng ứng dụng và cập nhật. Hoặc chọn “Để sau” để tiếp tục làm việc.',
+        buttons: ['Cài đặt ngay', 'Để sau'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      })
+      .then((result) => {
+        if (result.response === 0) void installDownloadedUpdate();
+      });
   });
   // Chờ giao diện xuất hiện trước để không làm chậm lần mở ứng dụng đầu tiên.
   const timer = setTimeout(() => {
-    void autoUpdater.checkForUpdates().catch((error) => console.warn('Không thể kiểm tra cập nhật:', error.message));
+    void autoUpdater
+      .checkForUpdates()
+      .catch((error) => console.warn('Không thể kiểm tra cập nhật:', error.message));
   }, 10_000);
   timer.unref();
 }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1440, height: 900, minWidth: 1100, minHeight: 700, backgroundColor: '#f4f6f8',
-    show: false, autoHideMenuBar: true, icon: ICON,
+    width: 1440,
+    height: 900,
+    minWidth: 1100,
+    minHeight: 700,
+    backgroundColor: '#f4f6f8',
+    show: false,
+    autoHideMenuBar: true,
+    icon: ICON,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false,
-      sandbox: true, webSecurity: true, allowRunningInsecureContent: false, devTools: !app.isPackaged, webviewTag: false,
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      devTools: !app.isPackaged,
+      webviewTag: false,
     },
   });
   mainWindow.webContents.setWindowOpenHandler(({ url, frameName }) => {
@@ -234,10 +277,16 @@ function createWindow() {
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
-          width: 1200, height: 850, autoHideMenuBar: true, icon: ICON,
+          width: 1200,
+          height: 850,
+          autoHideMenuBar: true,
+          icon: ICON,
           webPreferences: {
-            contextIsolation: true, nodeIntegration: false, sandbox: true,
-            webSecurity: true, devTools: !app.isPackaged,
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+            webSecurity: true,
+            devTools: !app.isPackaged,
           },
         },
       };
@@ -251,17 +300,33 @@ function createWindow() {
     printWindow.webContents.on('will-redirect', (event) => event.preventDefault());
   });
   // So đúng origin: startsWith để lọt http://127.0.0.1:3100@evil.com hoặc cổng 31000.
-  const sameOrigin = (url) => { try { return new URL(url).origin === new URL(origin).origin; } catch { return false; } };
-  const blockForeign = (event, url) => { if (!sameOrigin(url)) event.preventDefault(); };
+  const sameOrigin = (url) => {
+    try {
+      return new URL(url).origin === new URL(origin).origin;
+    } catch {
+      return false;
+    }
+  };
+  const blockForeign = (event, url) => {
+    if (!sameOrigin(url)) event.preventDefault();
+  };
   mainWindow.webContents.on('will-navigate', blockForeign);
   mainWindow.webContents.on('will-redirect', blockForeign);
   mainWindow.webContents.on('did-fail-load', (_event, _code, description, url, isMainFrame) => {
     if (machine.role !== 'client' || !isMainFrame || !url.startsWith(origin)) return;
-    dialog.showMessageBox(mainWindow, {
-      type: 'error', title: 'Không kết nối được máy chủ', message: `Không mở được ${origin}.`,
-      detail: `${description}\nKiểm tra máy chủ đang bật và cùng mạng nội bộ.`,
-      buttons: ['Đổi máy chủ', 'Đóng'], defaultId: 0, noLink: true,
-    }).then((result) => { if (result.response === 0) void configureClient(); });
+    dialog
+      .showMessageBox(mainWindow, {
+        type: 'error',
+        title: 'Không kết nối được máy chủ',
+        message: `Không mở được ${origin}.`,
+        detail: `${description}\nKiểm tra máy chủ đang bật và cùng mạng nội bộ.`,
+        buttons: ['Đổi máy chủ', 'Đóng'],
+        defaultId: 0,
+        noLink: true,
+      })
+      .then((result) => {
+        if (result.response === 0) void configureClient();
+      });
   });
   mainWindow.on('close', (event) => {
     if (quitting) return;
@@ -284,26 +349,49 @@ function createTray(port) {
   tray = new Tray(image);
   const isHost = machine.role === 'host';
   tray.setToolTip(`${company.name} — ${isHost ? 'máy chủ đang chạy' : 'máy trạm đang kết nối'}`);
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Mở ứng dụng', click: showWindow },
-    ...(isHost ? [{
-      label: 'Địa chỉ cho máy nhân viên…',
-      click: () => dialog.showMessageBox({ type: 'info', title: 'Địa chỉ truy cập', message: 'Nhân viên mở trình duyệt và gõ một trong các địa chỉ sau:', detail: lanAddresses(port).join('\n'), buttons: ['Đóng'] }),
-    }] : [
-      { label: `Máy chủ: ${origin}`, enabled: false },
-      { label: 'Đổi máy chủ…', click: () => void configureClient() },
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Mở ứng dụng', click: showWindow },
+      ...(isHost
+        ? [
+            {
+              label: 'Địa chỉ cho máy nhân viên…',
+              click: () =>
+                dialog.showMessageBox({
+                  type: 'info',
+                  title: 'Địa chỉ truy cập',
+                  message: 'Nhân viên mở trình duyệt và gõ một trong các địa chỉ sau:',
+                  detail: lanAddresses(port).join('\n'),
+                  buttons: ['Đóng'],
+                }),
+            },
+          ]
+        : [
+            { label: `Máy chủ: ${origin}`, enabled: false },
+            { label: 'Đổi máy chủ…', click: () => void configureClient() },
+          ]),
+      ...(fileLog
+        ? [{ label: 'Mở thư mục log…', click: () => void shell.openPath(fileLog.dir) }]
+        : []),
+      { type: 'separator' },
+      {
+        label: isHost ? 'Thoát (máy nhân viên sẽ mất kết nối)' : 'Thoát',
+        click: () => {
+          quitting = true;
+          app.quit();
+        },
+      },
     ]),
-    ...(fileLog ? [{ label: 'Mở thư mục log…', click: () => void shell.openPath(fileLog.dir) }] : []),
-    { type: 'separator' },
-    { label: isHost ? 'Thoát (máy nhân viên sẽ mất kết nối)' : 'Thoát', click: () => { quitting = true; app.quit(); } },
-  ]));
+  );
   tray.on('double-click', showWindow);
 }
 
 function announceFirstRun(port) {
   if (!backend.seeded) return;
   dialog.showMessageBoxSync({
-    type: 'info', title: 'Tài khoản quản trị đầu tiên', message: 'Đây là lần chạy đầu tiên.',
+    type: 'info',
+    title: 'Tài khoản quản trị đầu tiên',
+    message: 'Đây là lần chạy đầu tiên.',
     detail: `Tên đăng nhập: ${backend.seeded.username}\nMật khẩu mặc định: ${backend.seeded.password}\n\nSau khi đăng nhập, ứng dụng sẽ bắt buộc bạn đặt mật khẩu mới trước khi sử dụng.\n\nMáy nhân viên truy cập qua:\n${lanAddresses(port).join('\n')}`,
     buttons: ['Tiếp tục'],
   });
@@ -320,7 +408,7 @@ app.whenReady().then(async () => {
     // Log theo từng công ty, cạnh dữ liệu của công ty đó.
     fileLog = installFileLogging(path.join(app.getPath('userData'), 'logs'));
     console.log(`Khởi động ${company.name} — phiên bản ${app.getVersion()}`);
-    machine = readMachineConfig() ?? await chooseMachine();
+    machine = readMachineConfig() ?? (await chooseMachine());
     if (!machine) return app.quit();
     saveMachineConfig(machine);
     session.defaultSession.setPermissionRequestHandler((_wc, _p, cb) => cb(false));
@@ -331,10 +419,15 @@ app.whenReady().then(async () => {
     createTray(port);
     createWindow();
     setupAutoUpdate();
-    ipcMain.handle('app:addresses', () => machine.role === 'host' ? lanAddresses(port) : []);
+    ipcMain.handle('app:addresses', () => (machine.role === 'host' ? lanAddresses(port) : []));
   } catch (error) {
     const busy = error?.code === 'EADDRINUSE';
-    dialog.showErrorBox('Không khởi động được', busy ? `Cổng ${company?.port ?? ''} đang bị chương trình khác chiếm. Hãy đóng chương trình đó rồi mở lại.` : String(error?.message ?? error));
+    dialog.showErrorBox(
+      'Không khởi động được',
+      busy
+        ? `Cổng ${company?.port ?? ''} đang bị chương trình khác chiếm. Hãy đóng chương trình đó rồi mở lại.`
+        : String(error?.message ?? error),
+    );
     app.exit(1);
   }
 });
@@ -342,7 +435,9 @@ app.whenReady().then(async () => {
 app.on('second-instance', showWindow);
 app.on('activate', showWindow);
 app.on('window-all-closed', () => {});
-app.on('before-quit', () => { quitting = true; });
+app.on('before-quit', () => {
+  quitting = true;
+});
 app.on('will-quit', async (event) => {
   if (!backend) return;
   event.preventDefault();
@@ -352,4 +447,6 @@ app.on('will-quit', async (event) => {
     app.exit(0);
   }
 });
-app.on('web-contents-created', (_event, contents) => contents.on('will-attach-webview', (event) => event.preventDefault()));
+app.on('web-contents-created', (_event, contents) =>
+  contents.on('will-attach-webview', (event) => event.preventDefault()),
+);

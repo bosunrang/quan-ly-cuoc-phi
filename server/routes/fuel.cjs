@@ -5,12 +5,23 @@ const { writeAudit } = require('../audit.cjs');
 const { badRequest, notFound } = require('../http.cjs');
 const { canSeeEveryone } = require('../permissions.cjs');
 const {
-  FUEL_TYPES, cleanText, fuelConsumptionInput, fuelPriceInput, fuelRecordInput, toFuelPrice,
+  FUEL_TYPES,
+  cleanText,
+  fuelConsumptionInput,
+  fuelPriceInput,
+  fuelRecordInput,
+  toFuelPrice,
 } = require('../fuel/calculation.cjs');
 const { estimateRoute } = require('../fuel/routes.cjs');
 const { fetchPetrolimexPrices } = require('../fuel/online-prices.cjs');
 const {
-  activeEmployee, consumptionProfiles, fuelHistory, listFuelData, saveFuelRecord, editableRecord, deleteFuelRecord,
+  activeEmployee,
+  consumptionProfiles,
+  fuelHistory,
+  listFuelData,
+  saveFuelRecord,
+  editableRecord,
+  deleteFuelRecord,
 } = require('../fuel/records.cjs');
 
 const PAGE = 'fuel';
@@ -45,17 +56,30 @@ function register(router) {
     const input = fuelPriceInput(c.body);
     const at = new Date().toISOString();
     return transaction(c.db, () => {
-      c.db.prepare(
-        `INSERT INTO fuel_prices
+      c.db
+        .prepare(
+          `INSERT INTO fuel_prices
          (effective_date, fuel_type, region, price, source, created_by, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(effective_date, fuel_type, region) DO UPDATE SET
            price = excluded.price, source = excluded.source,
            created_by = excluded.created_by, updated_at = excluded.updated_at`,
-      ).run(input.effectiveDate, input.fuelType, input.region, input.price, input.source, c.user.id, at, at);
-      const row = c.db.prepare(
-        'SELECT * FROM fuel_prices WHERE effective_date = ? AND fuel_type = ? AND region = ?',
-      ).get(input.effectiveDate, input.fuelType, input.region);
+        )
+        .run(
+          input.effectiveDate,
+          input.fuelType,
+          input.region,
+          input.price,
+          input.source,
+          c.user.id,
+          at,
+          at,
+        );
+      const row = c.db
+        .prepare(
+          'SELECT * FROM fuel_prices WHERE effective_date = ? AND fuel_type = ? AND region = ?',
+        )
+        .get(input.effectiveDate, input.fuelType, input.region);
       writeAudit(c.db, c.user, 'fuel.price.upsert', 'fuel_price', row.id, input);
       return toFuelPrice(row);
     });
@@ -77,13 +101,16 @@ function register(router) {
       throw badRequest('Chỉ quản trị viên trên máy chủ được thiết lập định mức.');
     }
     const input = fuelConsumptionInput(c.body);
-    const columns = input.vehicleType === 'truck'
-      ? ['truck_consumption_liters', 'truck_base_km']
-      : ['motorcycle_consumption_liters', 'motorcycle_base_km'];
+    const columns =
+      input.vehicleType === 'truck'
+        ? ['truck_consumption_liters', 'truck_base_km']
+        : ['motorcycle_consumption_liters', 'motorcycle_base_km'];
     transaction(c.db, () => {
-      c.db.prepare(
-        `UPDATE app_settings SET ${columns[0]} = ?, ${columns[1]} = ?, updated_at = ? WHERE id = 1`,
-      ).run(input.consumptionLiters, input.consumptionBaseKm, new Date().toISOString());
+      c.db
+        .prepare(
+          `UPDATE app_settings SET ${columns[0]} = ?, ${columns[1]} = ?, updated_at = ? WHERE id = 1`,
+        )
+        .run(input.consumptionLiters, input.consumptionBaseKm, new Date().toISOString());
       writeAudit(c.db, c.user, 'settings.update', 'fuel_consumption', input.vehicleType, input);
     });
     return consumptionProfiles(c.db);
@@ -108,7 +135,9 @@ function register(router) {
       return await estimateRoute({ db: c.db, from, to, vietmapApiKey });
     } catch (cause) {
       const message = cause instanceof Error ? cleanText(cause.message, 320) : '';
-      throw badRequest(`VietMap không lấy được km: ${message || 'kiểm tra lại API key và hạn mức.'}`);
+      throw badRequest(
+        `VietMap không lấy được km: ${message || 'kiểm tra lại API key và hạn mức.'}`,
+      );
     }
   });
 
@@ -134,12 +163,7 @@ function register(router) {
 
   router.delete('/api/fuel/records/:id', async (c) => {
     c.requirePage(PAGE);
-    return deleteFuelRecord(
-      c.db,
-      Number(c.params.id),
-      c.user,
-      canSeeEveryone(c.user),
-    );
+    return deleteFuelRecord(c.db, Number(c.params.id), c.user, canSeeEveryone(c.user));
   });
 }
 

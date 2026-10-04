@@ -33,26 +33,28 @@ async function main() {
   });
 
   await app.listen(PORT, HOST);
-	console.log(`${COMPANY.name}: server đang chạy tại http://localhost:${PORT}`);
-	if (API_ONLY) console.log('Chế độ API nội bộ: giao diện chỉ chạy qua Vite.');
+  console.log(`${COMPANY.name}: server đang chạy tại http://localhost:${PORT}`);
+  if (API_ONLY) console.log('Chế độ API nội bộ: giao diện chỉ chạy qua Vite.');
 
-	if (ALLOW_DEV_LOGIN) {
-		console.log('Chế độ phát triển: tự động đăng nhập bằng tài khoản Admin.');
-	}
+  if (ALLOW_DEV_LOGIN) {
+    console.log('Chế độ phát triển: tự động đăng nhập bằng tài khoản Admin.');
+  }
 
   if (app.seeded) {
     // In thẳng ra màn hình, không qua console: mật khẩu ban đầu không được
     // nằm lại trong file log.
-    process.stdout.write([
-      '',
-      '  ===== TÀI KHOẢN ADMIN ĐẦU TIÊN =====',
-      `  Tên đăng nhập: ${app.seeded.username}`,
-      `  Mật khẩu:      ${app.seeded.password}`,
-      '  Hãy đổi mật khẩu ngay sau khi đăng nhập.',
-      '  ====================================',
-      '',
-      '',
-    ].join('\n'));
+    process.stdout.write(
+      [
+        '',
+        '  ===== TÀI KHOẢN ADMIN ĐẦU TIÊN =====',
+        `  Tên đăng nhập: ${app.seeded.username}`,
+        `  Mật khẩu:      ${app.seeded.password}`,
+        '  Hãy đổi mật khẩu ngay sau khi đăng nhập.',
+        '  ====================================',
+        '',
+        '',
+      ].join('\n'),
+    );
     console.log('Đã tạo tài khoản Admin đầu tiên (mật khẩu chỉ hiện trên màn hình).');
   }
 

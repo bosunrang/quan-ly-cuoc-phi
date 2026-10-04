@@ -75,16 +75,16 @@ function newEntry(overrides = {}) {
     entryDate: '2026-08-01',
     customer: 'Khách A',
     carrier: 'Nhà xe A',
-		recipient: 'Người nhận A',
-		address: 'Địa chỉ A',
-		spec: 'Tất cả',
+    recipient: 'Người nhận A',
+    address: 'Địa chỉ A',
+    spec: 'Tất cả',
     ticketFee: 10000,
     transportFee: 200000,
     gateFee: 5000,
-		otherFee: 0,
-		note: 'Sản phẩm A',
-		billStatus: 'Có bill',
-		employeeId: staffAEmployeeId,
+    otherFee: 0,
+    note: 'Sản phẩm A',
+    billStatus: 'Có bill',
+    employeeId: staffAEmployeeId,
     ...overrides,
   };
 }
@@ -164,7 +164,7 @@ before(async () => {
     token: adminToken,
     body: {
       fullName: 'Nhân viên A',
-	  address: '',
+      address: '',
       userId: staffA.id,
       isActive: true,
     },
@@ -189,12 +189,7 @@ describe('đăng nhập', () => {
   });
 
   test('không có token thì mọi API nghiệp vụ đều bị chặn', async () => {
-    for (const path of [
-      '/api/entries',
-      '/api/users',
-      '/api/audit',
-      '/api/me',
-    ]) {
+    for (const path of ['/api/entries', '/api/users', '/api/audit', '/api/me']) {
       const result = await call('GET', path);
       assert.equal(result.status, 401, `${path} phải trả 401`);
     }
@@ -218,7 +213,7 @@ describe('cài đặt dùng chung', () => {
     const read = await call('GET', '/api/settings', { token: staffAToken });
     assert.equal(read.status, 200);
     assert.equal(read.data.displayName, 'NAVIVA GROUP');
-		assert.equal(read.data.logoDataUrl, '/icon.png');
+    assert.equal(read.data.logoDataUrl, '/icon.png');
 
     const update = await call('PATCH', '/api/settings', {
       token: staffAToken,
@@ -274,26 +269,60 @@ describe('cài đặt dùng chung', () => {
 
   test('backup giữ ghi chú chênh lệch và ánh xạ người chốt/hủy không còn tồn tại', async () => {
     const at = new Date().toISOString();
-    app.db.prepare(
-      `INSERT INTO entries
+    app.db
+      .prepare(
+        `INSERT INTO entries
         (entry_date, customer, carrier, recipient, address, spec, ticket_fee,
          transport_fee, gate_fee, note, rate_variance_note, created_by, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      '2026-01-01', 'Khách backup', 'Nhà xe backup', '', '', '', 0, 100000,
-      0, '', 'Lý do chênh lệch cần giữ lại', 1, at, at,
-    );
-    app.db.prepare(
-      `INSERT INTO fuel_records
+      )
+      .run(
+        '2026-01-01',
+        'Khách backup',
+        'Nhà xe backup',
+        '',
+        '',
+        '',
+        0,
+        100000,
+        0,
+        '',
+        'Lý do chênh lệch cần giữ lại',
+        1,
+        at,
+        at,
+      );
+    app.db
+      .prepare(
+        `INSERT INTO fuel_records
         (entry_date, employee_id, distance_km, consumption_liters, consumption_base_km,
          fuel_type, region, fuel_price, total_fee, note, created_by, created_at,
          period_from, period_to, updated_at, finalized_at, finalized_by, voided_at,
          voided_by, void_reason, status)
        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      '2026-01-01', 10, 3.5, 40, 'Xăng E10', 'region1', 20000, 17500, '',
-      1, at, '2026-01-01', '2026-01-01', at, at, 1, at, 1, 'Hủy để kiểm tra backup', 'voided',
-    );
+      )
+      .run(
+        '2026-01-01',
+        10,
+        3.5,
+        40,
+        'Xăng E10',
+        'region1',
+        20000,
+        17500,
+        '',
+        1,
+        at,
+        '2026-01-01',
+        '2026-01-01',
+        at,
+        at,
+        1,
+        at,
+        1,
+        'Hủy để kiểm tra backup',
+        'voided',
+      );
 
     const exported = await call('GET', '/api/settings/backup', { token: adminToken });
     const backedUpEntry = exported.data.data.entries.find((row) => row.customer === 'Khách backup');
@@ -309,8 +338,14 @@ describe('cài đặt dùng chung', () => {
     });
     assert.equal(restored.status, 200);
 
-    const entry = app.db.prepare("SELECT rate_variance_note FROM entries WHERE customer = 'Khách backup'").get();
-    const fuel = app.db.prepare("SELECT finalized_by, voided_by FROM fuel_records WHERE void_reason = 'Hủy để kiểm tra backup'").get();
+    const entry = app.db
+      .prepare("SELECT rate_variance_note FROM entries WHERE customer = 'Khách backup'")
+      .get();
+    const fuel = app.db
+      .prepare(
+        "SELECT finalized_by, voided_by FROM fuel_records WHERE void_reason = 'Hủy để kiểm tra backup'",
+      )
+      .get();
     assert.equal(entry.rate_variance_note, 'Lý do chênh lệch cần giữ lại');
     assert.equal(fuel.finalized_by, 1);
     assert.equal(fuel.voided_by, 1);
@@ -447,16 +482,18 @@ describe('nhập dữ liệu MISA', () => {
       token: adminToken,
       body: {
         fileName: 'MISA lien ket theo ma.xlsx',
-        rows: [misaRow({
-          rowNumber: 9,
-          documentDate: '2026-06-08',
-          customerCode,
-          customerName: 'Bệnh viện tên cũ trên MISA',
-          productName: 'Sản phẩm liên kết theo mã',
-          quantitySold: 7,
-          provinceCity: 'Cần Thơ',
-          sourceKey: '2026-06-08|kh-misa-lien-ket|san-pham-lien-ket|7',
-        })],
+        rows: [
+          misaRow({
+            rowNumber: 9,
+            documentDate: '2026-06-08',
+            customerCode,
+            customerName: 'Bệnh viện tên cũ trên MISA',
+            productName: 'Sản phẩm liên kết theo mã',
+            quantitySold: 7,
+            provinceCity: 'Cần Thơ',
+            sourceKey: '2026-06-08|kh-misa-lien-ket|san-pham-lien-ket|7',
+          }),
+        ],
       },
     });
     assert.equal(imported.status, 200);
@@ -507,46 +544,44 @@ describe('nhập dữ liệu MISA', () => {
   });
 
   test('tìm tiếng Việt không phân biệt dấu, hoa thường và Đ/đ', async () => {
-	const row = misaRow({
-	  rowNumber: 8,
-	  customerName: 'Bệnh Viện Bệnh Nhiệt Đới',
-	  address: '764 Võ Văn Kiệt, Phường Chợ Quán',
-	  provinceCity: 'Hồ Chí Minh 1',
-	  sourceKey: '2026-06-01|bh008|kh008|benh vien benh nhiet doi|sp008|1',
-	});
-	const imported = await call('POST', '/api/misa/import', {
-	  token: adminToken,
-	  body: { fileName: 'Dữ liệu Misa.xlsx', rows: [row] },
-	});
-	assert.equal(imported.status, 200);
+    const row = misaRow({
+      rowNumber: 8,
+      customerName: 'Bệnh Viện Bệnh Nhiệt Đới',
+      address: '764 Võ Văn Kiệt, Phường Chợ Quán',
+      provinceCity: 'Hồ Chí Minh 1',
+      sourceKey: '2026-06-01|bh008|kh008|benh vien benh nhiet doi|sp008|1',
+    });
+    const imported = await call('POST', '/api/misa/import', {
+      token: adminToken,
+      body: { fileName: 'Dữ liệu Misa.xlsx', rows: [row] },
+    });
+    assert.equal(imported.status, 200);
 
-	for (const query of ['Nhiệt đới', 'nhiệt đới', 'NHIET DOI', 'nhiet doi']) {
-	  const result = await call(
-		'GET',
-		`/api/misa?search=${encodeURIComponent(query)}`,
-		{ token: adminToken },
-	  );
-	  assert.equal(result.status, 200);
-	  assert.equal(result.data.count, 1, `Không tìm đúng với "${query}"`);
-	  assert.equal(result.data.items[0].customerName, row.customerName);
-	}
+    for (const query of ['Nhiệt đới', 'nhiệt đới', 'NHIET DOI', 'nhiet doi']) {
+      const result = await call('GET', `/api/misa?search=${encodeURIComponent(query)}`, {
+        token: adminToken,
+      });
+      assert.equal(result.status, 200);
+      assert.equal(result.data.count, 1, `Không tìm đúng với "${query}"`);
+      assert.equal(result.data.items[0].customerName, row.customerName);
+    }
 
-	const byAddress = await call(
-	  'GET',
-	  `/api/misa?search=${encodeURIComponent('764 Võ Văn Kiệt')}`,
-	  { token: adminToken },
-	);
-	assert.equal(byAddress.status, 200);
-	assert.equal(byAddress.data.count, 0, 'Ô tìm kiếm không được lọc theo địa chỉ');
+    const byAddress = await call(
+      'GET',
+      `/api/misa?search=${encodeURIComponent('764 Võ Văn Kiệt')}`,
+      { token: adminToken },
+    );
+    assert.equal(byAddress.status, 200);
+    assert.equal(byAddress.data.count, 0, 'Ô tìm kiếm không được lọc theo địa chỉ');
   });
 
-	test('danh sách MISA luôn trả đúng 50 dòng mỗi trang', async () => {
-	  const result = await call('GET', '/api/misa?pageSize=200', {
-		token: adminToken,
-	  });
-	  assert.equal(result.status, 200);
-	  assert.equal(result.data.pageSize, 50);
-	});
+  test('danh sách MISA luôn trả đúng 50 dòng mỗi trang', async () => {
+    const result = await call('GET', '/api/misa?pageSize=200', {
+      token: adminToken,
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.data.pageSize, 50);
+  });
 });
 
 describe('danh mục khách hàng', () => {
@@ -616,12 +651,14 @@ describe('danh mục khách hàng', () => {
     const imported = await call('POST', '/api/customers/import', {
       token: adminToken,
       body: {
-        rows: [{
-          customerName: 'Khách hàng đã đổi tên',
-          customerCode: customerCode.toLowerCase(),
-          carrier: '',
-          address: '30 Đường mới',
-        }],
+        rows: [
+          {
+            customerName: 'Khách hàng đã đổi tên',
+            customerCode: customerCode.toLowerCase(),
+            carrier: '',
+            address: '30 Đường mới',
+          },
+        ],
       },
     });
     assert.equal(imported.status, 200);
@@ -634,7 +671,7 @@ describe('danh mục khách hàng', () => {
     assert.equal(listed.data.items[0].id, customer.data.id);
     assert.equal(listed.data.items[0].customerName, 'Khách hàng đã đổi tên');
     assert.equal(listed.data.items[0].carrier, carrier.name);
-	assert.equal(Object.hasOwn(listed.data.items[0], 'recipient'), false);
+    assert.equal(Object.hasOwn(listed.data.items[0], 'recipient'), false);
 
     const rates = await call(
       'GET',
@@ -664,9 +701,7 @@ describe('danh mục khách hàng', () => {
     const misaCustomerCodeLookupIndex = app.db
       .prepare("PRAGMA index_list('misa_rows')")
       .all()
-      .find(
-        (index) => index.name === 'misa_customer_code_nocase_order_idx',
-      );
+      .find((index) => index.name === 'misa_customer_code_nocase_order_idx');
     assert.ok(misaCustomerCodeLookupIndex);
   });
 
@@ -698,11 +733,11 @@ describe('danh mục khách hàng', () => {
 
     const updated = await call('PATCH', `/api/customers/${created.data.id}`, {
       token: adminToken,
-	  body: { ...created.data, address: 'Quận 1, TP. Hồ Chí Minh' },
+      body: { ...created.data, address: 'Quận 1, TP. Hồ Chí Minh' },
     });
     assert.equal(updated.status, 200);
-	assert.equal(updated.data.address, 'Quận 1, TP. Hồ Chí Minh');
-	assert.equal(Object.hasOwn(updated.data, 'recipient'), false);
+    assert.equal(updated.data.address, 'Quận 1, TP. Hồ Chí Minh');
+    assert.equal(Object.hasOwn(updated.data, 'recipient'), false);
 
     const duplicate = await call('POST', '/api/customers', {
       token: adminToken,
@@ -731,18 +766,15 @@ describe('danh mục khách hàng', () => {
     assert.equal(customer.status, 200);
     assert.equal(carrier.status, 200);
 
-    const assigned = await call(
-      'PATCH',
-      `/api/carriers/${carrier.data.id}/customers`,
-      { token: adminToken, body: { customerIds: [customer.data.id] } },
-    );
+    const assigned = await call('PATCH', `/api/carriers/${carrier.data.id}/customers`, {
+      token: adminToken,
+      body: { customerIds: [customer.data.id] },
+    });
     assert.equal(assigned.status, 200);
 
-    const assignedCustomers = await call(
-      'GET',
-      `/api/carriers/${carrier.data.id}/customers`,
-      { token: adminToken },
-    );
+    const assignedCustomers = await call('GET', `/api/carriers/${carrier.data.id}/customers`, {
+      token: adminToken,
+    });
     assert.equal(assignedCustomers.status, 200);
     assert.equal(assignedCustomers.data.items[0].customerCode, 'KH-LIEN-KET-NHA-XE');
 
@@ -805,7 +837,6 @@ describe('danh mục khách hàng', () => {
 });
 
 describe('bảng cước theo nhà xe và khách hàng', () => {
-
   test('nhập và xuất Excel đồng bộ nhà xe, khách hàng và mức cước', async () => {
     const customer = await call('POST', '/api/customers', {
       token: adminToken,
@@ -813,37 +844,56 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     });
     assert.equal(customer.status, 200);
     const body = {
-      carriers: [{
-        rowNumber: 2, name: 'Nhà xe Excel', contact: '', phone: '0909000000',
-        address: '10 Đường Excel', deliveryPoint: 'Bến xe Excel, 1 Đường chung',
-        schedule: '17h', note: '', isActive: true,
-      }],
-      rates: [{
-        rowNumber: 2, carrierName: 'Nhà xe Excel', customerName: 'Khách hàng Excel bảng cước',
-        spec: '01 thùng nhỏ', transportFee: 50000, gateFee: 15000, note: 'Ra nhận',
-      }],
+      carriers: [
+        {
+          rowNumber: 2,
+          name: 'Nhà xe Excel',
+          contact: '',
+          phone: '0909000000',
+          address: '10 Đường Excel',
+          deliveryPoint: 'Bến xe Excel, 1 Đường chung',
+          schedule: '17h',
+          note: '',
+          isActive: true,
+        },
+      ],
+      rates: [
+        {
+          rowNumber: 2,
+          carrierName: 'Nhà xe Excel',
+          customerName: 'Khách hàng Excel bảng cước',
+          spec: '01 thùng nhỏ',
+          transportFee: 50000,
+          gateFee: 15000,
+          note: 'Ra nhận',
+        },
+      ],
     };
     const preview = await call('POST', '/api/carriers/excel/preview', {
-      token: adminToken, body,
+      token: adminToken,
+      body,
     });
     assert.equal(preview.status, 200);
     assert.equal(preview.data.rateSummary.ready, 1);
 
     const imported = await call('POST', '/api/carriers/excel/import', {
-      token: adminToken, body,
+      token: adminToken,
+      body,
     });
     assert.equal(imported.status, 200);
     assert.equal(imported.data.ratesCreated, 1);
 
     const duplicatePreview = await call('POST', '/api/carriers/excel/preview', {
-      token: adminToken, body,
+      token: adminToken,
+      body,
     });
     assert.equal(duplicatePreview.status, 200);
     assert.equal(duplicatePreview.data.carrierSummary.duplicate, 1);
     assert.equal(duplicatePreview.data.rateSummary.duplicate, 1);
 
     const reimported = await call('POST', '/api/carriers/excel/import', {
-      token: adminToken, body,
+      token: adminToken,
+      body,
     });
     assert.equal(reimported.status, 200);
     assert.equal(reimported.data.carriersCreated, 0);
@@ -854,14 +904,17 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     });
     assert.equal(exported.status, 200);
     assert.equal(
-      exported.data.carriers.some((row) =>
-        row.name === 'Nhà xe Excel' && row.deliveryPoint === 'Bến xe Excel, 1 Đường chung',
+      exported.data.carriers.some(
+        (row) => row.name === 'Nhà xe Excel' && row.deliveryPoint === 'Bến xe Excel, 1 Đường chung',
       ),
       true,
     );
     assert.equal(
-      exported.data.rates.some((row) =>
-        row.carrierName === 'Nhà xe Excel' && row.customerName === 'Khách hàng Excel bảng cước' && row.transportFee === 50000,
+      exported.data.rates.some(
+        (row) =>
+          row.carrierName === 'Nhà xe Excel' &&
+          row.customerName === 'Khách hàng Excel bảng cước' &&
+          row.transportFee === 50000,
       ),
       true,
     );
@@ -879,17 +932,19 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     assert.equal(carrier.status, 200);
 
     const body = {
-      carriers: [{
-        rowNumber: 2,
-        name: 'Nhà xe cập nhật bến',
-        contact: '',
-        phone: '0909111222',
-        address: '',
-        deliveryPoint: 'Bến xe Trung tâm, 25 Đường A',
-        schedule: '',
-        note: '',
-        isActive: true,
-      }],
+      carriers: [
+        {
+          rowNumber: 2,
+          name: 'Nhà xe cập nhật bến',
+          contact: '',
+          phone: '0909111222',
+          address: '',
+          deliveryPoint: 'Bến xe Trung tâm, 25 Đường A',
+          schedule: '',
+          note: '',
+          isActive: true,
+        },
+      ],
       rates: [],
     };
     const preview = await call('POST', '/api/carriers/excel/preview', {
@@ -925,16 +980,18 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
 
     const body = {
       carriers: [],
-      rates: [{
-        rowNumber: 2,
-        carrierName: 'Nhà xe gán theo mã',
-        customerCode: 'kh-bang-cuoc-001',
-        customerName: 'Khách hàng mã bảng cước',
-        spec: 'Thùng nhỏ',
-        transportFee: 45_000,
-        gateFee: 0,
-        note: '',
-      }],
+      rates: [
+        {
+          rowNumber: 2,
+          carrierName: 'Nhà xe gán theo mã',
+          customerCode: 'kh-bang-cuoc-001',
+          customerName: 'Khách hàng mã bảng cước',
+          spec: 'Thùng nhỏ',
+          transportFee: 45_000,
+          gateFee: 0,
+          note: '',
+        },
+      ],
     };
     const preview = await call('POST', '/api/carriers/excel/preview', {
       token: adminToken,
@@ -954,11 +1011,13 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
       token: adminToken,
       body: {
         carriers: [],
-        rates: [{
-          ...body.rates[0],
-          customerName: 'Tên khách hàng đã đổi trên file cước',
-          spec: 'Thùng trung',
-        }],
+        rates: [
+          {
+            ...body.rates[0],
+            customerName: 'Tên khách hàng đã đổi trên file cước',
+            spec: 'Thùng trung',
+          },
+        ],
       },
     });
     assert.equal(renamedCustomer.status, 200);
@@ -990,7 +1049,13 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
 
     const smallBox = await call('POST', path, {
       token: adminToken,
-      body: { spec: '01 thùng nhỏ', isDefault: false, transportFee: 50000, gateFee: 15000, note: '' },
+      body: {
+        spec: '01 thùng nhỏ',
+        isDefault: false,
+        transportFee: 50000,
+        gateFee: 15000,
+        note: '',
+      },
     });
     assert.equal(smallBox.status, 200);
 
@@ -1065,8 +1130,10 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
 
     const ratesAfterSave = await call('GET', path, { token: adminToken });
     assert.equal(
-      ratesAfterSave.data.items.some((item) => item.spec === 'Thùng trung'
-        && item.transportFee === 60000 && item.gateFee === 17000),
+      ratesAfterSave.data.items.some(
+        (item) =>
+          item.spec === 'Thùng trung' && item.transportFee === 60000 && item.gateFee === 17000,
+      ),
       true,
     );
 
@@ -1147,12 +1214,13 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     assert.equal(variance.status, 200);
     assert.equal(
       variance.data.items.some(
-        (item) => item.customer === customer.data.customerName
-          && item.carrier === carrier.data.name
-          && item.entryDate === '2026-08-01'
-          && item.employeeName === 'Nhân viên A'
-          && item.difference === 1
-          && item.varianceNote.includes('Điều chỉnh giá giao thực tế'),
+        (item) =>
+          item.customer === customer.data.customerName &&
+          item.carrier === carrier.data.name &&
+          item.entryDate === '2026-08-01' &&
+          item.employeeName === 'Nhân viên A' &&
+          item.difference === 1 &&
+          item.varianceNote.includes('Điều chỉnh giá giao thực tế'),
       ),
       true,
     );
@@ -1164,7 +1232,9 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
     );
     assert.equal(varianceExport.status, 200);
     assert.match(varianceExport.data.fileName, /Báo cáo chênh lệch cước nhà xe/);
-    const workbook = XLSX.read(Buffer.from(varianceExport.data.contentBase64, 'base64'), { type: 'buffer' });
+    const workbook = XLSX.read(Buffer.from(varianceExport.data.contentBase64, 'base64'), {
+      type: 'buffer',
+    });
     const worksheet = workbook.Sheets['Chênh lệch cước'];
     assert.equal(worksheet.C4.v, 'Nhân viên');
     assert.equal(worksheet.C5.v, 'Nhân viên A');
@@ -1193,7 +1263,13 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
 
     const updated = await call('PATCH', `${path}/${smallBox.data.id}`, {
       token: adminToken,
-      body: { spec: '01 thùng nhỏ', isDefault: false, transportFee: 55000, gateFee: 15000, note: 'Mức mới' },
+      body: {
+        spec: '01 thùng nhỏ',
+        isDefault: false,
+        transportFee: 55000,
+        gateFee: 15000,
+        note: 'Mức mới',
+      },
     });
     assert.equal(updated.status, 200);
     assert.equal(updated.data.transportFee, 55000);
@@ -1296,7 +1372,10 @@ describe('phân quyền thẻ', () => {
     const catalog = await call('GET', '/api/reports', { token: staffAToken });
     assert.equal(catalog.status, 200);
     assert.equal(catalog.data.canReportAll, false);
-    assert.deepEqual(catalog.data.employees.map((employee) => employee.id), [staffAEmployeeId]);
+    assert.deepEqual(
+      catalog.data.employees.map((employee) => employee.id),
+      [staffAEmployeeId],
+    );
 
     // Thay employeeId trên URL không được phép đổi sang báo cáo của người khác.
     const exported = await call(
@@ -1316,7 +1395,10 @@ describe('phân quyền thẻ', () => {
     assert.equal(printable.data.sheets.length, 1);
     const printCells = printable.data.sheets[0].rows.flatMap((row) => row.cells);
     assert.ok(printCells.some((cell) => cell.value.includes('Nhân viên A')));
-    assert.equal(printCells.some((cell) => cell.value.includes('Nhân viên khác')), false);
+    assert.equal(
+      printCells.some((cell) => cell.value.includes('Nhân viên khác')),
+      false,
+    );
   });
 
   test('không thể tự cấp cho mình thẻ chỉ dành cho Admin', async () => {
@@ -1365,8 +1447,14 @@ describe('nhân viên thấy phiếu được giao nhưng chỉ quản lý phi�
 
     const adminView = await call('GET', '/api/entries', { token: adminToken });
     assert.equal(adminView.data.scope, 'all');
-    assert.equal(adminView.data.items.some((item) => item.customer === 'Khách của A'), true);
-    assert.equal(adminView.data.items.some((item) => item.customer === 'Khách của Admin'), true);
+    assert.equal(
+      adminView.data.items.some((item) => item.customer === 'Khách của A'),
+      true,
+    );
+    assert.equal(
+      adminView.data.items.some((item) => item.customer === 'Khách của Admin'),
+      true,
+    );
     assert.ok(adminView.data.items.every((item) => item.canEdit && item.canDelete));
   });
 
@@ -1395,9 +1483,7 @@ describe('nhân viên thấy phiếu được giao nhưng chỉ quản lý phi�
 
   test('không sửa hay xóa được phiếu của người khác', async () => {
     const adminEntries = await call('GET', '/api/entries', { token: adminToken });
-    const adminOwn = adminEntries.data.items.find(
-      (e) => e.customer === 'Khách của Admin',
-    );
+    const adminOwn = adminEntries.data.items.find((e) => e.customer === 'Khách của Admin');
 
     const updated = await call('PATCH', `/api/entries/${adminOwn.id}`, {
       token: staffAToken,
@@ -1417,11 +1503,9 @@ describe('nhân viên thấy phiếu được giao nhưng chỉ quản lý phi�
 
   test('nhân viên không lọc được sang dữ liệu người khác qua tham số URL', async () => {
     const admin = await call('GET', '/api/me', { token: adminToken });
-    const result = await call(
-      'GET',
-      `/api/entries?createdBy=${admin.data.user.id}`,
-      { token: staffAToken },
-    );
+    const result = await call('GET', `/api/entries?createdBy=${admin.data.user.id}`, {
+      token: staffAToken,
+    });
     // Bộ lọc nhân viên phụ trách ở server phải thắng tham số gửi lên.
     assert.equal(result.data.scope, 'own');
     assert.ok(
@@ -1442,37 +1526,41 @@ describe('nhân viên thấy phiếu được giao nhưng chỉ quản lý phi�
 });
 
 describe('kiểm tra dữ liệu đầu vào', () => {
-	test('lưu và sửa chi phí khác trong tổng tiền phiếu', async () => {
-		const delivery = await configureStaffRate('Đơn vị có chi phí phát sinh');
-		const created = await call('POST', '/api/entries', {
-			token: staffAToken,
-			body: newEntry({
-				entryDate: '2026-09-30',
-				customer: delivery.customer.customerName,
-				carrier: delivery.carrier.name,
-				spec: 'Tất cả',
-				recipient: '',
-				otherFeeName: 'Tiền bốc xếp',
-				otherFee: 12_345,
-			}),
-		});
-		assert.equal(created.status, 200);
-		assert.equal(created.data.otherFeeName, 'Tiền bốc xếp');
-		assert.equal(created.data.otherFee, 12_345);
-		assert.equal(created.data.totalFee, 227_345);
+  test('lưu và sửa chi phí khác trong tổng tiền phiếu', async () => {
+    const delivery = await configureStaffRate('Đơn vị có chi phí phát sinh');
+    const created = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: newEntry({
+        entryDate: '2026-09-30',
+        customer: delivery.customer.customerName,
+        carrier: delivery.carrier.name,
+        spec: 'Tất cả',
+        recipient: '',
+        otherFeeName: 'Tiền bốc xếp',
+        otherFee: 12_345,
+      }),
+    });
+    assert.equal(created.status, 200);
+    assert.equal(created.data.otherFeeName, 'Tiền bốc xếp');
+    assert.equal(created.data.otherFee, 12_345);
+    assert.equal(created.data.totalFee, 227_345);
 
-		const updated = await call('PATCH', `/api/entries/${created.data.id}`, {
-			token: staffAToken,
-			body: { ...newEntry({
-				entryDate: '2026-09-30',
-				customer: delivery.customer.customerName,
-				carrier: delivery.carrier.name,
-				spec: 'Tất cả',
-			}), otherFeeName: 'Phí chờ hàng', otherFee: 2_000 },
-		});
-		assert.equal(updated.status, 200);
-		assert.equal(updated.data.totalFee, 217_000);
-	});
+    const updated = await call('PATCH', `/api/entries/${created.data.id}`, {
+      token: staffAToken,
+      body: {
+        ...newEntry({
+          entryDate: '2026-09-30',
+          customer: delivery.customer.customerName,
+          carrier: delivery.carrier.name,
+          spec: 'Tất cả',
+        }),
+        otherFeeName: 'Phí chờ hàng',
+        otherFee: 2_000,
+      },
+    });
+    assert.equal(updated.status, 200);
+    assert.equal(updated.data.totalFee, 217_000);
+  });
 
   test('nhân viên phải giải trình phiếu trùng ngày và khách hàng khi tạo hoặc sửa', async () => {
     const delivery = await configureStaffRate('Đơn vị kiểm tra trùng phiếu');
@@ -1572,9 +1660,13 @@ describe('kiểm tra dữ liệu đầu vào', () => {
       token: staffAToken,
       body: newEntry({ entryDate: '2026-02-30' }),
     });
-    const report = await call('GET', '/api/reports/carrier-variance?from=2026-02-30&to=2026-03-01', {
-      token: adminToken,
-    });
+    const report = await call(
+      'GET',
+      '/api/reports/carrier-variance?from=2026-02-30&to=2026-03-01',
+      {
+        token: adminToken,
+      },
+    );
     assert.equal(entry.status, 400);
     assert.equal(report.status, 400);
   });
@@ -1617,11 +1709,15 @@ describe('kiểm tra dữ liệu đầu vào', () => {
 });
 
 describe('khóa tài khoản và đổi mật khẩu', () => {
-
   test('chỉ xóa được tài khoản nhân viên chưa có dữ liệu', async () => {
     const created = await call('POST', '/api/users', {
       token: adminToken,
-      body: { username: 'taikhoanxoatest', fullName: 'Tài khoản xóa test', password: 'MatKhau123', pages: [] },
+      body: {
+        username: 'taikhoanxoatest',
+        fullName: 'Tài khoản xóa test',
+        password: 'MatKhau123',
+        pages: [],
+      },
     });
     assert.equal(created.status, 200);
 
@@ -1746,7 +1842,8 @@ describe('xóa dữ liệu theo nhóm', () => {
     assert.equal(removeCustomers.status, 200);
     assert.deepEqual(removeCustomers.data.deleted, ['customers']);
     assert.equal(
-      app.db.prepare('SELECT COUNT(*) AS count FROM carriers WHERE id = ?').get(carrier.data.id).count,
+      app.db.prepare('SELECT COUNT(*) AS count FROM carriers WHERE id = ?').get(carrier.data.id)
+        .count,
       1,
     );
 
@@ -1792,9 +1889,11 @@ describe('xóa dữ liệu theo nhóm', () => {
   });
 
   test('xóa nhóm nhân viên tháo liên kết lịch sử, còn xóa lẻ thì bị chặn', async () => {
-    const linkedEmployee = app.db.prepare(
-      'SELECT id FROM employees WHERE id IN (SELECT employee_id FROM entries WHERE employee_id IS NOT NULL) LIMIT 1',
-    ).get();
+    const linkedEmployee = app.db
+      .prepare(
+        'SELECT id FROM employees WHERE id IN (SELECT employee_id FROM entries WHERE employee_id IS NOT NULL) LIMIT 1',
+      )
+      .get();
     assert.ok(linkedEmployee);
 
     const individual = await call('DELETE', `/api/employees/${linkedEmployee.id}`, {
@@ -1811,11 +1910,14 @@ describe('xóa dữ liệu theo nhóm', () => {
     assert.ok(removed.data.detachedEmployeeLinks.entries > 0);
     assert.equal(app.db.prepare('SELECT COUNT(*) AS count FROM employees').get().count, 0);
     assert.equal(
-      app.db.prepare('SELECT COUNT(*) AS count FROM entries WHERE employee_id IS NOT NULL').get().count,
+      app.db.prepare('SELECT COUNT(*) AS count FROM entries WHERE employee_id IS NOT NULL').get()
+        .count,
       0,
     );
     assert.equal(
-      app.db.prepare('SELECT COUNT(*) AS count FROM fuel_records WHERE employee_id IS NOT NULL').get().count,
+      app.db
+        .prepare('SELECT COUNT(*) AS count FROM fuel_records WHERE employee_id IS NOT NULL')
+        .get().count,
       0,
     );
   });

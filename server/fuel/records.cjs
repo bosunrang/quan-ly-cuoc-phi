@@ -7,11 +7,13 @@ const { calculateFuelTotal, toFuelPrice } = require('./calculation.cjs');
 const { saveRouteLegs } = require('./routes.cjs');
 
 function consumptionProfiles(db) {
-  const row = db.prepare(`
+  const row = db
+    .prepare(`
     SELECT motorcycle_consumption_liters, motorcycle_base_km,
       truck_consumption_liters, truck_base_km
     FROM app_settings WHERE id = 1
-  `).get();
+  `)
+    .get();
   return {
     motorcycle: {
       consumptionLiters: Number(row?.motorcycle_consumption_liters) || 1,
@@ -27,11 +29,9 @@ function consumptionProfiles(db) {
 function activeEmployee(db, user, isAdmin, requestedEmployeeId) {
   const employee = isAdmin
     ? db
-      .prepare('SELECT id FROM employees WHERE id = ? AND is_active = 1')
-      .get(Number(requestedEmployeeId))
-    : db
-      .prepare('SELECT id FROM employees WHERE user_id = ? AND is_active = 1')
-      .get(user.id);
+        .prepare('SELECT id FROM employees WHERE id = ? AND is_active = 1')
+        .get(Number(requestedEmployeeId))
+    : db.prepare('SELECT id FROM employees WHERE user_id = ? AND is_active = 1').get(user.id);
   if (!employee) throw badRequest('Vui lòng chọn nhân viên đang hoạt động.');
   return employee;
 }
@@ -75,9 +75,7 @@ function fuelHistory(db, user, isAdmin, query) {
   }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const recordsTotal = Number(
-    db
-      .prepare(`SELECT COUNT(*) AS count FROM fuel_records f ${where}`)
-      .get(...params).count,
+    db.prepare(`SELECT COUNT(*) AS count FROM fuel_records f ${where}`).get(...params).count,
   );
   const records = db
     .prepare(
@@ -93,12 +91,14 @@ function fuelHistory(db, user, isAdmin, query) {
   const legsByRecord = new Map();
   if (recordIds.length) {
     const placeholders = recordIds.map(() => '?').join(', ');
-    for (const leg of db.prepare(
-      `SELECT fuel_record_id, sequence_no, from_name, to_name, distance_km
+    for (const leg of db
+      .prepare(
+        `SELECT fuel_record_id, sequence_no, from_name, to_name, distance_km
        FROM fuel_record_legs
        WHERE fuel_record_id IN (${placeholders})
        ORDER BY fuel_record_id, sequence_no`,
-    ).all(...recordIds)) {
+      )
+      .all(...recordIds)) {
       const legs = legsByRecord.get(leg.fuel_record_id) ?? [];
       legs.push({ from: leg.from_name, to: leg.to_name, km: leg.distance_km });
       legsByRecord.set(leg.fuel_record_id, legs);
@@ -137,8 +137,10 @@ function fuelCatalog(db, user, isAdmin, fuelTypes) {
   const employee = currentEmployee(db, user, isAdmin);
   const employees = isAdmin
     ? db
-      .prepare('SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE')
-      .all()
+        .prepare(
+          'SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE',
+        )
+        .all()
     : employee
       ? [employee]
       : [];
@@ -146,17 +148,25 @@ function fuelCatalog(db, user, isAdmin, fuelTypes) {
     .prepare('SELECT * FROM fuel_prices ORDER BY effective_date DESC, fuel_type, region')
     .all();
   const distances = db
-    .prepare('SELECT id, from_name, to_name, distance_km FROM route_distances ORDER BY updated_at DESC')
+    .prepare(
+      'SELECT id, from_name, to_name, distance_km FROM route_distances ORDER BY updated_at DESC',
+    )
     .all();
   const locations = [
     ...db
-      .prepare("SELECT id, customer_name AS name, address, 'customer' AS type FROM customers WHERE trim(customer_name) <> ''")
+      .prepare(
+        "SELECT id, customer_name AS name, address, 'customer' AS type FROM customers WHERE trim(customer_name) <> ''",
+      )
       .all(),
     ...db
-      .prepare("SELECT id, name, address, delivery_point, 'carrier' AS type FROM carriers WHERE is_active = 1 AND trim(name) <> ''")
+      .prepare(
+        "SELECT id, name, address, delivery_point, 'carrier' AS type FROM carriers WHERE is_active = 1 AND trim(name) <> ''",
+      )
       .all(),
     ...db
-      .prepare("SELECT id, full_name AS name, address, 'employee' AS type FROM employees WHERE is_active = 1 AND trim(full_name) <> ''")
+      .prepare(
+        "SELECT id, full_name AS name, address, 'employee' AS type FROM employees WHERE is_active = 1 AND trim(full_name) <> ''",
+      )
       .all(),
   ].sort((left, right) => left.name.localeCompare(right.name, 'vi'));
 
@@ -217,38 +227,36 @@ function saveFuelRecord(db, user, input, employeeId, id = null) {
           input.vehicleType,
           input.fuelPrice,
           totalFee,
-		  JSON.stringify(input.extraCosts),
+          JSON.stringify(input.extraCosts),
           user.id,
           at,
           at,
         );
       recordId = Number(result.lastInsertRowid);
     } else {
-      db
-        .prepare(
-          `UPDATE fuel_records SET
+      db.prepare(
+        `UPDATE fuel_records SET
            entry_date = ?, period_from = ?, period_to = ?, employee_id = ?,
            distance_km = ?, consumption_liters = ?, consumption_base_km = ?,
            fuel_type = ?, region = ?, vehicle_type = ?, fuel_price = ?, total_fee = ?, extra_costs = ?, updated_at = ?
            WHERE id = ?`,
-        )
-        .run(
-          input.periodTo,
-          input.periodFrom,
-          input.periodTo,
-          employeeId,
-          input.distanceKm,
-          input.consumptionLiters,
-          input.consumptionBaseKm,
-          input.fuelType,
-          input.region,
-          input.vehicleType,
-          input.fuelPrice,
-          totalFee,
-		  JSON.stringify(input.extraCosts),
-          at,
-          recordId,
-        );
+      ).run(
+        input.periodTo,
+        input.periodFrom,
+        input.periodTo,
+        employeeId,
+        input.distanceKm,
+        input.consumptionLiters,
+        input.consumptionBaseKm,
+        input.fuelType,
+        input.region,
+        input.vehicleType,
+        input.fuelPrice,
+        totalFee,
+        JSON.stringify(input.extraCosts),
+        at,
+        recordId,
+      );
       db.prepare('DELETE FROM fuel_record_legs WHERE fuel_record_id = ?').run(recordId);
     }
     saveRouteLegs(db, recordId, input.legs, at);

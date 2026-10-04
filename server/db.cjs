@@ -19,17 +19,15 @@ function normalizeSearchText(value) {
 
 /** Khôi phục chặng từng bị cắt ở giới hạn 100 ký tự từ danh mục địa điểm. */
 function restoreTruncatedFuelLocations(db) {
-  const locations = db.prepare(`
+  const locations = db
+    .prepare(`
     SELECT customer_name AS name, address FROM customers
     UNION ALL SELECT name, address FROM carriers
     UNION ALL SELECT full_name AS name, address FROM employees
-  `).all();
-  const updateFrom = db.prepare(
-    'UPDATE fuel_record_legs SET from_name = ? WHERE from_name = ?',
-  );
-  const updateTo = db.prepare(
-    'UPDATE fuel_record_legs SET to_name = ? WHERE to_name = ?',
-  );
+  `)
+    .all();
+  const updateFrom = db.prepare('UPDATE fuel_record_legs SET from_name = ? WHERE from_name = ?');
+  const updateTo = db.prepare('UPDATE fuel_record_legs SET to_name = ? WHERE to_name = ?');
 
   for (const location of locations) {
     const name = String(location.name || '').trim();
@@ -79,9 +77,8 @@ function migrate(db) {
   // quay về trạng thái cũ thay vì để cơ sở dữ liệu dở dang.
   db.exec('BEGIN IMMEDIATE');
   try {
-
-  if (current < 1) {
-    db.exec(`
+    if (current < 1) {
+      db.exec(`
       CREATE TABLE users (
         id            INTEGER PRIMARY KEY,
         username      TEXT    NOT NULL UNIQUE,
@@ -145,10 +142,10 @@ function migrate(db) {
       );
       CREATE INDEX audit_at_idx ON audit_log(at DESC);
     `);
-  }
+    }
 
-  if (current < 2) {
-    db.exec(`
+    if (current < 2) {
+      db.exec(`
       CREATE TABLE app_settings (
         id              INTEGER PRIMARY KEY CHECK (id = 1),
         company_name    TEXT NOT NULL DEFAULT '',
@@ -164,10 +161,10 @@ function migrate(db) {
       VALUES
         (1, '', '', 'NAVIVA GROUP', 'Quản lý giao hàng', '/icon.png', datetime('now'));
     `);
-  }
+    }
 
-  if (current < 3) {
-    db.exec(`
+    if (current < 3) {
+      db.exec(`
       CREATE TABLE misa_rows (
         id              INTEGER PRIMARY KEY,
         document_date   TEXT    NOT NULL,
@@ -184,10 +181,10 @@ function migrate(db) {
       CREATE INDEX misa_customer_idx ON misa_rows(customer_name);
       CREATE INDEX misa_province_idx ON misa_rows(province_city);
     `);
-  }
+    }
 
-  if (current < 4) {
-    db.exec(`
+    if (current < 4) {
+      db.exec(`
       -- Chỉ mục toàn văn đã bỏ dấu để tìm MISA nhanh khi dữ liệu lớn.
       CREATE VIRTUAL TABLE misa_search USING fts5(
         search_text,
@@ -220,10 +217,10 @@ function migrate(db) {
         );
       END;
     `);
-  }
+    }
 
-  if (current < 5) {
-    db.exec(`
+    if (current < 5) {
+      db.exec(`
       -- Tìm kiếm MISA chỉ theo tên khách hàng.
       DROP TRIGGER misa_search_insert;
       DROP TRIGGER misa_search_delete;
@@ -249,18 +246,18 @@ function migrate(db) {
         VALUES (new.id, vn_normalize(new.customer_name));
       END;
     `);
-  }
+    }
 
-  if (current < 6) {
-    db.exec(`
+    if (current < 6) {
+      db.exec(`
       -- Tên mặt hàng từ cột "Tên hàng" trong Sổ chi tiết bán hàng MISA.
       ALTER TABLE misa_rows
       ADD COLUMN product_name TEXT NOT NULL DEFAULT '';
     `);
-  }
+    }
 
-  if (current < 7) {
-    db.exec(`
+    if (current < 7) {
+      db.exec(`
       -- Danh mục khách hàng: một tên chuẩn có thông tin giao hàng mặc định.
       CREATE TABLE customers (
         id            INTEGER PRIMARY KEY,
@@ -275,10 +272,10 @@ function migrate(db) {
       );
       CREATE INDEX customers_search_idx ON customers(search_text);
     `);
-  }
+    }
 
-  if (current < 8) {
-    db.exec(`
+    if (current < 8) {
+      db.exec(`
       CREATE TABLE carriers (
         id          INTEGER PRIMARY KEY,
         name        TEXT    NOT NULL,
@@ -301,17 +298,17 @@ function migrate(db) {
       );
       CREATE INDEX carrier_customers_customer_idx ON carrier_customers(customer_id);
     `);
-  }
+    }
 
-  if (current < 9) {
-    db.exec(`
+    if (current < 9) {
+      db.exec(`
       ALTER TABLE carriers ADD COLUMN schedule TEXT NOT NULL DEFAULT '';
       ALTER TABLE carriers ADD COLUMN note TEXT NOT NULL DEFAULT '';
     `);
-  }
+    }
 
-  if (current < 10) {
-    db.exec(`
+    if (current < 10) {
+      db.exec(`
       CREATE TABLE employees (
         id          INTEGER PRIMARY KEY,
         full_name   TEXT    NOT NULL,
@@ -324,10 +321,10 @@ function migrate(db) {
       );
       CREATE INDEX employees_search_idx ON employees(search_text);
     `);
-  }
+    }
 
-  if (current < 11) {
-    db.exec(`
+    if (current < 11) {
+      db.exec(`
       -- Phân trang MISA luôn sắp xếp theo ngày và id; chỉ mục ghép giúp
       -- tránh sắp xếp lại toàn bộ khi dữ liệu đã có nhiều tháng.
       CREATE INDEX misa_list_idx
@@ -335,10 +332,10 @@ function migrate(db) {
       CREATE INDEX misa_province_list_idx
         ON misa_rows(province_city, document_date DESC, id DESC);
     `);
-  }
+    }
 
-  if (current < 12) {
-    db.exec(`
+    if (current < 12) {
+      db.exec(`
       -- Bảng cước thuộc đúng cặp nhà xe - khách hàng. Một cặp có thể có
       -- nhiều quy cách; dòng is_default là mức "Tất cả" dự phòng.
       CREATE TABLE carrier_customer_rates (
@@ -358,10 +355,10 @@ function migrate(db) {
       CREATE INDEX carrier_customer_rates_lookup_idx
         ON carrier_customer_rates(carrier_id, customer_id, is_default, spec_key);
     `);
-  }
+    }
 
-  if (current < 13) {
-    db.exec(`
+    if (current < 13) {
+      db.exec(`
       -- Số chứng từ phân biệt các đơn bán cùng ngày của một khách hàng.
       -- Các bản ghi cũ dùng chuỗi rỗng, nên vẫn xem được như trước.
       ALTER TABLE misa_rows ADD COLUMN document_code TEXT NOT NULL DEFAULT '';
@@ -372,10 +369,10 @@ function migrate(db) {
       ALTER TABLE entries ADD COLUMN misa_document_date TEXT NOT NULL DEFAULT '';
       ALTER TABLE entries ADD COLUMN misa_document_code TEXT NOT NULL DEFAULT '';
     `);
-  }
+    }
 
-  if (current < 14) {
-    db.exec(`
+    if (current < 14) {
+      db.exec(`
       -- Người thao tác và nhân viên chịu cước là hai thông tin riêng.
       ALTER TABLE entries ADD COLUMN employee_id INTEGER REFERENCES employees(id);
       CREATE INDEX entries_employee_idx ON entries(employee_id, entry_date DESC);
@@ -383,10 +380,10 @@ function migrate(db) {
          SET employee_id = (SELECT id FROM employees WHERE employees.user_id = entries.created_by)
        WHERE employee_id IS NULL;
     `);
-  }
+    }
 
-  if (current < 15) {
-    db.exec(`
+    if (current < 15) {
+      db.exec(`
       -- Khóa khách MISA đã chuẩn hóa giúp tra cứu đơn và tỉnh theo khách
       -- không phải chuẩn hóa toàn bộ bảng ở mỗi lần nhập phiếu.
       ALTER TABLE misa_rows ADD COLUMN customer_key TEXT NOT NULL DEFAULT '';
@@ -395,10 +392,10 @@ function migrate(db) {
       CREATE INDEX misa_customer_key_order_idx
         ON misa_rows(customer_key, document_date DESC, id DESC);
     `);
-  }
+    }
 
-  if (current < 16) {
-    db.exec(`
+    if (current < 16) {
+      db.exec(`
       CREATE TABLE fuel_prices (
         id INTEGER PRIMARY KEY,
         effective_date TEXT NOT NULL,
@@ -431,10 +428,10 @@ function migrate(db) {
       CREATE INDEX fuel_records_date_idx ON fuel_records(entry_date DESC);
       CREATE INDEX fuel_records_employee_idx ON fuel_records(employee_id, entry_date DESC);
     `);
-  }
+    }
 
-  if (current < 17) {
-    db.exec(`
+    if (current < 17) {
+      db.exec(`
       ALTER TABLE fuel_records ADD COLUMN period_from TEXT NOT NULL DEFAULT '';
       ALTER TABLE fuel_records ADD COLUMN period_to TEXT NOT NULL DEFAULT '';
       UPDATE fuel_records SET period_from = entry_date, period_to = entry_date
@@ -462,25 +459,25 @@ function migrate(db) {
       );
       CREATE INDEX fuel_record_legs_record_idx ON fuel_record_legs(fuel_record_id, sequence_no);
     `);
-  }
+    }
 
-  if (current < 18) {
-    db.exec(`
+    if (current < 18) {
+      db.exec(`
       ALTER TABLE employees ADD COLUMN address TEXT NOT NULL DEFAULT '';
     `);
-  }
+    }
 
-  if (current < 19) {
-    db.exec(`
+    if (current < 19) {
+      db.exec(`
       UPDATE employees
       SET address = areas
       WHERE trim(address) = '' AND trim(areas) <> '';
       ALTER TABLE employees DROP COLUMN areas;
     `);
-  }
+    }
 
-  if (current < 20) {
-    db.exec(`
+    if (current < 20) {
+      db.exec(`
       -- Mã dùng một lần để khôi phục tài khoản quản trị viên trên máy chủ cục bộ.
       -- Chỉ lưu bản băm, không bao giờ lưu mã gốc trong SQLite.
       CREATE TABLE admin_recovery_code (
@@ -490,27 +487,27 @@ function migrate(db) {
         created_at  TEXT NOT NULL
       );
     `);
-  }
+    }
 
-  if (current < 21) {
-    db.exec(`
+    if (current < 21) {
+      db.exec(`
       -- Chỉ dùng cho tài khoản mặc định khi máy chủ được khởi tạo lần đầu.
       -- Người dùng bắt buộc đổi mật khẩu trước khi thao tác dữ liệu.
       ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0
         CHECK (must_change_password IN (0, 1));
     `);
-  }
+    }
 
-  if (current < 22) {
-    db.exec(`
+    if (current < 22) {
+      db.exec(`
       -- Lý do riêng cho phần chênh lệch cước vận chuyển với bảng giá nhà xe.
       -- Không dùng chung ghi chú hàng hóa/MISA của phiếu.
       ALTER TABLE entries ADD COLUMN rate_variance_note TEXT NOT NULL DEFAULT '';
     `);
-  }
+    }
 
-  if (current < 23) {
-    db.exec(`
+    if (current < 23) {
+      db.exec(`
       -- Bản ghi xăng được khóa khi đã xuất báo cáo; hủy vẫn giữ lại dấu vết.
       ALTER TABLE fuel_records ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
       UPDATE fuel_records SET updated_at = created_at WHERE updated_at = '';
@@ -523,40 +520,40 @@ function migrate(db) {
         CHECK (status IN ('active', 'voided'));
       CREATE INDEX fuel_records_status_idx ON fuel_records(status, period_from, period_to);
     `);
-  }
+    }
 
-  if (current < 24) {
-    db.exec(`
+    if (current < 24) {
+      db.exec(`
       -- Lưu nguồn km để truy vết. Tất cả các chặng đã lưu vẫn được dùng làm
       -- dữ liệu lộ trình, kể cả chặng người dùng đã hiệu chỉnh thủ công.
       ALTER TABLE route_distances ADD COLUMN source TEXT NOT NULL DEFAULT 'legacy';
       CREATE INDEX route_distances_source_idx ON route_distances(source, updated_at DESC);
     `);
-  }
+    }
 
-  if (current < 25) {
-    db.exec(`
+    if (current < 25) {
+      db.exec(`
       -- Mã khách hàng từ file MISA được lưu riêng để xem và đối soát.
       -- Các dòng đã nhập trước đây không có mã vẫn giữ nguyên giá trị rỗng.
       ALTER TABLE misa_rows ADD COLUMN customer_code TEXT NOT NULL DEFAULT '';
       CREATE INDEX misa_customer_code_idx ON misa_rows(customer_code);
     `);
-  }
+    }
 
-  if (current < 26) {
-    db.exec(`
+    if (current < 26) {
+      db.exec(`
       -- Trạng thái hóa đơn được lưu riêng để ghép rõ ràng vào ghi chú báo cáo.
       ALTER TABLE entries ADD COLUMN bill_status TEXT NOT NULL DEFAULT ''
         CHECK (bill_status IN ('', 'Có bill', 'Không bill'));
     `);
-  }
+    }
 
-  if (current < 27) {
-    restoreTruncatedFuelLocations(db);
-  }
+    if (current < 27) {
+      restoreTruncatedFuelLocations(db);
+    }
 
-  if (current < 28) {
-    db.exec(`
+    if (current < 28) {
+      db.exec(`
       -- Mã khách hàng dùng chung cho danh mục, nhập Excel và chọn phiếu cước.
       ALTER TABLE customers ADD COLUMN customer_code TEXT NOT NULL DEFAULT '';
       CREATE INDEX customers_customer_code_idx ON customers(customer_code);
@@ -573,88 +570,88 @@ function migrate(db) {
         customer_name || ' ' || customer_code || ' ' || carrier || ' ' || recipient || ' ' || address
       );
     `);
-  }
+    }
 
-  if (current < 29) {
-    db.exec(`
+    if (current < 29) {
+      db.exec(`
       -- Lý do giữ lại phiếu có cùng ngày, khách hàng và danh sách mặt hàng.
       ALTER TABLE entries ADD COLUMN duplicate_reason TEXT NOT NULL DEFAULT '';
     `);
-  }
+    }
 
-  if (current < 30) {
-    db.exec(`
+    if (current < 30) {
+      db.exec(`
       -- Phương tiện được chốt theo từng lần tính, độc lập với định mức đang
       -- được chọn trên giao diện ở thời điểm xem lại lịch sử.
       ALTER TABLE fuel_records ADD COLUMN vehicle_type TEXT NOT NULL DEFAULT ''
         CHECK (vehicle_type IN ('', 'motorcycle', 'truck'));
     `);
-  }
+    }
 
-  if (current < 31) {
-    db.exec(`
+    if (current < 31) {
+      db.exec(`
       -- Định mức là cấu hình chung trên máy chủ; máy trạm chỉ đọc để tính.
       ALTER TABLE app_settings ADD COLUMN motorcycle_consumption_liters REAL NOT NULL DEFAULT 1;
       ALTER TABLE app_settings ADD COLUMN motorcycle_base_km REAL NOT NULL DEFAULT 40;
       ALTER TABLE app_settings ADD COLUMN truck_consumption_liters REAL NOT NULL DEFAULT 7.5;
       ALTER TABLE app_settings ADD COLUMN truck_base_km REAL NOT NULL DEFAULT 100;
     `);
-  }
+    }
 
-  if (current < 32) {
-    db.exec(`
+    if (current < 32) {
+      db.exec(`
       -- Ghi chú tự do của phiếu, tách riêng với danh sách sản phẩm MISA.
       ALTER TABLE entries ADD COLUMN general_note TEXT NOT NULL DEFAULT '';
     `);
-  }
+    }
 
-  if (current < 33) {
-    // Quy tắc duy nhất được bật sau migration. Không tự động sửa,
-    // gộp hay xóa dữ liệu khách hàng hiện có.
-  }
+    if (current < 33) {
+      // Quy tắc duy nhất được bật sau migration. Không tự động sửa,
+      // gộp hay xóa dữ liệu khách hàng hiện có.
+    }
 
-  if (current < 34) {
-    db.exec(`
+    if (current < 34) {
+      db.exec(`
       -- Form nhập phiếu đối chiếu mã khách hàng không phân biệt hoa/thường.
       -- Chỉ mục phải dùng cùng COLLATE NOCASE với truy vấn; nếu không SQLite
       -- sẽ quét toàn bộ dữ liệu MISA cho từng khách hàng trong danh mục.
       CREATE INDEX misa_customer_code_nocase_order_idx
         ON misa_rows(customer_code COLLATE NOCASE, document_date DESC, id DESC);
     `);
-  }
+    }
 
-  if (current < 35) {
-    db.exec(`
+    if (current < 35) {
+      db.exec(`
       -- Nhiều nhà xe có thể nhận hàng tại cùng một bến/điểm giao. Giá trị này
       -- được dùng để gộp chặng xăng, còn địa chỉ nhà xe vẫn phục vụ liên hệ.
       ALTER TABLE carriers ADD COLUMN delivery_point TEXT NOT NULL DEFAULT '';
     `);
-  }
+    }
 
-  if (current < 36) {
-    db.exec(`
+    if (current < 36) {
+      db.exec(`
       -- Khoản phát sinh riêng của từng phiếu giao hàng; tổng hiển thị được
       -- tính kèm khoản này tại tầng nghiệp vụ để vẫn tương thích dữ liệu cũ.
       ALTER TABLE entries ADD COLUMN other_fee INTEGER NOT NULL DEFAULT 0
         CHECK (other_fee >= 0);
     `);
-  }
+    }
 
-  if (current < 37) {
-    db.exec(`
+    if (current < 37) {
+      db.exec(`
       ALTER TABLE entries ADD COLUMN other_fee_name TEXT NOT NULL DEFAULT '';
     `);
-  }
+    }
 
-	if (current < 38) {
-    db.exec(`
+    if (current < 38) {
+      db.exec(`
       -- Các khoản phát sinh ngoài tiền xăng của một kỳ tính.
       ALTER TABLE fuel_records ADD COLUMN extra_costs TEXT NOT NULL DEFAULT '[]';
     `);
-	}
+    }
 
-	if (current < 39) {
-		db.exec(`
+    if (current < 39) {
+      db.exec(`
 		  -- Người nhận không còn là thuộc tính danh mục khách hàng. Giữ cột cũ
 		  -- để bảo toàn dữ liệu lịch sử, nhưng loại khỏi chỉ mục tìm kiếm mới.
 		  UPDATE customers
@@ -662,10 +659,10 @@ function migrate(db) {
 		    customer_name || ' ' || customer_code || ' ' || carrier || ' ' || address
 		  );
 		`);
-	}
+    }
 
-  if (current < 40) {
-    db.exec(`
+    if (current < 40) {
+      db.exec(`
       -- Khóa chuẩn hóa của khách hàng, nhà xe và quy cách được lưu sẵn trên
       -- phiếu. Trước đây mỗi truy vấn báo cáo gọi vn_normalize() (hàm JS) cho
       -- từng phiếu, làm Tổng quan/báo cáo chậm dần theo số phiếu.
@@ -725,10 +722,10 @@ function migrate(db) {
       DROP INDEX misa_province_idx;
       DROP INDEX misa_customer_idx;
     `);
-  }
+    }
 
-  if (current < 41) {
-    db.exec(`
+    if (current < 41) {
+      db.exec(`
       -- Phiếu trỏ thẳng tới khách hàng và nhà xe trong danh mục bằng mã.
       -- Tên trên phiếu chỉ còn là chữ hiển thị lúc lập; báo cáo, giá chuẩn và
       -- form sửa phiếu đều nối theo mã nên đổi tên trong danh mục không làm
@@ -751,8 +748,8 @@ function migrate(db) {
          WHERE carrier_id IS NULL AND carrier_key = new.carrier_key;
       END;
     `);
-    linkEntriesToCatalog(db);
-  }
+      linkEntriesToCatalog(db);
+    }
 
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
@@ -763,14 +760,16 @@ function migrate(db) {
 }
 
 function ensureCustomerCodeUniqueIndex(db) {
-  const duplicate = db.prepare(
-    `SELECT 1
+  const duplicate = db
+    .prepare(
+      `SELECT 1
        FROM customers
       WHERE trim(customer_code) <> ''
       GROUP BY trim(customer_code) COLLATE NOCASE
      HAVING COUNT(*) > 1
       LIMIT 1`,
-  ).get();
+    )
+    .get();
   if (duplicate) return false;
   db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS customers_customer_code_unique_idx

@@ -3,11 +3,7 @@
 const auth = require('../auth.cjs');
 const { transaction } = require('../db.cjs');
 const { writeAudit } = require('../audit.cjs');
-const {
-  GRANTABLE_PAGES,
-  isValidPageKey,
-  PAGES,
-} = require('../permissions.cjs');
+const { GRANTABLE_PAGES, isValidPageKey, PAGES } = require('../permissions.cjs');
 const { badRequest, notFound } = require('../http.cjs');
 
 const PAGE = 'users';
@@ -16,10 +12,12 @@ const USERNAME_PATTERN = /^[a-z0-9._-]{3,32}$/;
 function toApi(db, row, grantedPages) {
   // Khi trả về một người dùng (sau khi thêm/sửa) chỉ cần đọc quyền của người đó.
   // Danh sách dùng dữ liệu đã đọc theo lô ở dưới để tránh N+1 truy vấn.
-  const pages = grantedPages ?? db
-    .prepare('SELECT page_key FROM user_pages WHERE user_id = ? ORDER BY page_key')
-    .all(row.id)
-    .map((r) => r.page_key);
+  const pages =
+    grantedPages ??
+    db
+      .prepare('SELECT page_key FROM user_pages WHERE user_id = ? ORDER BY page_key')
+      .all(row.id)
+      .map((r) => r.page_key);
   return {
     id: row.id,
     username: row.username,
@@ -43,9 +41,7 @@ function sanitizePages(value) {
 
 function replacePages(db, userId, pages) {
   db.prepare('DELETE FROM user_pages WHERE user_id = ?').run(userId);
-  const insert = db.prepare(
-    'INSERT INTO user_pages (user_id, page_key) VALUES (?, ?)',
-  );
+  const insert = db.prepare('INSERT INTO user_pages (user_id, page_key) VALUES (?, ?)');
   for (const key of pages) insert.run(userId, key);
 }
 
@@ -64,9 +60,7 @@ function register(router) {
 
   router.get('/api/users', async (c) => {
     c.requirePage(PAGE);
-    const rows = c.db
-      .prepare('SELECT * FROM users ORDER BY is_admin DESC, full_name')
-      .all();
+    const rows = c.db.prepare('SELECT * FROM users ORDER BY is_admin DESC, full_name').all();
     const pagesByUser = new Map();
     for (const page of c.db
       .prepare('SELECT user_id, page_key FROM user_pages ORDER BY user_id, page_key')
@@ -82,7 +76,9 @@ function register(router) {
 
   router.post('/api/users', async (c) => {
     c.requirePage(PAGE);
-    const username = String(c.body.username ?? '').trim().toLowerCase();
+    const username = String(c.body.username ?? '')
+      .trim()
+      .toLowerCase();
     const fullName = String(c.body.fullName ?? '').trim();
     const password = String(c.body.password ?? '');
 
@@ -98,9 +94,7 @@ function register(router) {
     // để hai yêu cầu tạo cùng tên không lọt qua kiểm tra cùng lúc.
     const { hash, salt } = await auth.hashPassword(password);
 
-    const taken = c.db
-      .prepare('SELECT 1 FROM users WHERE username = ?')
-      .get(username);
+    const taken = c.db.prepare('SELECT 1 FROM users WHERE username = ?').get(username);
     if (taken) throw badRequest('Tên đăng nhập này đã có người dùng.');
 
     const isAdmin = c.body.isAdmin === true;
@@ -132,9 +126,7 @@ function register(router) {
     if (!target) throw notFound('Không tìm thấy người dùng.');
 
     const fullName =
-      c.body.fullName === undefined
-        ? target.full_name
-        : String(c.body.fullName).trim();
+      c.body.fullName === undefined ? target.full_name : String(c.body.fullName).trim();
     if (!fullName) throw badRequest('Vui lòng nhập họ tên.');
 
     let isActive = target.is_active;
@@ -148,9 +140,7 @@ function register(router) {
 
     return transaction(c.db, () => {
       c.db
-        .prepare(
-          'UPDATE users SET full_name = ?, is_active = ?, updated_at = ? WHERE id = ?',
-        )
+        .prepare('UPDATE users SET full_name = ?, is_active = ?, updated_at = ? WHERE id = ?')
         .run(fullName, isActive, new Date().toISOString(), id);
 
       // Thẻ của Admin không sửa được: họ luôn có toàn bộ.
@@ -204,13 +194,15 @@ function register(router) {
     if (target.is_admin) throw badRequest('Không thể xóa tài khoản quản trị viên.');
     if (target.id === c.user.id) throw badRequest('Không thể xóa chính tài khoản đang đăng nhập.');
 
-    const used = c.db.prepare(
-      `SELECT
+    const used = c.db
+      .prepare(
+        `SELECT
         (SELECT COUNT(*) FROM entries WHERE created_by = ?) +
         (SELECT COUNT(*) FROM misa_rows WHERE imported_by = ?) +
         (SELECT COUNT(*) FROM fuel_prices WHERE created_by = ?) +
         (SELECT COUNT(*) FROM fuel_records WHERE created_by = ? OR finalized_by = ? OR voided_by = ?) AS count`,
-    ).get(id, id, id, id, id, id);
+      )
+      .get(id, id, id, id, id, id);
     if (Number(used.count) > 0) {
       throw badRequest('Tài khoản này đã có dữ liệu nghiệp vụ. Hãy khóa tài khoản để giữ lịch sử.');
     }

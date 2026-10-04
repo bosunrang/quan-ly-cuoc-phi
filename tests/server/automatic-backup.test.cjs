@@ -14,10 +14,7 @@ const { join } = require('node:path');
 const { test } = require('node:test');
 const { DatabaseSync } = require('node:sqlite');
 
-const {
-  createAutomaticBackup,
-  pruneBackups,
-} = require('../../server/automatic-backup.cjs');
+const { createAutomaticBackup, pruneBackups } = require('../../server/automatic-backup.cjs');
 
 test('backup tự động tạo snapshot nhất quán và giữ một bản mỗi ngày', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cost-app-backup-'));
@@ -26,7 +23,7 @@ test('backup tự động tạo snapshot nhất quán và giữ một bản mỗ
   const db = new DatabaseSync(dbFile);
 
   try {
-    db.exec('CREATE TABLE sample(value TEXT); INSERT INTO sample VALUES (\'ban-dau\')');
+    db.exec("CREATE TABLE sample(value TEXT); INSERT INTO sample VALUES ('ban-dau')");
     const date = new Date(2026, 9, 1, 8, 30);
     const first = await createAutomaticBackup(db, dbFile, backupDir, { date });
     assert.equal(first.created, true);
@@ -45,10 +42,7 @@ test('backup tự động tạo snapshot nhất quán và giữ một bản mỗ
     snapshot.close();
 
     for (let day = 2; day <= 16; day += 1) {
-      const simulated = join(
-        backupDir,
-        `cost-app-2026-10-${String(day).padStart(2, '0')}.sqlite`,
-      );
+      const simulated = join(backupDir, `cost-app-2026-10-${String(day).padStart(2, '0')}.sqlite`);
       writeFileSync(simulated, 'snapshot');
       const modifiedAt = new Date(2026, 9, day, 8, 30);
       utimesSync(simulated, modifiedAt, modifiedAt);

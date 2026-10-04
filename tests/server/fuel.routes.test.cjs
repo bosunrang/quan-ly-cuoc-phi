@@ -78,7 +78,9 @@ test('dùng cache chiều ngược khi lộ trình đã được thiết lập',
   };
   const result = await estimateRoute({ db, from: 'A', to: 'B', vietmapApiKey: '' });
   assert.deepEqual(result, {
-    km: 7, source: 'Chặng ngược đã lưu trong ứng dụng', estimated: false,
+    km: 7,
+    source: 'Chặng ngược đã lưu trong ứng dụng',
+    estimated: false,
   });
   assert.equal(reads, 2);
 });

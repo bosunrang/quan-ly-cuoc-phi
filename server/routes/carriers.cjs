@@ -55,7 +55,9 @@ function readRateInput(body) {
 function excelRows(value, label) {
   if (!Array.isArray(value)) throw badRequest(`${label} không hợp lệ.`);
   if (value.length > MAX_EXCEL_ROWS) {
-    throw badRequest(`Mỗi sheet chỉ được nhập tối đa ${MAX_EXCEL_ROWS.toLocaleString('vi-VN')} dòng.`);
+    throw badRequest(
+      `Mỗi sheet chỉ được nhập tối đa ${MAX_EXCEL_ROWS.toLocaleString('vi-VN')} dòng.`,
+    );
   }
   return value;
 }
@@ -93,39 +95,46 @@ function prepareExcelImport(db, body) {
   const carrierRows = excelRows(body.carriers, 'Sheet Nhà xe');
   const rateRows = excelRows(body.rates, 'Sheet Bảng cước');
   const existingCarriers = new Map(
-    db.prepare('SELECT id, name, carrier_key, delivery_point FROM carriers').all()
+    db
+      .prepare('SELECT id, name, carrier_key, delivery_point FROM carriers')
+      .all()
       .map((row) => [row.carrier_key, row]),
   );
-  const customerRows = db.prepare(
-    'SELECT id, customer_name, customer_key, customer_code FROM customers',
-  ).all();
-  const customersByName = new Map(
-    customerRows
-      .map((row) => [row.customer_key, row]),
-  );
+  const customerRows = db
+    .prepare('SELECT id, customer_name, customer_key, customer_code FROM customers')
+    .all();
+  const customersByName = new Map(customerRows.map((row) => [row.customer_key, row]));
   const customersByCode = new Map(
     customerRows
       .filter((row) => row.customer_code)
       .map((row) => [String(row.customer_code).toLocaleUpperCase('vi-VN'), row]),
   );
   const existingRates = new Set(
-    db.prepare(
-      `SELECT carriers.carrier_key, carrier_customer_rates.customer_id, carrier_customer_rates.spec_key
+    db
+      .prepare(
+        `SELECT carriers.carrier_key, carrier_customer_rates.customer_id, carrier_customer_rates.spec_key
          FROM carrier_customer_rates
          INNER JOIN carriers ON carriers.id = carrier_customer_rates.carrier_id`,
-    ).all().map((row) => `${row.carrier_key}|${row.customer_id}|${row.spec_key}`),
+      )
+      .all()
+      .map((row) => `${row.carrier_key}|${row.customer_id}|${row.spec_key}`),
   );
   const carrierKeys = new Set();
   const carriers = carrierRows.map((row, index) => {
     try {
       const input = readExcelCarrier(row);
       if (carrierKeys.has(input.key)) {
-        return { rowNumber: Number(row?.rowNumber) || index + 2, status: 'skipped', reason: 'Nhà xe trùng trong file' };
+        return {
+          rowNumber: Number(row?.rowNumber) || index + 2,
+          status: 'skipped',
+          reason: 'Nhà xe trùng trong file',
+        };
       }
       carrierKeys.add(input.key);
       const existing = existingCarriers.get(input.key);
-      const hasNewDeliveryPoint = input.deliveryPoint
-        && normalizeSearchText(input.deliveryPoint) !== normalizeSearchText(existing?.delivery_point);
+      const hasNewDeliveryPoint =
+        input.deliveryPoint &&
+        normalizeSearchText(input.deliveryPoint) !== normalizeSearchText(existing?.delivery_point);
       return {
         rowNumber: Number(row?.rowNumber) || index + 2,
         status: !existing ? 'ready' : hasNewDeliveryPoint ? 'update' : 'duplicate',
@@ -155,14 +164,21 @@ function prepareExcelImport(db, body) {
         return {
           rowNumber: Number(row?.rowNumber) || index + 2,
           status: 'skipped',
-          reason: input.customerCode ? 'Không tìm thấy mã khách hàng trong danh mục' : 'Chưa có đơn vị trong danh mục',
+          reason: input.customerCode
+            ? 'Không tìm thấy mã khách hàng trong danh mục'
+            : 'Chưa có đơn vị trong danh mục',
           ...input,
         };
       }
       const carrierKey = normalizeSearchText(input.carrierName);
       const key = `${carrierKey}|${customer.id}|${input.specKey}`;
       if (rateKeys.has(key)) {
-        return { rowNumber: Number(row?.rowNumber) || index + 2, status: 'skipped', reason: 'Mức cước trùng trong file', ...input };
+        return {
+          rowNumber: Number(row?.rowNumber) || index + 2,
+          status: 'skipped',
+          reason: 'Mức cước trùng trong file',
+          ...input,
+        };
       }
       rateKeys.add(key);
       return {
@@ -219,10 +235,10 @@ function toApi(row, assignedCustomerIds = []) {
 function toCustomerApi(row) {
   return {
     id: row.id,
-		customerName: row.customer_name,
-		customerCode: row.customer_code,
-		carrier: row.carrier,
-		address: row.address,
+    customerName: row.customer_name,
+    customerCode: row.customer_code,
+    carrier: row.carrier,
+    address: row.address,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -235,9 +251,9 @@ function load(db, id) {
 }
 
 function ensureAssignment(db, carrierId, customerId) {
-  const row = db.prepare(
-    'SELECT 1 FROM carrier_customers WHERE carrier_id = ? AND customer_id = ?',
-  ).get(carrierId, customerId);
+  const row = db
+    .prepare('SELECT 1 FROM carrier_customers WHERE carrier_id = ? AND customer_id = ?')
+    .get(carrierId, customerId);
   if (!row) throw badRequest('Khách hàng này chưa được gán cho nhà xe.');
 }
 
@@ -279,19 +295,23 @@ function carrierIds(db) {
 function register(router) {
   router.get('/api/carriers/excel-export', async (c) => {
     c.requirePage(PAGE);
-    const carriers = c.db.prepare(
-      `SELECT name, address, delivery_point, phone, schedule, note, is_active
+    const carriers = c.db
+      .prepare(
+        `SELECT name, address, delivery_point, phone, schedule, note, is_active
          FROM carriers ORDER BY name COLLATE NOCASE, id`,
-    ).all();
-    const rates = c.db.prepare(
-      `SELECT carriers.name AS carrier_name, customers.customer_code, customers.customer_name, carrier_customer_rates.spec,
+      )
+      .all();
+    const rates = c.db
+      .prepare(
+        `SELECT carriers.name AS carrier_name, customers.customer_code, customers.customer_name, carrier_customer_rates.spec,
               carrier_customer_rates.transport_fee, carrier_customer_rates.gate_fee, carrier_customer_rates.note
          FROM carrier_customer_rates
          INNER JOIN carriers ON carriers.id = carrier_customer_rates.carrier_id
          INNER JOIN customers ON customers.id = carrier_customer_rates.customer_id
         ORDER BY carriers.name COLLATE NOCASE, customers.customer_name COLLATE NOCASE,
                  carrier_customer_rates.is_default ASC, carrier_customer_rates.spec COLLATE NOCASE`,
-    ).all();
+      )
+      .all();
     return {
       carriers: carriers.map((row) => ({
         name: row.name,
@@ -314,87 +334,125 @@ function register(router) {
     };
   });
 
-  router.post('/api/carriers/excel/preview', async (c) => {
-    c.requirePage(PAGE);
-    return prepareExcelImport(c.db, c.body);
-  }, { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES });
+  router.post(
+    '/api/carriers/excel/preview',
+    async (c) => {
+      c.requirePage(PAGE);
+      return prepareExcelImport(c.db, c.body);
+    },
+    { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES },
+  );
 
-  router.post('/api/carriers/excel/import', async (c) => {
-    c.requirePage(PAGE);
-    const preview = prepareExcelImport(c.db, c.body);
-    const at = new Date().toISOString();
-    return transaction(c.db, () => {
-      const carrierIds = new Map(
-        c.db.prepare('SELECT id, carrier_key FROM carriers').all()
-          .map((row) => [row.carrier_key, row.id]),
-      );
-      const createCarrier = c.db.prepare(
-        `INSERT INTO carriers
+  router.post(
+    '/api/carriers/excel/import',
+    async (c) => {
+      c.requirePage(PAGE);
+      const preview = prepareExcelImport(c.db, c.body);
+      const at = new Date().toISOString();
+      return transaction(c.db, () => {
+        const carrierIds = new Map(
+          c.db
+            .prepare('SELECT id, carrier_key FROM carriers')
+            .all()
+            .map((row) => [row.carrier_key, row.id]),
+        );
+        const createCarrier = c.db.prepare(
+          `INSERT INTO carriers
            (name, contact, phone, address, delivery_point, schedule, note, is_active, carrier_key, created_at, updated_at)
          VALUES (?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      );
-      const updateCarrierDeliveryPoint = c.db.prepare(
-        'UPDATE carriers SET delivery_point = ?, updated_at = ? WHERE id = ?',
-      );
-      for (const carrier of preview.carriers) {
-        const existingId = carrierIds.get(carrier.key);
-        if (carrier.status === 'ready' && !existingId) {
-          const result = createCarrier.run(carrier.name, carrier.phone, carrier.address, carrier.deliveryPoint, carrier.schedule, carrier.note, Number(carrier.isActive), carrier.key, at, at);
-          carrierIds.set(carrier.key, Number(result.lastInsertRowid));
-        } else if (carrier.status === 'update' && existingId) {
-          updateCarrierDeliveryPoint.run(carrier.deliveryPoint, at, existingId);
+        );
+        const updateCarrierDeliveryPoint = c.db.prepare(
+          'UPDATE carriers SET delivery_point = ?, updated_at = ? WHERE id = ?',
+        );
+        for (const carrier of preview.carriers) {
+          const existingId = carrierIds.get(carrier.key);
+          if (carrier.status === 'ready' && !existingId) {
+            const result = createCarrier.run(
+              carrier.name,
+              carrier.phone,
+              carrier.address,
+              carrier.deliveryPoint,
+              carrier.schedule,
+              carrier.note,
+              Number(carrier.isActive),
+              carrier.key,
+              at,
+              at,
+            );
+            carrierIds.set(carrier.key, Number(result.lastInsertRowid));
+          } else if (carrier.status === 'update' && existingId) {
+            updateCarrierDeliveryPoint.run(carrier.deliveryPoint, at, existingId);
+          }
         }
-      }
-      const assign = c.db.prepare(
-        `INSERT INTO carrier_customers (carrier_id, customer_id, assigned_at)
+        const assign = c.db.prepare(
+          `INSERT INTO carrier_customers (carrier_id, customer_id, assigned_at)
          VALUES (?, ?, ?) ON CONFLICT(carrier_id, customer_id) DO NOTHING`,
-      );
-      const upsertRate = c.db.prepare(
-        `INSERT INTO carrier_customer_rates
+        );
+        const upsertRate = c.db.prepare(
+          `INSERT INTO carrier_customer_rates
            (carrier_id, customer_id, spec, spec_key, is_default, transport_fee, gate_fee, note, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(carrier_id, customer_id, spec_key) DO NOTHING`,
-      );
-      const refreshedCustomers = new Set();
-      for (const rate of preview.rates) {
-        if (rate.status !== 'ready') continue;
-        let carrierId = carrierIds.get(rate.carrierKey);
-        if (!carrierId) {
-          const carrier = ensureCustomerCarrier(c.db, rate.customerId, rate.carrierName, at);
-          carrierId = carrier?.id;
-          if (!carrierId) continue;
-          carrierIds.set(rate.carrierKey, carrierId);
-        }
-        assign.run(carrierId, rate.customerId, at);
-        upsertRate.run(
-          carrierId, rate.customerId, rate.spec, rate.specKey, Number(rate.isDefault),
-          rate.transportFee, rate.gateFee, rate.note, at, at,
         );
-        refreshedCustomers.add(rate.customerId);
-      }
-      for (const customerId of refreshedCustomers) refreshCustomerCarrier(c.db, customerId, at);
-      const summary = {
-        carriersCreated: preview.carrierSummary.ready,
-        carriersUpdated: preview.carrierSummary.update,
-        ratesCreated: preview.rateSummary.ready,
-        ratesUpdated: 0,
-        skipped: preview.carrierSummary.skipped + preview.rateSummary.skipped,
-      };
-      writeAudit(c.db, c.user, 'carrier.excel.import', 'carrier', null, summary);
-      return summary;
-    });
-  }, { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES });
+        const refreshedCustomers = new Set();
+        for (const rate of preview.rates) {
+          if (rate.status !== 'ready') continue;
+          let carrierId = carrierIds.get(rate.carrierKey);
+          if (!carrierId) {
+            const carrier = ensureCustomerCarrier(c.db, rate.customerId, rate.carrierName, at);
+            carrierId = carrier?.id;
+            if (!carrierId) continue;
+            carrierIds.set(rate.carrierKey, carrierId);
+          }
+          assign.run(carrierId, rate.customerId, at);
+          upsertRate.run(
+            carrierId,
+            rate.customerId,
+            rate.spec,
+            rate.specKey,
+            Number(rate.isDefault),
+            rate.transportFee,
+            rate.gateFee,
+            rate.note,
+            at,
+            at,
+          );
+          refreshedCustomers.add(rate.customerId);
+        }
+        for (const customerId of refreshedCustomers) refreshCustomerCarrier(c.db, customerId, at);
+        const summary = {
+          carriersCreated: preview.carrierSummary.ready,
+          carriersUpdated: preview.carrierSummary.update,
+          ratesCreated: preview.rateSummary.ready,
+          ratesUpdated: 0,
+          skipped: preview.carrierSummary.skipped + preview.rateSummary.skipped,
+        };
+        writeAudit(c.db, c.user, 'carrier.excel.import', 'carrier', null, summary);
+        return summary;
+      });
+    },
+    { page: PAGE, maxBodyBytes: IMPORT_MAX_BODY_BYTES },
+  );
 
   router.get('/api/carriers', async (c) => {
     c.requirePage(PAGE);
-    const rows = c.db.prepare('SELECT * FROM carriers ORDER BY is_active DESC, name COLLATE NOCASE').all();
+    const rows = c.db
+      .prepare('SELECT * FROM carriers ORDER BY is_active DESC, name COLLATE NOCASE')
+      .all();
     const ids = carrierIds(c.db);
-    const totalCustomers = Number(c.db.prepare('SELECT COUNT(*) AS count FROM customers').get().count);
-    const linkedCustomers = Number(c.db.prepare('SELECT COUNT(DISTINCT customer_id) AS count FROM carrier_customers').get().count);
+    const totalCustomers = Number(
+      c.db.prepare('SELECT COUNT(*) AS count FROM customers').get().count,
+    );
+    const linkedCustomers = Number(
+      c.db.prepare('SELECT COUNT(DISTINCT customer_id) AS count FROM carrier_customers').get()
+        .count,
+    );
     return {
       items: rows.map((row) => toApi(row, ids.get(row.id) ?? [])),
       activeCount: rows.filter((row) => row.is_active).length,
-      linkCount: Number(c.db.prepare('SELECT COUNT(*) AS count FROM carrier_customers').get().count),
+      linkCount: Number(
+        c.db.prepare('SELECT COUNT(*) AS count FROM carrier_customers').get().count,
+      ),
       unassignedCustomerCount: Math.max(0, totalCustomers - linkedCustomers),
     };
   });
@@ -402,13 +460,15 @@ function register(router) {
   router.get('/api/carriers/:id/customers', async (c) => {
     c.requirePage(PAGE);
     const carrier = load(c.db, Number(c.params.id));
-    const rows = c.db.prepare(
-      `SELECT customers.*
+    const rows = c.db
+      .prepare(
+        `SELECT customers.*
        FROM carrier_customers
        INNER JOIN customers ON customers.id = carrier_customers.customer_id
        WHERE carrier_customers.carrier_id = ?
        ORDER BY customers.customer_name COLLATE NOCASE, customers.id`,
-    ).all(carrier.id);
+      )
+      .all(carrier.id);
     return { items: rows.map(toCustomerApi) };
   });
 
@@ -417,11 +477,13 @@ function register(router) {
     const carrier = load(c.db, Number(c.params.id));
     const customerId = Number(c.params.customerId);
     ensureAssignment(c.db, carrier.id, customerId);
-    const rows = c.db.prepare(
-      `SELECT * FROM carrier_customer_rates
+    const rows = c.db
+      .prepare(
+        `SELECT * FROM carrier_customer_rates
        WHERE carrier_id = ? AND customer_id = ?
        ORDER BY is_default ASC, spec COLLATE NOCASE, id`,
-    ).all(carrier.id, customerId);
+      )
+      .all(carrier.id, customerId);
     return { items: rows.map(toRateApi) };
   });
 
@@ -434,13 +496,32 @@ function register(router) {
     const at = new Date().toISOString();
     return transaction(c.db, () => {
       try {
-        const result = c.db.prepare(
-          `INSERT INTO carrier_customer_rates
+        const result = c.db
+          .prepare(
+            `INSERT INTO carrier_customer_rates
              (carrier_id, customer_id, spec, spec_key, is_default, transport_fee, gate_fee, note, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(carrier.id, customerId, input.spec, input.specKey, Number(input.isDefault), input.transportFee, input.gateFee, input.note, at, at);
-        const rate = c.db.prepare('SELECT * FROM carrier_customer_rates WHERE id = ?').get(Number(result.lastInsertRowid));
-        writeAudit(c.db, c.user, 'carrier.rate.create', 'carrier_customer_rate', rate.id, { carrierId: carrier.id, customerId, rate: toRateApi(rate) });
+          )
+          .run(
+            carrier.id,
+            customerId,
+            input.spec,
+            input.specKey,
+            Number(input.isDefault),
+            input.transportFee,
+            input.gateFee,
+            input.note,
+            at,
+            at,
+          );
+        const rate = c.db
+          .prepare('SELECT * FROM carrier_customer_rates WHERE id = ?')
+          .get(Number(result.lastInsertRowid));
+        writeAudit(c.db, c.user, 'carrier.rate.create', 'carrier_customer_rate', rate.id, {
+          carrierId: carrier.id,
+          customerId,
+          rate: toRateApi(rate),
+        });
         return toRateApi(rate);
       } catch (error) {
         if (isUniqueConstraint(error)) {
@@ -456,18 +537,36 @@ function register(router) {
     const carrier = load(c.db, Number(c.params.id));
     const customerId = Number(c.params.customerId);
     ensureAssignment(c.db, carrier.id, customerId);
-    const before = c.db.prepare(
-      'SELECT * FROM carrier_customer_rates WHERE id = ? AND carrier_id = ? AND customer_id = ?',
-    ).get(Number(c.params.rateId), carrier.id, customerId);
+    const before = c.db
+      .prepare(
+        'SELECT * FROM carrier_customer_rates WHERE id = ? AND carrier_id = ? AND customer_id = ?',
+      )
+      .get(Number(c.params.rateId), carrier.id, customerId);
     if (!before) throw notFound('Không tìm thấy mức cước.');
     const input = readRateInput(c.body);
     return transaction(c.db, () => {
       try {
-        c.db.prepare(
-          `UPDATE carrier_customer_rates SET spec = ?, spec_key = ?, is_default = ?, transport_fee = ?, gate_fee = ?, note = ?, updated_at = ? WHERE id = ?`,
-        ).run(input.spec, input.specKey, Number(input.isDefault), input.transportFee, input.gateFee, input.note, new Date().toISOString(), before.id);
-        const after = c.db.prepare('SELECT * FROM carrier_customer_rates WHERE id = ?').get(before.id);
-        writeAudit(c.db, c.user, 'carrier.rate.update', 'carrier_customer_rate', before.id, { before: toRateApi(before), after: toRateApi(after) });
+        c.db
+          .prepare(
+            `UPDATE carrier_customer_rates SET spec = ?, spec_key = ?, is_default = ?, transport_fee = ?, gate_fee = ?, note = ?, updated_at = ? WHERE id = ?`,
+          )
+          .run(
+            input.spec,
+            input.specKey,
+            Number(input.isDefault),
+            input.transportFee,
+            input.gateFee,
+            input.note,
+            new Date().toISOString(),
+            before.id,
+          );
+        const after = c.db
+          .prepare('SELECT * FROM carrier_customer_rates WHERE id = ?')
+          .get(before.id);
+        writeAudit(c.db, c.user, 'carrier.rate.update', 'carrier_customer_rate', before.id, {
+          before: toRateApi(before),
+          after: toRateApi(after),
+        });
         return toRateApi(after);
       } catch (error) {
         if (isUniqueConstraint(error)) {
@@ -483,12 +582,18 @@ function register(router) {
     const carrier = load(c.db, Number(c.params.id));
     const customerId = Number(c.params.customerId);
     ensureAssignment(c.db, carrier.id, customerId);
-    const before = c.db.prepare(
-      'SELECT * FROM carrier_customer_rates WHERE id = ? AND carrier_id = ? AND customer_id = ?',
-    ).get(Number(c.params.rateId), carrier.id, customerId);
+    const before = c.db
+      .prepare(
+        'SELECT * FROM carrier_customer_rates WHERE id = ? AND carrier_id = ? AND customer_id = ?',
+      )
+      .get(Number(c.params.rateId), carrier.id, customerId);
     if (!before) throw notFound('Không tìm thấy mức cước.');
     c.db.prepare('DELETE FROM carrier_customer_rates WHERE id = ?').run(before.id);
-    writeAudit(c.db, c.user, 'carrier.rate.delete', 'carrier_customer_rate', before.id, { carrierId: carrier.id, customerId, rate: toRateApi(before) });
+    writeAudit(c.db, c.user, 'carrier.rate.delete', 'carrier_customer_rate', before.id, {
+      carrierId: carrier.id,
+      customerId,
+      rate: toRateApi(before),
+    });
     return { ok: true };
   });
 
@@ -498,8 +603,23 @@ function register(router) {
     const at = new Date().toISOString();
     return transaction(c.db, () => {
       ensureAvailable(c.db, input.key);
-      const result = c.db.prepare(`INSERT INTO carriers (name, contact, phone, address, delivery_point, schedule, note, is_active, carrier_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(input.name, input.contact, input.phone, input.address, input.deliveryPoint, input.schedule, input.note, Number(input.isActive), input.key, at, at);
+      const result = c.db
+        .prepare(
+          `INSERT INTO carriers (name, contact, phone, address, delivery_point, schedule, note, is_active, carrier_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          input.name,
+          input.contact,
+          input.phone,
+          input.address,
+          input.deliveryPoint,
+          input.schedule,
+          input.note,
+          Number(input.isActive),
+          input.key,
+          at,
+          at,
+        );
       const row = load(c.db, Number(result.lastInsertRowid));
       writeAudit(c.db, c.user, 'carrier.create', 'carrier', row.id, toApi(row));
       return toApi(row);
@@ -513,14 +633,33 @@ function register(router) {
     return transaction(c.db, () => {
       ensureAvailable(c.db, input.key, before.id);
       const at = new Date().toISOString();
-      c.db.prepare('UPDATE carriers SET name = ?, contact = ?, phone = ?, address = ?, delivery_point = ?, schedule = ?, note = ?, is_active = ?, carrier_key = ?, updated_at = ? WHERE id = ?')
-        .run(input.name, input.contact, input.phone, input.address, input.deliveryPoint, input.schedule, input.note, Number(input.isActive), input.key, at, before.id);
-      const customerIds = c.db.prepare(
-        'SELECT customer_id FROM carrier_customers WHERE carrier_id = ?',
-      ).all(before.id).map((row) => row.customer_id);
+      c.db
+        .prepare(
+          'UPDATE carriers SET name = ?, contact = ?, phone = ?, address = ?, delivery_point = ?, schedule = ?, note = ?, is_active = ?, carrier_key = ?, updated_at = ? WHERE id = ?',
+        )
+        .run(
+          input.name,
+          input.contact,
+          input.phone,
+          input.address,
+          input.deliveryPoint,
+          input.schedule,
+          input.note,
+          Number(input.isActive),
+          input.key,
+          at,
+          before.id,
+        );
+      const customerIds = c.db
+        .prepare('SELECT customer_id FROM carrier_customers WHERE carrier_id = ?')
+        .all(before.id)
+        .map((row) => row.customer_id);
       for (const customerId of customerIds) refreshCustomerCarrier(c.db, customerId, at);
       const after = load(c.db, before.id);
-      writeAudit(c.db, c.user, 'carrier.update', 'carrier', before.id, { before: toApi(before), after: toApi(after) });
+      writeAudit(c.db, c.user, 'carrier.update', 'carrier', before.id, {
+        before: toApi(before),
+        after: toApi(after),
+      });
       return toApi(after);
     });
   });
@@ -529,9 +668,10 @@ function register(router) {
     c.requirePage(PAGE);
     const row = load(c.db, Number(c.params.id));
     return transaction(c.db, () => {
-      const customerIds = c.db.prepare(
-        'SELECT customer_id FROM carrier_customers WHERE carrier_id = ?',
-      ).all(row.id).map((item) => item.customer_id);
+      const customerIds = c.db
+        .prepare('SELECT customer_id FROM carrier_customers WHERE carrier_id = ?')
+        .all(row.id)
+        .map((item) => item.customer_id);
       c.db.prepare('DELETE FROM carriers WHERE id = ?').run(row.id);
       const at = new Date().toISOString();
       for (const customerId of customerIds) refreshCustomerCarrier(c.db, customerId, at);
@@ -543,13 +683,24 @@ function register(router) {
   router.patch('/api/carriers/:id/customers', async (c) => {
     c.requirePage(PAGE);
     const carrier = load(c.db, Number(c.params.id));
-    const customerIds = [...new Set(Array.isArray(c.body.customerIds) ? c.body.customerIds.map(Number).filter(Number.isInteger) : [])];
+    const customerIds = [
+      ...new Set(
+        Array.isArray(c.body.customerIds)
+          ? c.body.customerIds.map(Number).filter(Number.isInteger)
+          : [],
+      ),
+    ];
     if (!customerIds.length) throw badRequest('Hãy chọn ít nhất một khách hàng.');
     return transaction(c.db, () => {
       const placeholders = customerIds.map(() => '?').join(', ');
-      const existing = c.db.prepare(`SELECT id FROM customers WHERE id IN (${placeholders})`).all(...customerIds);
-      if (existing.length !== customerIds.length) throw badRequest('Có khách hàng không còn tồn tại.');
-      const insert = c.db.prepare('INSERT OR IGNORE INTO carrier_customers (carrier_id, customer_id, assigned_at) VALUES (?, ?, ?)');
+      const existing = c.db
+        .prepare(`SELECT id FROM customers WHERE id IN (${placeholders})`)
+        .all(...customerIds);
+      if (existing.length !== customerIds.length)
+        throw badRequest('Có khách hàng không còn tồn tại.');
+      const insert = c.db.prepare(
+        'INSERT OR IGNORE INTO carrier_customers (carrier_id, customer_id, assigned_at) VALUES (?, ?, ?)',
+      );
       const at = new Date().toISOString();
       for (const customerId of customerIds) insert.run(carrier.id, customerId, at);
       for (const customerId of customerIds) refreshCustomerCarrier(c.db, customerId, at);
@@ -561,10 +712,14 @@ function register(router) {
   router.delete('/api/carriers/:id/customers/:customerId', async (c) => {
     c.requirePage(PAGE);
     const carrier = load(c.db, Number(c.params.id));
-    const result = c.db.prepare('DELETE FROM carrier_customers WHERE carrier_id = ? AND customer_id = ?').run(carrier.id, Number(c.params.customerId));
+    const result = c.db
+      .prepare('DELETE FROM carrier_customers WHERE carrier_id = ? AND customer_id = ?')
+      .run(carrier.id, Number(c.params.customerId));
     if (result.changes === 0) throw notFound('Khách hàng này chưa được gán cho nhà xe.');
     refreshCustomerCarrier(c.db, Number(c.params.customerId), new Date().toISOString());
-    writeAudit(c.db, c.user, 'carrier.unassign_customer', 'carrier', carrier.id, { customerId: Number(c.params.customerId) });
+    writeAudit(c.db, c.user, 'carrier.unassign_customer', 'carrier', carrier.id, {
+      customerId: Number(c.params.customerId),
+    });
     return { ok: true };
   });
 }

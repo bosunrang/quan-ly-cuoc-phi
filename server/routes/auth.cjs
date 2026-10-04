@@ -26,10 +26,11 @@ function publicProfile(db, user) {
   };
 }
 
-
 function register(router) {
   router.post('/api/login', async (c) => {
-    const username = String(c.body.username ?? '').trim().toLowerCase();
+    const username = String(c.body.username ?? '')
+      .trim()
+      .toLowerCase();
     const password = String(c.body.password ?? '');
     const address = clientAddress(c.req);
     if (!username || !password) {
@@ -38,14 +39,10 @@ function register(router) {
 
     const blockedMinutes = auth.loginBlockedFor(username, address);
     if (blockedMinutes > 0) {
-      throw badRequest(
-        `Sai quá nhiều lần. Vui lòng thử lại sau ${blockedMinutes} phút.`,
-      );
+      throw badRequest(`Sai quá nhiều lần. Vui lòng thử lại sau ${blockedMinutes} phút.`);
     }
 
-    const user = c.db
-      .prepare('SELECT * FROM users WHERE username = ?')
-      .get(username);
+    const user = c.db.prepare('SELECT * FROM users WHERE username = ?').get(username);
 
     // Cùng một thông báo cho mọi trường hợp sai, để không lộ tài khoản nào có thật.
     const invalid = unauthorized('Tên đăng nhập hoặc mật khẩu không đúng.');
@@ -88,7 +85,9 @@ function register(router) {
     if (!isLocalRequest(c.req)) {
       throw unauthorized('Khôi phục chỉ thực hiện được trên máy chính.');
     }
-    const username = String(c.body.username ?? '').trim().toLowerCase();
+    const username = String(c.body.username ?? '')
+      .trim()
+      .toLowerCase();
     const code = String(c.body.code ?? '').trim();
     const password = String(c.body.password ?? '');
     const weak = auth.checkPasswordStrength(password);
@@ -107,7 +106,11 @@ function register(router) {
     const user = c.db
       .prepare('SELECT * FROM users WHERE username = ? AND is_admin = 1 AND is_active = 1')
       .get(username);
-    if (!recovery || !user || !(await auth.verifyPassword(code, recovery.code_hash, recovery.code_salt))) {
+    if (
+      !recovery ||
+      !user ||
+      !(await auth.verifyPassword(code, recovery.code_hash, recovery.code_salt))
+    ) {
       auth.recordFailedLogin(attemptName, address);
       throw unauthorized('Mã khôi phục hoặc tên quản trị viên không đúng.');
     }
@@ -149,13 +152,7 @@ function register(router) {
     const currentPassword = String(c.body.currentPassword ?? '');
     const newPassword = String(c.body.newPassword ?? '');
 
-    if (
-      !(await auth.verifyPassword(
-        currentPassword,
-        c.user.password_hash,
-        c.user.password_salt,
-      ))
-    ) {
+    if (!(await auth.verifyPassword(currentPassword, c.user.password_hash, c.user.password_salt))) {
       throw badRequest('Mật khẩu hiện tại không đúng.');
     }
     const weak = auth.checkPasswordStrength(newPassword);
@@ -187,9 +184,11 @@ function register(router) {
       throw badRequest('Mật khẩu mới phải khác mật khẩu được cấp.');
     }
     const { hash, salt } = await auth.hashPassword(newPassword);
-    c.db.prepare(
-      'UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = 0, updated_at = ? WHERE id = ?',
-    ).run(hash, salt, new Date().toISOString(), c.user.id);
+    c.db
+      .prepare(
+        'UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = 0, updated_at = ? WHERE id = ?',
+      )
+      .run(hash, salt, new Date().toISOString(), c.user.id);
     writeAudit(c.db, c.user, 'password.initial_change', 'user', c.user.id);
     // Phiên khác mở bằng mật khẩu mặc định (có thể của người khác trong mạng)
     // bị hủy; chỉ giữ lại phiên vừa đổi mật khẩu.

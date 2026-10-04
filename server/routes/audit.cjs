@@ -7,23 +7,42 @@ const { writeAudit } = require('../audit.cjs');
 const { normalizeSearchText } = require('../db.cjs');
 const SEARCH_ALIASES = {
   'bao cao': ['report.'],
-  'excel': ['report.'],
-  'xang': ['fuel.'],
+  excel: ['report.'],
+  xang: ['fuel.'],
   'tinh xang': ['fuel.'],
-  'phieu': ['entry.'],
+  phieu: ['entry.'],
   'chi phi': ['entry.', 'fuel.'],
   'gui hang': ['entry.'],
   'nhap chi phi': ['entry.create'],
-  'cuoc': ['entry.', 'carrier.rate.'],
-  'misa': ['misa.'],
+  cuoc: ['entry.', 'carrier.rate.'],
+  misa: ['misa.'],
   'nhan vien': ['employee.'],
   'khach hang': ['customer.'],
   'nha xe': ['carrier.'],
   'nguoi dung': ['user.', 'login', 'logout', 'password.'],
-	'tai khoan': ['user.', 'login', 'logout', 'password.'],
-	'dang nhap': ['login'],
-	'thay doi': ['entry.update', 'user.update', 'employee.update', 'customer.update', 'carrier.update', 'carrier.rate.update', 'fuel.price.upsert', 'settings.update', 'password.'],
-	'xoa': ['entry.delete', 'user.delete', 'employee.delete', 'customer.delete', 'carrier.delete', 'carrier.rate.delete', 'fuel.price.delete', 'audit.cleanup'],
+  'tai khoan': ['user.', 'login', 'logout', 'password.'],
+  'dang nhap': ['login'],
+  'thay doi': [
+    'entry.update',
+    'user.update',
+    'employee.update',
+    'customer.update',
+    'carrier.update',
+    'carrier.rate.update',
+    'fuel.price.upsert',
+    'settings.update',
+    'password.',
+  ],
+  xoa: [
+    'entry.delete',
+    'user.delete',
+    'employee.delete',
+    'customer.delete',
+    'carrier.delete',
+    'carrier.rate.delete',
+    'fuel.price.delete',
+    'audit.cleanup',
+  ],
   'cai dat': ['settings.'],
 };
 // action được lưu dưới dạng mã kỹ thuật. Bảng này giúp ô tìm kiếm hiểu đúng
@@ -74,17 +93,20 @@ const ACTION_SEARCH_TEXT = {
   'carrier.unassign_customer': 'gỡ khách hàng khỏi nhà xe',
   'audit.cleanup': 'dọn nhật ký xóa nhật ký',
 };
-const normalize = (value) => String(value)
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .replace(/[đĐ]/g, 'd')
-  .toLowerCase()
-  .trim();
+const normalize = (value) =>
+  String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .trim();
 
 function filters(query) {
   const clauses = [];
   const values = [];
-  const q = String(query.q || '').trim().slice(0, 120);
+  const q = String(query.q || '')
+    .trim()
+    .slice(0, 120);
   const from = query.from ? String(query.from) : '';
   const to = query.to ? String(query.to) : '';
   if ((from && !isIsoDate(from)) || (to && !isIsoDate(to)) || (from && to && from > to)) {
@@ -118,8 +140,18 @@ function filters(query) {
       actionClauses.push("vn_normalize(COALESCE(audit_log.detail, '')) LIKE ?");
       actions.push(`%${detailKey}%`);
     }
-    clauses.push(`(audit_log.username LIKE ? ESCAPE '\\' OR vn_normalize(COALESCE(users.full_name, '')) LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\' OR audit_log.entity LIKE ? ESCAPE '\\' OR audit_log.entity_id LIKE ? ESCAPE '\\'${actionPrefixClauses.length ? ` OR ${actionPrefixClauses.join(' OR ')}` : ''}${actionClauses.length ? ` OR ${actionClauses.join(' OR ')}` : ''})`);
-    values.push(pattern, normalizedPattern, pattern, pattern, pattern, ...actionPrefixes.map((prefix) => `${prefix}%`), ...actions);
+    clauses.push(
+      `(audit_log.username LIKE ? ESCAPE '\\' OR vn_normalize(COALESCE(users.full_name, '')) LIKE ? ESCAPE '\\' OR audit_log.action LIKE ? ESCAPE '\\' OR audit_log.entity LIKE ? ESCAPE '\\' OR audit_log.entity_id LIKE ? ESCAPE '\\'${actionPrefixClauses.length ? ` OR ${actionPrefixClauses.join(' OR ')}` : ''}${actionClauses.length ? ` OR ${actionClauses.join(' OR ')}` : ''})`,
+    );
+    values.push(
+      pattern,
+      normalizedPattern,
+      pattern,
+      pattern,
+      pattern,
+      ...actionPrefixes.map((prefix) => `${prefix}%`),
+      ...actions,
+    );
   }
   clauses.push("action <> 'login.dev'");
   return { where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', values };
@@ -154,17 +186,19 @@ function register(router) {
     const filter = filters(c.query);
     const rows = c.db
       .prepare(
-      `SELECT audit_log.id, audit_log.at, audit_log.user_id, audit_log.username,
+        `SELECT audit_log.id, audit_log.at, audit_log.user_id, audit_log.username,
               audit_log.action, audit_log.entity, audit_log.entity_id, audit_log.detail
            FROM audit_log
            LEFT JOIN users ON users.id = audit_log.user_id
            ${filter.where} ORDER BY audit_log.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...filter.values, limit, offset);
-    const total = c.db.prepare(
-      `SELECT COUNT(*) AS total FROM audit_log
+    const total = c.db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM audit_log
        LEFT JOIN users ON users.id = audit_log.user_id ${filter.where}`,
-    ).get(...filter.values).total;
+      )
+      .get(...filter.values).total;
     return {
       total,
       items: rows.map((row) => ({

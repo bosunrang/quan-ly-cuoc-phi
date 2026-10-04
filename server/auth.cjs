@@ -1,12 +1,6 @@
 'use strict';
 
-const {
-  randomBytes,
-  scrypt,
-  scryptSync,
-  createHash,
-  timingSafeEqual,
-} = require('node:crypto');
+const { randomBytes, scrypt, scryptSync, createHash, timingSafeEqual } = require('node:crypto');
 const { promisify } = require('node:util');
 
 // scrypt bất đồng bộ chạy trên thread pool của Node: mỗi lần kiểm tra mật khẩu
@@ -76,14 +70,11 @@ function checkPasswordStrength(password) {
 
 // ---------------------------------------------------------------- phiên
 
-const hashToken = (token) =>
-  createHash('sha256').update(token).digest('hex');
+const hashToken = (token) => createHash('sha256').update(token).digest('hex');
 
 function createSession(db, userId) {
   const token = randomBytes(32).toString('base64url');
-  const expiresAt = new Date(
-    Date.now() + SESSION_HOURS * 60 * 60 * 1000,
-  ).toISOString();
+  const expiresAt = new Date(Date.now() + SESSION_HOURS * 60 * 60 * 1000).toISOString();
   db.prepare(
     'INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
   ).run(hashToken(token), userId, now(), expiresAt);
