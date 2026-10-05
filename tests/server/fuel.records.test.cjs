@@ -135,6 +135,33 @@ test('năm nhà xe cùng bến chỉ tính một chặng xăng', () => {
   );
 });
 
+test('kỳ tính xăng không có phiếu giao vẫn có STT và ngày', () => {
+  const details = dailyDetailRows(
+    [],
+    [
+      {
+        periodFrom: '2026-10-05',
+        periodTo: '2026-10-07',
+        distanceKm: 33.2,
+        fuelPrice: 27_080,
+        totalFee: 104_472,
+        legs: [
+          { from: 'Kho', to: 'Đơn vị A', km: 19.8 },
+          { from: 'Đơn vị A', to: 'Đơn vị B', km: 13.4 },
+        ],
+      },
+    ],
+  );
+
+  assert.equal(details.length, 2);
+  assert.equal(details[0].dayNumber, 1);
+  assert.equal(details[0].entryDate, '05/10/2026');
+  assert.equal(details[0].daySpan, 2);
+  assert.equal(details[1].dayNumber, null);
+  assert.equal(details[1].entryDate, null);
+  assert.equal(details[1].daySpan, null);
+});
+
 test('tên sheet báo cáo được làm sạch và không trùng nhau', () => {
   const used = new Set();
   assert.equal(uniqueSheetName('Nguyễn/Văn:*An?', used), 'Nguyễn Văn An');
@@ -577,6 +604,7 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   }
   assert.equal(sheet.A4.v, 'BẢNG CHI TIẾT CƯỚC NHÂN VIÊN');
   assert.deepEqual(workbook.SheetNames, ['Bảng kê cước']);
+  assert.equal(sheet.B11.v, 'Ngày');
   assert.equal(sheet.C11.v, 'Điểm đi');
   assert.equal(sheet.D11.v, 'Điểm đến');
   assert.equal(sheet.E11.v, 'Nhà xe');
@@ -740,4 +768,59 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   assert.doesNotMatch(stylesXml, /xfpb:xfComplement i="0"/);
   assert.doesNotMatch(sheetXml, /<c r="L1[23]"[^>]*t="b">/);
   assert.doesNotMatch(sheetXml, /<c r="K14"[^>]*t="b">/);
+});
+
+test('Excel chỉ có lộ trình xăng vẫn xuất STT và ngày', async () => {
+  const employee = await call('POST', '/api/employees', {
+    fullName: 'Nhân viên giao trực tiếp',
+    address: '',
+    userId: null,
+    isActive: true,
+  });
+  assert.equal(employee.status, 200);
+
+  const fuel = await call('POST', '/api/fuel/records', {
+    periodFrom: '2026-10-05',
+    periodTo: '2026-10-05',
+    employeeId: employee.data.id,
+    consumptionLiters: 12,
+    consumptionBaseKm: 100,
+    fuelPrice: 27_080,
+    vehicleType: 'truck',
+    fuelType: 'Xăng E10',
+    region: 'region1',
+    legs: [
+      { from: 'Kho', to: 'Đơn vị A', km: 19.8 },
+      { from: 'Đơn vị A', to: 'Đơn vị B', km: 13.4 },
+    ],
+  });
+  assert.equal(fuel.status, 200);
+
+  const exported = await call(
+    'GET',
+    `/api/reports/export?from=2026-10-05&to=2026-10-05&employeeId=${employee.data.id}&type=daily`,
+  );
+  assert.equal(exported.status, 200);
+  const workbook = XLSX.read(Buffer.from(exported.data.contentBase64, 'base64'), {
+    type: 'buffer',
+    cellStyles: true,
+  });
+  const sheet = workbook.Sheets['Bảng kê cước'];
+
+  assert.equal(sheet.B11.v, 'Ngày');
+  assert.equal(sheet.A12.v, 1);
+  assert.equal(sheet.B12.v, '05/10/2026');
+  for (const range of ['A12:A13', 'B12:B13']) {
+    const expected = XLSX.utils.decode_range(range);
+    assert.equal(
+      sheet['!merges'].some(
+        (item) =>
+          item.s.c === expected.s.c &&
+          item.s.r === expected.s.r &&
+          item.e.c === expected.e.c &&
+          item.e.r === expected.e.r,
+      ),
+      true,
+    );
+  }
 });

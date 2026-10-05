@@ -442,7 +442,7 @@ const money = {
 const heading = { ...centered, font: { name: 'Times New Roman', sz: 11, bold: true } };
 const DAILY_REPORT_HEADERS = [
   'STT',
-  'Ngày gửi',
+  'Ngày',
   'Điểm đi',
   'Điểm đến',
   'Nhà xe',
@@ -767,6 +767,10 @@ function deliveryRouteKey(delivery) {
 function dailyDetailRows(deliveries, fuels) {
   const remainingFuels = [...fuels];
   const rows = [];
+  let nextDayNumber = deliveries.reduce(
+    (largest, delivery) => Math.max(largest, number(delivery.dayNumber)),
+    0,
+  );
   for (let offset = 0; offset < deliveries.length; ) {
     const firstDelivery = deliveries[offset];
     const groupSize = firstDelivery.isGroupStart ? firstDelivery.groupSize : 1;
@@ -832,6 +836,8 @@ function dailyDetailRows(deliveries, fuels) {
     });
   }
   remainingFuels.forEach((fuelRow) => {
+    nextDayNumber += 1;
+    const fuelDate = formatDate(fuelRow.periodFrom);
     const legs = fuelRow.legs?.length
       ? fuelRow.legs
       : [
@@ -849,7 +855,9 @@ function dailyDetailRows(deliveries, fuels) {
         fuelLegSpan: 1,
         fuelRow: index === 0 ? fuelRow : null,
         fuelSpan: legs.length,
-        daySpan: null,
+        dayNumber: index === 0 ? nextDayNumber : null,
+        entryDate: index === 0 ? fuelDate : null,
+        daySpan: index === 0 ? legs.length : null,
       });
     });
   });
