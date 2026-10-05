@@ -36,6 +36,20 @@ describe('tính tiền xăng', () => {
     assert.equal(calculateFuelTotal(input), 72_000);
   });
 
+  test('chấp nhận giá xăng bằng 0 cho xe công ty', () => {
+    const input = fuelRecordInput({
+      periodFrom: '2026-09-01',
+      periodTo: '2026-09-01',
+      consumptionLiters: 8,
+      consumptionBaseKm: 100,
+      fuelPrice: 0,
+      legs: [{ from: 'Kho', to: 'Khách hàng', km: 25 }],
+    });
+
+    assert.equal(input.fuelPrice, 0);
+    assert.equal(calculateFuelTotal(input), 0);
+  });
+
   test('cộng chi phí khác có tên vào tổng tiền xăng', () => {
     const input = fuelRecordInput({
       periodFrom: '2026-09-01',

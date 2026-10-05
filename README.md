@@ -160,6 +160,24 @@ database và cấu hình máy chủ riêng:
 - **NAVIVA GROUP**: cổng 3101 khi chạy cùng máy với Nam Hưng Việt.
 - **Tường Khuê** và **Winbio**: cổng 3100 trên máy chủ riêng của từng miền.
 
+Khi dùng Cloudflare Tunnel trên **cùng một máy chủ**, tạo một Public Hostname
+cho từng công ty và trỏ về đúng cổng localhost. Không cho hai hostname cùng
+trỏ vào một cổng, vì khi đó chúng sẽ luôn mở cùng một dữ liệu. Ví dụ cấu hình
+ingress của một tunnel:
+
+```yaml
+ingress:
+  - hostname: cuocphi-nam-hung-viet.example.com
+    service: http://127.0.0.1:3100
+  - hostname: cuocphi-naviva.example.com
+    service: http://127.0.0.1:3101
+  - service: http_status:404
+```
+
+Một tunnel có thể có nhiều hostname; chỉ cần chạy **một** tiến trình
+`cloudflared` với cấu hình trên. Trong Cloudflare Zero Trust, đặt các Public
+Hostname tương ứng nếu cấu hình trực tiếp trên Dashboard.
+
 Các máy trạm chỉ cần chọn công ty tương ứng rồi nhập địa chỉ máy chủ của công
 ty đó ở lần kết nối đầu tiên. Cập nhật ứng dụng chỉ đổi mã chương trình; không
 trộn các database công ty.

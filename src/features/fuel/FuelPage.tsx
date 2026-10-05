@@ -365,6 +365,8 @@ export function FuelPage() {
 		const stored = findStoredPrice(date);
 		setFuelPrice(stored ? formatMoney(stored.price) : "");
 	};
+	// `0` là giá hợp lệ khi dùng xe công ty; chỉ chuỗi rỗng mới là chưa nhập giá.
+	const hasFuelPrice = fuelPrice.trim() !== "";
 	const appliedPrice = Number(fuelPrice.replace(/\D/g, ""));
 	const routeLegs = legs.map((leg, index) => ({
 		from: index ? legs[index - 1].destination : origin,
@@ -585,6 +587,7 @@ export function FuelPage() {
 	};
 	const save = async () => {
 		if (!employeeId) throw new Error("Vui lòng chọn nhân viên.");
+		if (!hasFuelPrice) throw new Error("Vui lòng nhập giá xăng.");
 		if (!origin.trim() || !totalKm)
 			throw new Error("Vui lòng nhập điểm đi và quãng đường.");
 		if (incompleteRouteLeg)
@@ -735,7 +738,7 @@ export function FuelPage() {
 									<input
 										value={fuelPrice}
 										inputMode="numeric"
-										placeholder="Chưa có giá"
+										placeholder="Nhập 0 nếu xe công ty"
 										onChange={(event) => {
 											const digits = event.target.value.replace(/\D/g, "");
 											setFuelPrice(digits ? formatMoney(Number(digits)) : "");
@@ -977,7 +980,7 @@ export function FuelPage() {
 							className="button primary"
 							type="button"
 							disabled={
-								!appliedPrice || !totalKm || Boolean(incompleteRouteLeg)
+								!hasFuelPrice || !totalKm || Boolean(incompleteRouteLeg)
 							}
 							onClick={() =>
 								void save().catch((cause) =>
