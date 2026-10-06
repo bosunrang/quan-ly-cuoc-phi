@@ -203,6 +203,7 @@ export function parseMisaRows(
 			customerCode: normalizeText(optionalCell(source, columns.customerCode)),
 			customerName,
 			address,
+			productCode: normalizeText(optionalCell(source, columns.productCode)),
 			productName,
 			quantitySold,
 			provinceCity,

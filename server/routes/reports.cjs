@@ -764,6 +764,85 @@ function deliveryRouteKey(delivery) {
   );
 }
 
+function fuelLegs(fuelRow) {
+  return fuelRow.legs?.length
+    ? fuelRow.legs
+    : [
+        {
+          from: 'Chưa lưu chi tiết lộ trình',
+          to: '',
+          km: fuelRow.distanceKm,
+          extraCosts: fuelRow.extraCosts || [],
+        },
+      ];
+}
+
+function takeFuelsForDate(remainingFuels, date) {
+  const sameDay = [];
+  for (let index = 0; index < remainingFuels.length; ) {
+    const fuelRow = remainingFuels[index];
+    if (fuelRow.periodFrom === date && fuelRow.periodTo === date) {
+      sameDay.push(remainingFuels.splice(index, 1)[0]);
+    } else {
+      index += 1;
+    }
+  }
+  if (sameDay.length) return sameDay;
+
+  const rangeIndex = remainingFuels.findIndex(
+    (fuelRow) => fuelRow.periodFrom <= date && fuelRow.periodTo >= date,
+  );
+  return rangeIndex < 0 ? [] : [remainingFuels.splice(rangeIndex, 1)[0]];
+}
+
+function detailRowsForFuels(fuelRows, deliveries = []) {
+  const unmatchedDeliveries = new Set(deliveries);
+  const rows = [];
+  fuelRows.forEach((fuelRow) => {
+    const recordRows = [];
+    fuelLegs(fuelRow).forEach((fuelLeg) => {
+      const carrierKey = routeDestinationCarrierKey(fuelLeg.to);
+      const matches = carrierKey
+        ? deliveries.filter(
+            (delivery) =>
+              unmatchedDeliveries.has(delivery) && deliveryRouteKey(delivery) === carrierKey,
+          )
+        : [];
+      const matchedDeliveries = matches.length ? matches : [null];
+      matchedDeliveries.forEach((delivery, matchIndex) => {
+        if (delivery) unmatchedDeliveries.delete(delivery);
+        recordRows.push({
+          delivery,
+          fuelLeg: matchIndex === 0 ? fuelLeg : null,
+          fuelLegSpan: matchedDeliveries.length,
+        });
+      });
+    });
+    recordRows.forEach((row, index) => {
+      rows.push({
+        ...row,
+        fuelRow: index === 0 ? fuelRow : null,
+        fuelSpan: recordRows.length,
+      });
+    });
+  });
+  deliveries.forEach((delivery) => {
+    if (unmatchedDeliveries.has(delivery)) {
+      rows.push({ delivery, fuelLeg: null, fuelLegSpan: 1, fuelRow: null, fuelSpan: 1 });
+    }
+  });
+  return rows;
+}
+
+function dailyFuelSummary(fuelRows, rowCount) {
+  if (!fuelRows.length) return {};
+  return {
+    dayFuelPrice: fuelRows[0].fuelPrice,
+    dayFuelTotal: fuelRows.reduce((sum, fuelRow) => sum + number(fuelRow.totalFee), 0),
+    dayFuelSpan: rowCount,
+  };
+}
+
 function dailyDetailRows(deliveries, fuels) {
   const remainingFuels = [...fuels];
   const rows = [];
@@ -777,90 +856,52 @@ function dailyDetailRows(deliveries, fuels) {
     const group = deliveries.slice(offset, offset + groupSize);
     offset += group.length;
     const date = firstDelivery.entryDateIso;
-    let fuelIndex = remainingFuels.findIndex(
-      (fuelRow) => fuelRow.periodFrom === date && fuelRow.periodTo === date,
-    );
-    if (fuelIndex < 0) {
-      fuelIndex = remainingFuels.findIndex(
-        (fuelRow) => fuelRow.periodFrom <= date && fuelRow.periodTo >= date,
-      );
+    const fuelRows = takeFuelsForDate(remainingFuels, date);
+    const dayRows = detailRowsForFuels(fuelRows, group);
+    if (!dayRows.length) {
+      dayRows.push({ delivery: null, fuelLeg: null, fuelLegSpan: 1, fuelRow: null, fuelSpan: 1 });
     }
-    const fuelRow = fuelIndex < 0 ? null : remainingFuels.splice(fuelIndex, 1)[0];
-    const legs = fuelRow?.legs?.length
-      ? fuelRow.legs
-      : fuelRow
-        ? [
-            {
-              from: 'Chưa lưu chi tiết lộ trình',
-              to: '',
-              km: fuelRow.distanceKm,
-              extraCosts: fuelRow.extraCosts || [],
-            },
-          ]
-        : [];
-    const unmatchedDeliveries = new Set(group);
-    const dayRows = [];
-    legs.forEach((fuelLeg) => {
-      const carrierKey = routeDestinationCarrierKey(fuelLeg.to);
-      const matches = carrierKey
-        ? group.filter(
-            (delivery) =>
-              unmatchedDeliveries.has(delivery) && deliveryRouteKey(delivery) === carrierKey,
-          )
-        : [];
-      const matchedDeliveries = matches.length ? matches : [null];
-      matchedDeliveries.forEach((delivery, matchIndex) => {
-        if (delivery) unmatchedDeliveries.delete(delivery);
-        dayRows.push({
-          delivery,
-          fuelLeg: matchIndex === 0 ? fuelLeg : null,
-          fuelLegSpan: matchedDeliveries.length,
-        });
-      });
-    });
-    group.forEach((delivery) => {
-      if (unmatchedDeliveries.has(delivery)) {
-        dayRows.push({ delivery, fuelLeg: null, fuelLegSpan: 1 });
-      }
-    });
-    if (!dayRows.length) dayRows.push({ delivery: null, fuelLeg: null, fuelLegSpan: 1 });
+    const fuelSummary = dailyFuelSummary(fuelRows, dayRows.length);
     dayRows.forEach((row, index) => {
       rows.push({
         ...row,
-        fuelRow: index === 0 ? fuelRow : null,
-        fuelSpan: fuelRow ? dayRows.length : 1,
         dayNumber: index === 0 ? firstDelivery.dayNumber : null,
         entryDate: index === 0 ? firstDelivery.entryDate : null,
         daySpan: index === 0 ? dayRows.length : null,
+        ...(index === 0 ? fuelSummary : {}),
       });
     });
   }
-  remainingFuels.forEach((fuelRow) => {
+  while (remainingFuels.length) {
+    const firstFuel = remainingFuels.shift();
+    const sameDayFuels = [firstFuel];
+    if (firstFuel.periodFrom === firstFuel.periodTo) {
+      for (let index = 0; index < remainingFuels.length; ) {
+        const fuelRow = remainingFuels[index];
+        if (
+          fuelRow.periodFrom === firstFuel.periodFrom &&
+          fuelRow.periodTo === firstFuel.periodTo
+        ) {
+          sameDayFuels.push(remainingFuels.splice(index, 1)[0]);
+        } else {
+          index += 1;
+        }
+      }
+    }
     nextDayNumber += 1;
-    const fuelDate = formatDate(fuelRow.periodFrom);
-    const legs = fuelRow.legs?.length
-      ? fuelRow.legs
-      : [
-          {
-            from: 'Chưa lưu chi tiết lộ trình',
-            to: '',
-            km: fuelRow.distanceKm,
-            extraCosts: fuelRow.extraCosts || [],
-          },
-        ];
-    legs.forEach((fuelLeg, index) => {
+    const fuelDate = formatDate(firstFuel.periodFrom);
+    const dayRows = detailRowsForFuels(sameDayFuels);
+    const fuelSummary = dailyFuelSummary(sameDayFuels, dayRows.length);
+    dayRows.forEach((row, index) => {
       rows.push({
-        delivery: null,
-        fuelLeg,
-        fuelLegSpan: 1,
-        fuelRow: index === 0 ? fuelRow : null,
-        fuelSpan: legs.length,
+        ...row,
         dayNumber: index === 0 ? nextDayNumber : null,
         entryDate: index === 0 ? fuelDate : null,
-        daySpan: index === 0 ? legs.length : null,
+        daySpan: index === 0 ? dayRows.length : null,
+        ...(index === 0 ? fuelSummary : {}),
       });
     });
-  });
+  }
   return rows.length ? rows : [{ delivery: null, fuelRow: null, fuelSpan: 1 }];
 }
 
@@ -952,8 +993,17 @@ function dailySheet(data, input, employee, extras) {
   const detailExtras = [];
   for (let index = 0; index < detailRows; index += 1) {
     const excelRow = detailStartRow + index;
-    const { delivery, fuelLeg, fuelLegSpan, fuelRow, fuelSpan, dayNumber, entryDate, daySpan } =
-      details[index];
+    const {
+      delivery,
+      fuelLeg,
+      fuelLegSpan,
+      dayFuelPrice,
+      dayFuelTotal,
+      dayFuelSpan,
+      dayNumber,
+      entryDate,
+      daySpan,
+    } = details[index];
     for (let column = 0; column < DAILY_REPORT_HEADERS.length; column += 1) {
       set(ws, XLSX.utils.encode_cell({ r: excelRow - 1, c: column }), '', dailyBaseStyle);
     }
@@ -1027,11 +1077,11 @@ function dailySheet(data, input, employee, extras) {
         }
       }
     }
-    if (fuelRow) {
-      set(ws, `O${excelRow}`, fuelRow.fuelPrice, dailyMoney);
-      set(ws, `P${excelRow}`, fuelRow.totalFee, dailyMoney);
-      if (fuelSpan > 1) {
-        const lastExcelRow = excelRow + fuelSpan - 1;
+    if (dayFuelSpan) {
+      set(ws, `O${excelRow}`, dayFuelPrice, dailyMoney);
+      set(ws, `P${excelRow}`, dayFuelTotal, dailyMoney);
+      if (dayFuelSpan > 1) {
+        const lastExcelRow = excelRow + dayFuelSpan - 1;
         for (const column of ['O', 'P']) {
           merge(ws, `${column}${excelRow}:${column}${lastExcelRow}`);
         }

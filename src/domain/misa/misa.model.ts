@@ -7,6 +7,7 @@ export interface MisaImportRow {
 	customerCode: string;
 	customerName: string;
 	address: string;
+	productCode: string;
 	productName: string;
 	quantitySold: number | null;
 	provinceCity: string;
@@ -34,6 +35,7 @@ export interface MisaRecord {
 	customerCode: string;
 	customerName: string;
 	address: string;
+	productCode: string;
 	productName: string;
 	quantitySold: number;
 	provinceCity: string;

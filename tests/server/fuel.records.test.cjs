@@ -162,6 +162,51 @@ test('kỳ tính xăng không có phiếu giao vẫn có STT và ngày', () => {
   assert.equal(details[1].daySpan, null);
 });
 
+test('hai lần tính xăng cùng ngày dùng chung STT và ngày', () => {
+  const details = dailyDetailRows(
+    [],
+    [
+      {
+        periodFrom: '2026-10-05',
+        periodTo: '2026-10-05',
+        distanceKm: 13.8,
+        fuelPrice: 27_080,
+        totalFee: 9_834,
+        legs: [
+          { from: 'Công ty', to: 'Điểm giao sáng', km: 6.9 },
+          { from: 'Điểm giao sáng', to: 'Công ty', km: 6.9 },
+        ],
+      },
+      {
+        periodFrom: '2026-10-05',
+        periodTo: '2026-10-05',
+        distanceKm: 29.7,
+        fuelPrice: 27_080,
+        totalFee: 21_165,
+        legs: [
+          { from: 'Công ty', to: 'Điểm giao chiều', km: 6 },
+          { from: 'Điểm giao chiều', to: 'Điểm khác', km: 10.4 },
+          { from: 'Điểm khác', to: 'Công ty', km: 13.3 },
+        ],
+      },
+    ],
+  );
+
+  assert.equal(details.length, 5);
+  assert.equal(details[0].dayNumber, 1);
+  assert.equal(details[0].entryDate, '05/10/2026');
+  assert.equal(details[0].daySpan, 5);
+  assert.equal(details.filter((row) => row.dayNumber != null).length, 1);
+  assert.equal(details.filter((row) => row.entryDate != null).length, 1);
+  assert.equal(details.filter((row) => row.fuelRow != null).length, 2);
+  assert.equal(details[0].fuelSpan, 2);
+  assert.equal(details[2].fuelSpan, 3);
+  assert.equal(details[0].dayFuelPrice, 27_080);
+  assert.equal(details[0].dayFuelTotal, 30_999);
+  assert.equal(details[0].dayFuelSpan, 5);
+  assert.equal(details.filter((row) => row.dayFuelTotal != null).length, 1);
+});
+
 test('tên sheet báo cáo được làm sạch và không trùng nhau', () => {
   const used = new Set();
   assert.equal(uniqueSheetName('Nguyễn/Văn:*An?', used), 'Nguyễn Văn An');
@@ -796,6 +841,24 @@ test('Excel chỉ có lộ trình xăng vẫn xuất STT và ngày', async () =>
   });
   assert.equal(fuel.status, 200);
 
+  const afternoonFuel = await call('POST', '/api/fuel/records', {
+    periodFrom: '2026-10-05',
+    periodTo: '2026-10-05',
+    employeeId: employee.data.id,
+    consumptionLiters: 12,
+    consumptionBaseKm: 100,
+    fuelPrice: 27_080,
+    vehicleType: 'truck',
+    fuelType: 'Xăng E10',
+    region: 'region1',
+    legs: [
+      { from: 'Kho', to: 'Đơn vị C', km: 6 },
+      { from: 'Đơn vị C', to: 'Đơn vị D', km: 10.4 },
+      { from: 'Đơn vị D', to: 'Kho', km: 13.3 },
+    ],
+  });
+  assert.equal(afternoonFuel.status, 200);
+
   const exported = await call(
     'GET',
     `/api/reports/export?from=2026-10-05&to=2026-10-05&employeeId=${employee.data.id}&type=daily`,
@@ -810,7 +873,9 @@ test('Excel chỉ có lộ trình xăng vẫn xuất STT và ngày', async () =>
   assert.equal(sheet.B11.v, 'Ngày');
   assert.equal(sheet.A12.v, 1);
   assert.equal(sheet.B12.v, '05/10/2026');
-  for (const range of ['A12:A13', 'B12:B13']) {
+  assert.equal(sheet.O12.v, 27_080);
+  assert.equal(sheet.P12.v, 204_400);
+  for (const range of ['A12:A16', 'B12:B16', 'O12:O16', 'P12:P16']) {
     const expected = XLSX.utils.decode_range(range);
     assert.equal(
       sheet['!merges'].some(

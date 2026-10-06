@@ -359,9 +359,11 @@ describe('nhập dữ liệu MISA', () => {
   const misaRow = (overrides = {}) => ({
     rowNumber: 4,
     documentDate: '2026-06-01',
+    documentCode: 'BH001',
     customerCode: 'KH001',
     customerName: 'Bệnh viện A',
     address: '01 Nguyễn Huệ',
+    productCode: 'SP001',
     productName: 'Mặt hàng A',
     quantitySold: 4,
     provinceCity: 'Hồ Chí Minh',
@@ -476,6 +478,53 @@ describe('nhập dữ liệu MISA', () => {
     assert.equal(list.data.items[0].productName, 'Mặt hàng A');
   });
 
+  test('nhập chồng khoảng ngày chặn đơn trùng dù tên khách, địa chỉ và số lô đổi', async () => {
+    const first = misaRow({
+      rowNumber: 20,
+      documentDate: '2026-06-10',
+      documentCode: 'BH010',
+      customerCode: 'KH010',
+      customerName: 'Bệnh viện A - tên lúc sáng',
+      address: 'Địa chỉ lúc sáng',
+      productCode: 'SP010',
+      productName: 'Sản phẩm A',
+      quantitySold: 12,
+      sourceKey:
+        '2026-06-10|bh010|kh010|benh vien a ten luc sang|dia chi luc sang|sp010|lo-sang|12',
+    });
+    const firstImport = await call('POST', '/api/misa/import', {
+      token: adminToken,
+      body: { fileName: 'MISA 1-5.xlsx', rows: [first] },
+    });
+    assert.equal(firstImport.data.inserted, 1);
+
+    const exportedAgain = {
+      ...first,
+      rowNumber: 35,
+      customerName: 'Bệnh viện A',
+      address: 'Địa chỉ đã cập nhật',
+      sourceKey: '2026-06-10|bh010|kh010|benh vien a|dia chi da cap nhat|sp010|lo-chieu|12',
+    };
+    const preview = await call('POST', '/api/misa/preview', {
+      token: adminToken,
+      body: { fileName: 'MISA 1-10.xlsx', rows: [exportedAgain] },
+    });
+    assert.equal(preview.data.readyCount, 0);
+    assert.equal(preview.data.duplicateCount, 1);
+    assert.match(preview.data.rows[0].reason, /mã khách hàng, đơn hàng, mã hàng/);
+
+    const importedAgain = await call('POST', '/api/misa/import', {
+      token: adminToken,
+      body: { fileName: 'MISA 1-10.xlsx', rows: [exportedAgain] },
+    });
+    assert.equal(importedAgain.data.inserted, 0);
+    assert.equal(importedAgain.data.duplicates, 1);
+    const rows = app.db
+      .prepare("SELECT COUNT(*) AS count FROM misa_rows WHERE document_code = 'BH010'")
+      .get();
+    assert.equal(rows.count, 1);
+  });
+
   test('mã khách hàng MISA giữ liên kết nhà xe khi tên khách thay đổi', async () => {
     const customerCode = 'KH-MISA-LIEN-KET';
     const imported = await call('POST', '/api/misa/import', {
@@ -546,8 +595,11 @@ describe('nhập dữ liệu MISA', () => {
   test('tìm tiếng Việt không phân biệt dấu, hoa thường và Đ/đ', async () => {
     const row = misaRow({
       rowNumber: 8,
+      documentCode: 'BH008',
+      customerCode: 'KH008',
       customerName: 'Bệnh Viện Bệnh Nhiệt Đới',
       address: '764 Võ Văn Kiệt, Phường Chợ Quán',
+      productCode: 'SP008',
       provinceCity: 'Hồ Chí Minh 1',
       sourceKey: '2026-06-01|bh008|kh008|benh vien benh nhiet doi|sp008|1',
     });

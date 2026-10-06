@@ -1,6 +1,6 @@
 'use strict';
 
-const { normalizeSearchText, transaction } = require('../db.cjs');
+const { misaDedupeKey, normalizeSearchText, transaction } = require('../db.cjs');
 const { writeAudit } = require('../audit.cjs');
 const { IMPORT_MAX_BODY_BYTES, badRequest, isIsoDate } = require('../http.cjs');
 
@@ -37,6 +37,7 @@ function normalizeRow(row) {
   const customerCode = text(row?.customerCode, 'Mã khách hàng', 100);
   const customerName = text(row?.customerName, 'Tên khách hàng', 300);
   const address = text(row?.address, 'Địa chỉ', 600);
+  const productCode = text(row?.productCode, 'Mã hàng', 100);
   const productName = text(row?.productName, 'Tên mặt hàng', 500);
   const provinceCity = text(row?.provinceCity, 'Tỉnh/Thành phố', 150);
   const sourceKey = text(row?.sourceKey, 'Khóa nguồn', 500);
@@ -60,62 +61,104 @@ function normalizeRow(row) {
     customerName,
     customerKey: normalizeSearchText(customerName),
     address,
+    productCode,
     productName,
     quantitySold: Number.isFinite(quantitySold) ? quantitySold : null,
     provinceCity,
     sourceKey,
+    dedupeKey: misaDedupeKey({
+      documentCode,
+      customerCode,
+      productCode,
+      productName,
+      quantitySold,
+    }),
     status: reason ? 'skipped' : 'ready',
     reason,
   };
 }
 
-function existingRowsBySourceKey(db, rows) {
-  const keys = [
+function existingRows(db, rows) {
+  const sourceKeys = [
     ...new Set(rows.filter((row) => row.status === 'ready').map((row) => row.sourceKey)),
   ];
-  const existing = new Map();
-  for (let offset = 0; offset < keys.length; offset += SQLITE_PARAMETER_CHUNK) {
-    const batch = keys.slice(offset, offset + SQLITE_PARAMETER_CHUNK);
-    const placeholders = batch.map(() => '?').join(', ');
-    for (const row of db
-      .prepare(
-        `SELECT source_key, product_name, customer_code FROM misa_rows WHERE source_key IN (${placeholders})`,
-      )
-      .all(...batch)) {
-      existing.set(row.source_key, {
-        productName: row.product_name,
-        customerCode: row.customer_code,
-      });
+  const dedupeKeys = [
+    ...new Set(
+      rows.filter((row) => row.status === 'ready' && row.dedupeKey).map((row) => row.dedupeKey),
+    ),
+  ];
+  const bySourceKey = new Map();
+  const byDedupeKey = new Map();
+  const select = (column, keys) => {
+    for (let offset = 0; offset < keys.length; offset += SQLITE_PARAMETER_CHUNK) {
+      const batch = keys.slice(offset, offset + SQLITE_PARAMETER_CHUNK);
+      const placeholders = batch.map(() => '?').join(', ');
+      for (const row of db
+        .prepare(
+          `SELECT source_key, dedupe_key, product_name, customer_code, product_code
+             FROM misa_rows WHERE ${column} IN (${placeholders})`,
+        )
+        .all(...batch)) {
+        bySourceKey.set(row.source_key, row);
+        if (row.dedupe_key) byDedupeKey.set(row.dedupe_key, row);
+      }
     }
-  }
-  return existing;
+  };
+  select('source_key', sourceKeys);
+  select('dedupe_key', dedupeKeys);
+  return { bySourceKey, byDedupeKey };
+}
+
+function canEnrich(previous, row) {
+  return (
+    (!previous.product_name && row.productName) ||
+    (!previous.customer_code && row.customerCode) ||
+    (!previous.product_code && row.productCode)
+  );
 }
 
 function previewRows(db, sourceRows) {
   const normalizedRows = sourceRows.map(normalizeRow);
-  const existing = existingRowsBySourceKey(db, normalizedRows);
-  const seen = new Set();
+  const existing = existingRows(db, normalizedRows);
+  const seenSourceKeys = new Set();
+  const seenDedupeKeys = new Set();
   return normalizedRows.map((row) => {
     if (row.status === 'skipped') return row;
-    if (seen.has(row.sourceKey)) {
+    if (seenSourceKeys.has(row.sourceKey)) {
       return { ...row, status: 'duplicate', reason: 'Dòng trùng trong file' };
     }
-    seen.add(row.sourceKey);
-    if (existing.has(row.sourceKey)) {
-      const previous = existing.get(row.sourceKey);
-      if (
-        (!previous.productName && row.productName) ||
-        (!previous.customerCode && row.customerCode)
-      ) {
+    seenSourceKeys.add(row.sourceKey);
+    const previousBySource = existing.bySourceKey.get(row.sourceKey);
+    if (previousBySource) {
+      if (canEnrich(previousBySource, row)) {
         return {
           ...row,
           reason:
-            !previous.customerCode && row.customerCode
+            !previousBySource.customer_code && row.customerCode
               ? 'Bổ sung mã khách hàng'
-              : 'Bổ sung tên mặt hàng',
+              : !previousBySource.product_code && row.productCode
+                ? 'Bổ sung mã hàng'
+                : 'Bổ sung tên mặt hàng',
         };
       }
       return { ...row, status: 'duplicate', reason: 'Dòng đã tồn tại' };
+    }
+    if (row.dedupeKey) {
+      if (seenDedupeKeys.has(row.dedupeKey)) {
+        return {
+          ...row,
+          status: 'duplicate',
+          reason: 'Trùng mã khách hàng, đơn hàng, mã hàng, sản phẩm và số lượng trong file',
+        };
+      }
+      seenDedupeKeys.add(row.dedupeKey);
+      if (existing.byDedupeKey.has(row.dedupeKey)) {
+        return {
+          ...row,
+          status: 'duplicate',
+          reason: 'Trùng mã khách hàng, đơn hàng, mã hàng, sản phẩm và số lượng',
+        };
+      }
     }
     return row;
   });
@@ -221,7 +264,7 @@ function register(router) {
     const page = Math.min(requestedPage, pageCount);
     const rows = c.db
       .prepare(
-        `SELECT id, document_date, document_code, customer_code, customer_name, address, product_name, quantity_sold,
+        `SELECT id, document_date, document_code, customer_code, customer_name, address, product_code, product_name, quantity_sold,
                 province_city, source_file, imported_at
            FROM misa_rows WHERE ${clause}
           ORDER BY document_date DESC, id DESC LIMIT ? OFFSET ?`,
@@ -237,6 +280,7 @@ function register(router) {
         customerCode: row.customer_code,
         customerName: row.customer_name,
         address: row.address,
+        productCode: row.product_code,
         productName: row.product_name,
         quantitySold: Number(row.quantity_sold),
         provinceCity: row.province_city,
@@ -281,20 +325,41 @@ function register(router) {
       const result = transaction(c.db, () => {
         const insert = c.db.prepare(
           `INSERT INTO misa_rows
-          (document_date, document_code, customer_code, customer_name, customer_key, address, product_name, quantity_sold, province_city,
-            source_key, source_file, imported_by, imported_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (document_date, document_code, customer_code, customer_name, customer_key, address, product_code, product_name, quantity_sold, province_city,
+            source_key, dedupe_key, source_file, imported_by, imported_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(source_key) DO UPDATE SET
-           product_name = excluded.product_name,
-           customer_code = excluded.customer_code,
+           product_name = CASE WHEN misa_rows.product_name = '' THEN excluded.product_name ELSE misa_rows.product_name END,
+           customer_code = CASE WHEN misa_rows.customer_code = '' THEN excluded.customer_code ELSE misa_rows.customer_code END,
+           product_code = CASE WHEN misa_rows.product_code = '' THEN excluded.product_code ELSE misa_rows.product_code END,
+           dedupe_key = CASE WHEN misa_rows.dedupe_key = '' THEN excluded.dedupe_key ELSE misa_rows.dedupe_key END,
            source_file = excluded.source_file,
            imported_by = excluded.imported_by,
            imported_at = excluded.imported_at
          WHERE (misa_rows.product_name = '' AND excluded.product_name <> '')
-            OR (misa_rows.customer_code = '' AND excluded.customer_code <> '')`,
+            OR (misa_rows.customer_code = '' AND excluded.customer_code <> '')
+            OR (misa_rows.product_code = '' AND excluded.product_code <> '')
+            OR (misa_rows.dedupe_key = '' AND excluded.dedupe_key <> '')`,
         );
         let inserted = 0;
+        let duplicates = 0;
+        const existing = existingRows(c.db, rows);
+        const seenSourceKeys = new Set();
+        const seenDedupeKeys = new Set();
         for (const row of rows) {
+          if (seenSourceKeys.has(row.sourceKey)) {
+            duplicates += 1;
+            continue;
+          }
+          seenSourceKeys.add(row.sourceKey);
+          const previousBySource = existing.bySourceKey.get(row.sourceKey);
+          if (!previousBySource && row.dedupeKey) {
+            if (seenDedupeKeys.has(row.dedupeKey) || existing.byDedupeKey.has(row.dedupeKey)) {
+              duplicates += 1;
+              continue;
+            }
+          }
+          if (row.dedupeKey) seenDedupeKeys.add(row.dedupeKey);
           const result = insert.run(
             row.documentDate,
             row.documentCode,
@@ -302,17 +367,19 @@ function register(router) {
             row.customerName,
             row.customerKey,
             row.address,
+            row.productCode,
             row.productName,
             row.quantitySold,
             row.provinceCity,
             row.sourceKey,
+            row.dedupeKey,
             fileName,
             c.user.id,
             importedAt,
           );
-          inserted += Number(result.changes);
+          if (result.changes) inserted += Number(result.changes);
+          else duplicates += 1;
         }
-        const duplicates = rows.length - inserted;
         writeAudit(c.db, c.user, 'misa.import', 'misa', fileName, {
           requested: rows.length,
           inserted,

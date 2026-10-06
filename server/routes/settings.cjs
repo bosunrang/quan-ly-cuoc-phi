@@ -4,7 +4,7 @@ const { randomBytes } = require('node:crypto');
 const { copyFileSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
-const { linkEntriesToCatalog, openDatabase, transaction } = require('../db.cjs');
+const { linkEntriesToCatalog, misaDedupeKey, openDatabase, transaction } = require('../db.cjs');
 const auth = require('../auth.cjs');
 const { writeAudit } = require('../audit.cjs');
 const { createSafetyBackup, listAutomaticBackups } = require('../automatic-backup.cjs');
@@ -48,6 +48,8 @@ const BACKUP_TABLES = {
       'document_code',
       'customer_key',
       'customer_code',
+      'product_code',
+      'dedupe_key',
     ],
   },
   customers: {
@@ -305,7 +307,20 @@ function importRows(db, name, rows, userId, knownUserIds) {
       value.carrier_id ??= null;
     }
     // Backup cũ chưa lưu mã khách MISA vẫn khôi phục được.
-    if (name === 'misa') value.customer_code ??= '';
+    if (name === 'misa') {
+      value.customer_code ??= '';
+      if (!value.product_code) {
+        const sourceParts = String(value.source_key ?? '').split('|');
+        value.product_code = sourceParts.length >= 8 ? sourceParts[5] : '';
+      }
+      value.dedupe_key ??= misaDedupeKey({
+        documentCode: value.document_code,
+        customerCode: value.customer_code,
+        productCode: value.product_code,
+        productName: value.product_name,
+        quantitySold: Number(value.quantity_sold),
+      });
+    }
     // Backup trước khi bổ sung mã khách vẫn giữ được các bản ghi khách hàng.
     if (name === 'customers') value.customer_code ??= '';
     // Backup trước khi có điểm giao dùng địa chỉ riêng của nhà xe như trước.

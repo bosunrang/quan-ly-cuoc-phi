@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 41;
+const SCHEMA_VERSION = 42;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -15,6 +15,27 @@ function normalizeSearchText(value) {
     .toLocaleLowerCase('vi-VN')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+
+/**
+ * Khóa nghiệp vụ MISA: mã khách, đơn hàng, mã hàng, tên sản phẩm và số lượng.
+ * Không dùng tên khách, địa chỉ hoặc số lô vì chúng có thể thay đổi giữa hai
+ * lần xuất cùng một đơn.
+ */
+function misaDedupeKey({ documentCode, customerCode, productCode, productName, quantitySold }) {
+  if (
+    !documentCode ||
+    !customerCode ||
+    !productCode ||
+    !productName ||
+    !Number.isFinite(quantitySold)
+  ) {
+    return '';
+  }
+  return [documentCode, customerCode, productCode, productName]
+    .map(normalizeSearchText)
+    .concat(String(quantitySold))
+    .join('|');
 }
 
 /** Khôi phục chặng từng bị cắt ở giới hạn 100 ký tự từ danh mục địa điểm. */
@@ -751,6 +772,44 @@ function migrate(db) {
       linkEntriesToCatalog(db);
     }
 
+    if (current < 42) {
+      db.exec(`
+      -- Lưu mã hàng và khóa nghiệp vụ để nhập chồng khoảng ngày MISA không
+      -- tạo thêm dòng khi tên khách, địa chỉ hoặc số lô thay đổi.
+      ALTER TABLE misa_rows ADD COLUMN product_code TEXT NOT NULL DEFAULT '';
+      ALTER TABLE misa_rows ADD COLUMN dedupe_key TEXT NOT NULL DEFAULT '';
+      CREATE INDEX misa_dedupe_key_idx ON misa_rows(dedupe_key)
+        WHERE dedupe_key <> '';
+    `);
+
+      // Bản ghi cũ lưu mã hàng ở phần thứ 6 của source_key. Không xóa hoặc
+      // gộp lịch sử; chỉ bổ sung khóa để lần import sau nhận ra dòng cũ.
+      const oldMisaRows = db
+        .prepare(
+          `SELECT id, document_code, customer_code, product_name, quantity_sold, source_key
+             FROM misa_rows`,
+        )
+        .all();
+      const updateMisaIdentity = db.prepare(
+        'UPDATE misa_rows SET product_code = ?, dedupe_key = ? WHERE id = ?',
+      );
+      for (const row of oldMisaRows) {
+        const parts = String(row.source_key).split('|');
+        const productCode = parts.length >= 8 ? parts[5] : '';
+        updateMisaIdentity.run(
+          productCode,
+          misaDedupeKey({
+            documentCode: row.document_code,
+            customerCode: row.customer_code,
+            productCode,
+            productName: row.product_name,
+            quantitySold: Number(row.quantity_sold),
+          }),
+          row.id,
+        );
+      }
+    }
+
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (error) {
@@ -811,6 +870,7 @@ function transaction(db, work) {
 module.exports = {
   openDatabase,
   linkEntriesToCatalog,
+  misaDedupeKey,
   transaction,
   normalizeSearchText,
   SCHEMA_VERSION,
