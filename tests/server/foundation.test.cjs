@@ -127,7 +127,7 @@ before(async () => {
   });
   assert.equal(firstLogin.status, 200);
   assert.equal(app.seeded.username, 'admin');
-  assert.match(app.seeded.password, /^[A-Za-z2-9]{12}$/);
+  assert.equal(app.seeded.password, 'admin');
   assert.equal(firstLogin.data.user.mustChangePassword, true);
   adminToken = firstLogin.data.token;
   const blockedBeforePasswordChange = await call('GET', '/api/audit', { token: adminToken });

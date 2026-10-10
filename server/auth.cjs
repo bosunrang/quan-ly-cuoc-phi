@@ -44,13 +44,6 @@ async function verifyDummyPassword(password) {
   return false;
 }
 
-/** Mật khẩu ngẫu nhiên dễ đọc (bỏ các ký tự dễ nhầm như 0/O, 1/l/I). */
-function generateReadablePassword(length = 12) {
-  const alphabet = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = randomBytes(length);
-  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
-}
-
 async function verifyPassword(password, hash, salt) {
   const attempt = await scryptAsync(password, salt, SCRYPT_KEY_LENGTH);
   const stored = Buffer.from(hash, 'hex');
@@ -198,7 +191,6 @@ module.exports = {
   hashPasswordSync,
   verifyPassword,
   verifyDummyPassword,
-  generateReadablePassword,
   checkPasswordStrength,
   createSession,
   userForToken,

@@ -44,6 +44,16 @@ test('API và giao diện production trả về security headers', async () => {
     assert.match(contentSecurityPolicy, /default-src 'self'/);
     assert.match(contentSecurityPolicy, /frame-ancestors 'none'/);
     assert.match(contentSecurityPolicy, /worker-src 'self' blob:/);
+
+    // Sau khi cập nhật, file build cũ không còn: trả 404 để trình duyệt tải lại
+    // trang mới, không trả index.html dưới tên file .js. Đường dẫn màn hình thì
+    // vẫn trả index.html như trước.
+    const staleChunk = await fetch(`${origin}/assets/AuditPage-banCu.js`);
+    assert.equal(staleChunk.status, 404);
+    assert.doesNotMatch(staleChunk.headers.get('content-type'), /text\/html/);
+    const screen = await fetch(`${origin}/bao-cao`);
+    assert.equal(screen.status, 200);
+    assert.match(screen.headers.get('content-type'), /text\/html/);
   } finally {
     await app.close();
     rmSync(root, { recursive: true, force: true });

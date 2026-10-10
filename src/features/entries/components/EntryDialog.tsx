@@ -27,6 +27,8 @@ import { MoneyInput } from "../../../shared/ui/MoneyInput";
 interface Props {
 	initial: EntryInput;
 	editingId: number | null;
+	/** Tên nhân viên của phiếu đang sửa, để hiện đúng cả người đã nghỉ. */
+	employeeName?: string | null;
 	formOptions?: EntryFormOptions | null;
 	onEntryDateChange?: (entryDate: string) => void;
 	onSave: (input: EntryInput) => Promise<void>;
@@ -115,6 +117,7 @@ function RateOptionGroup({
 export function EntryDialog({
 	initial,
 	editingId,
+	employeeName = null,
 	formOptions = null,
 	onEntryDateChange,
 	onSave,
@@ -578,6 +581,16 @@ export function EntryDialog({
 								}}
 							>
 								<option value="">Chọn nhân viên phụ trách</option>
+								{/* Phiếu cũ của nhân viên đã nghỉ: giữ nguyên người phụ trách. */}
+								{editingId &&
+									initial.employeeId &&
+									!options.employees.some(
+										(employee) => employee.id === initial.employeeId,
+									) && (
+										<option value={initial.employeeId}>
+											{employeeName || "Nhân viên"} (đã nghỉ)
+										</option>
+									)}
 								{options.employees.map((employee) => (
 									<option key={employee.id} value={employee.id}>
 										{employee.name}

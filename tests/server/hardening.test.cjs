@@ -48,7 +48,7 @@ after(async () => {
 });
 
 test('đổi mật khẩu mặc định hủy mọi phiên khác mở bằng mật khẩu đó', async () => {
-  assert.notEqual(app.seeded.password, 'admin');
+  assert.equal(app.seeded.password, 'admin');
   const credentials = { username: app.seeded.username, password: app.seeded.password };
   const owner = await call('POST', '/api/login', { body: credentials });
   const other = await call('POST', '/api/login', { body: credentials });

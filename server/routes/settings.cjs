@@ -4,7 +4,13 @@ const { randomBytes } = require('node:crypto');
 const { copyFileSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
-const { linkEntriesToCatalog, misaDedupeKey, openDatabase, transaction } = require('../db.cjs');
+const {
+  backfillStandardTransportFees,
+  linkEntriesToCatalog,
+  misaDedupeKey,
+  openDatabase,
+  transaction,
+} = require('../db.cjs');
 const auth = require('../auth.cjs');
 const { writeAudit } = require('../audit.cjs');
 const { createSafetyBackup, listAutomaticBackups } = require('../automatic-backup.cjs');
@@ -145,6 +151,7 @@ const BACKUP_TABLES = {
       'bill_status',
       'customer_id',
       'carrier_id',
+      'standard_transport_fee',
     ],
   },
   fuelPrices: {
@@ -433,6 +440,10 @@ function restoreData(db, user, data, auditAction, auditDetail) {
         importRows(db, name, normalized[name], user.id, knownUserIds);
       }
       linkEntriesToCatalog(db);
+      // Backup trước khi phiếu chốt giá chuẩn: chốt theo bảng cước trong backup.
+      if (normalized.entries.some((row) => !('standard_transport_fee' in row))) {
+        backfillStandardTransportFees(db);
+      }
       writeAudit(db, user, auditAction, 'backup', null, auditDetail);
       return { restored: true };
     }),

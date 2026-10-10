@@ -85,6 +85,48 @@ test('dùng cache chiều ngược khi lộ trình đã được thiết lập',
   assert.equal(reads, 2);
 });
 
+test('làm mới km bỏ qua quãng đường đã lưu và gọi lại VietMap', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (input) => {
+    const url = new URL(input);
+    calls.push(url);
+    if (url.pathname === '/api/search/v4') {
+      return json([{ ref_id: `geocode:${url.searchParams.get('text')}` }]);
+    }
+    if (url.pathname === '/api/place/v4') {
+      const refId = url.searchParams.get('refid');
+      return json(
+        refId.includes('Điểm đi đã lưu') ? { lat: 10.7, lng: 106.6 } : { lat: 10.8, lng: 106.7 },
+      );
+    }
+    if (url.pathname === '/api/route/v4') {
+      return json({ code: 'OK', paths: [{ distance: 8_900 }] });
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+  const db = {
+    prepare: () => ({
+      get: () => ({ distance_km: 7 }),
+      run: () => undefined,
+    }),
+  };
+
+  try {
+    const result = await estimateRoute({
+      db,
+      from: 'Điểm đi đã lưu',
+      to: 'Điểm đến đã lưu',
+      vietmapApiKey: 'private-vietmap-key',
+      forceRefresh: true,
+    });
+    assert.deepEqual(result, { km: 8.9, source: 'VietMap', estimated: false });
+    assert.equal(calls.filter((url) => url.pathname === '/api/route/v4').length, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('km nhập tay trong chứng từ ghi đè cache lộ trình dùng chung', () => {
   const statements = [];
   const db = {

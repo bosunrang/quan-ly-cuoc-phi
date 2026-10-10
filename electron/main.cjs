@@ -19,9 +19,11 @@ const { createApp } = require('../server/index.cjs');
 const { installFileLogging } = require('../server/file-log.cjs');
 const { COMPANY_PROFILES } = require('../server/company-profiles.cjs');
 const { isReportPrintPopup } = require('./report-window.cjs');
+const { companyFromArgv, defaultCompanyIndex, loginItem, startsHidden } = require('./startup.cjs');
 
 const ICON = path.join(__dirname, '..', 'build', 'icon.png');
 const MACHINE_CONFIG_FILE = 'machine-mode.json';
+const LAST_COMPANY_FILE = 'last-company.json';
 const USER_DATA_DIRECTORY = 'Quản lý cước phí';
 let backend;
 let mainWindow;
@@ -32,6 +34,9 @@ let company;
 let quitting = false;
 let fileLog = null;
 let updateCheckStarted = false;
+let backendPort;
+// Windows tự mở lúc đăng nhập: chạy ngầm dưới khay, không bật cửa sổ.
+const launchedHidden = startsHidden(process.argv);
 
 // Hồ sơ Nam Hưng Việt giữ nguyên thư mục cũ. Các hồ sơ khác được tách thành
 // thư mục con trước khi khởi động backend, để dữ liệu và cấu hình máy chủ
@@ -39,9 +44,35 @@ let updateCheckStarted = false;
 app.setPath('userData', path.join(app.getPath('appData'), USER_DATA_DIRECTORY));
 app.enableSandbox();
 
+function baseDataDirectory() {
+  return path.join(app.getPath('appData'), USER_DATA_DIRECTORY);
+}
+
 function companyDataDirectory(profile) {
-  const base = path.join(app.getPath('appData'), USER_DATA_DIRECTORY);
+  const base = baseDataDirectory();
   return profile.usesLegacyDataDirectory ? base : path.join(base, 'profiles', profile.id);
+}
+
+function lastCompanyPath() {
+  return path.join(baseDataDirectory(), LAST_COMPANY_FILE);
+}
+
+function readLastCompanyId() {
+  try {
+    return JSON.parse(readFileSync(lastCompanyPath(), 'utf8'))?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLastCompanyId(id) {
+  try {
+    mkdirSync(baseDataDirectory(), { recursive: true });
+    writeFileSync(lastCompanyPath(), `${JSON.stringify({ id }, null, 2)}\n`, 'utf8');
+  } catch (error) {
+    // Chỉ ảnh hưởng nút chọn sẵn lần sau, không chặn việc mở ứng dụng.
+    console.warn('Không lưu được công ty mở gần nhất:', error.message);
+  }
 }
 
 async function chooseCompany() {
@@ -51,11 +82,37 @@ async function chooseCompany() {
     message: 'Bạn muốn mở dữ liệu của công ty nào?',
     detail: 'Mỗi công ty có máy chủ, tài khoản và dữ liệu hoàn toàn riêng.',
     buttons: [...COMPANY_PROFILES.map((profile) => profile.name), 'Thoát'],
-    defaultId: 0,
+    defaultId: defaultCompanyIndex(COMPANY_PROFILES, readLastCompanyId()),
     cancelId: COMPANY_PROFILES.length,
     noLink: true,
   });
   return COMPANY_PROFILES[selected.response] ?? null;
+}
+
+// Tự khởi động chỉ có ở bản đã cài: bản chạy thử từ mã nguồn không được ghi
+// đường dẫn electron.exe tạm thời vào danh sách khởi động của Windows.
+const canAutoStart = () => app.isPackaged && process.platform === 'win32';
+
+function autoStartEnabled() {
+  if (!canAutoStart()) return false;
+  const { name, args } = loginItem(company);
+  const settings = app.getLoginItemSettings({ path: process.execPath, args });
+  return (
+    settings.launchItems?.some((item) => item.name === name && item.enabled !== false) ??
+    settings.openAtLogin
+  );
+}
+
+function setAutoStart(enabled) {
+  const { name, args } = loginItem(company);
+  try {
+    app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath, args, name });
+    console.log(`${enabled ? 'Bật' : 'Tắt'} khởi động cùng Windows cho ${company.name}.`);
+  } catch (error) {
+    dialog.showErrorBox('Không đổi được thiết lập', String(error?.message ?? error));
+  }
+  // Dựng lại menu để dấu tick phản ánh đúng trạng thái thật trong Windows.
+  createTray(backendPort);
 }
 
 function lanAddresses(port) {
@@ -334,7 +391,7 @@ function createWindow() {
     mainWindow.hide();
   });
   mainWindow.loadURL(origin);
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  if (!launchedHidden) mainWindow.once('ready-to-show', () => mainWindow.show());
 }
 
 function showWindow() {
@@ -373,6 +430,17 @@ function createTray(port) {
       ...(fileLog
         ? [{ label: 'Mở thư mục log…', click: () => void shell.openPath(fileLog.dir) }]
         : []),
+      ...(isHost && canAutoStart()
+        ? [
+            { type: 'separator' },
+            {
+              label: `Khởi động cùng Windows (${company.name})`,
+              type: 'checkbox',
+              checked: autoStartEnabled(),
+              click: (item) => setAutoStart(item.checked),
+            },
+          ]
+        : []),
       { type: 'separator' },
       {
         label: isHost ? 'Thoát (máy nhân viên sẽ mất kết nối)' : 'Thoát',
@@ -399,21 +467,26 @@ function announceFirstRun(port) {
 
 app.whenReady().then(async () => {
   try {
-    company = await chooseCompany();
+    // Mở bằng tay luôn hỏi công ty; Windows tự mở thì đã ghi sẵn công ty.
+    company = companyFromArgv(process.argv, COMPANY_PROFILES) ?? (await chooseCompany());
     if (!company) return app.quit();
     const companyDataDirectoryPath = companyDataDirectory(company);
     mkdirSync(companyDataDirectoryPath, { recursive: true });
     app.setPath('userData', companyDataDirectoryPath);
     if (!app.requestSingleInstanceLock()) return app.quit();
+    saveLastCompanyId(company.id);
     // Log theo từng công ty, cạnh dữ liệu của công ty đó.
     fileLog = installFileLogging(path.join(app.getPath('userData'), 'logs'));
-    console.log(`Khởi động ${company.name} — phiên bản ${app.getVersion()}`);
+    console.log(
+      `Khởi động ${company.name} — phiên bản ${app.getVersion()}${launchedHidden ? ' (tự mở cùng Windows)' : ''}`,
+    );
     machine = readMachineConfig() ?? (await chooseMachine());
     if (!machine) return app.quit();
     saveMachineConfig(machine);
     session.defaultSession.setPermissionRequestHandler((_wc, _p, cb) => cb(false));
     Menu.setApplicationMenu(null);
     const port = machine.role === 'host' ? await startBackend() : undefined;
+    backendPort = port;
     if (machine.role === 'client') origin = machine.serverUrl;
     if (machine.role === 'host') announceFirstRun(port);
     createTray(port);

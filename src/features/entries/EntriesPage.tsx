@@ -33,6 +33,8 @@ import { EntryDialog } from "./components/EntryDialog";
 interface EditorState {
 	initial: EntryInput;
 	editingId: number | null;
+	/** Tên nhân viên của phiếu đang sửa, kể cả khi người đó đã nghỉ. */
+	employeeName?: string | null;
 }
 
 const ENTRY_DATE_DRAFT_KEY = "cuocphi.entry-date-draft";
@@ -337,6 +339,7 @@ export function EntriesPage() {
 																		setEditor({
 																			initial: toEntryInput(entry),
 																			editingId: entry.id,
+																			employeeName: entry.employeeName,
 																		})
 																	}
 																>
@@ -380,6 +383,7 @@ export function EntriesPage() {
 				<EntryDialog
 					initial={editor.initial}
 					editingId={editor.editingId}
+					employeeName={editor.employeeName}
 					formOptions={options}
 					onEntryDateChange={editor.editingId ? undefined : rememberEntryDate}
 					onSave={save}

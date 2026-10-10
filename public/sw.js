@@ -1,4 +1,5 @@
-const CACHE_NAME = "cuocphi-shell-v1";
+// Đổi tên để xóa bộ nhớ đệm cũ có thể đã lưu nhầm trang HTML dưới tên file .js.
+const CACHE_NAME = "cuocphi-shell-v2";
 const APP_SHELL = [
 	"/",
 	"/manifest.webmanifest",
@@ -44,7 +45,10 @@ self.addEventListener("fetch", (event) => {
 	event.respondWith(
 		fetch(request)
 			.then((response) => {
-				if (response.ok) {
+				// Trang HTML chỉ được lưu cho lần mở trang; file .js/.css mà máy chủ
+				// trả về HTML là phản hồi sai, lưu lại sẽ làm lỗi kéo dài sau cập nhật.
+				const isHtml = (response.headers.get("content-type") || "").includes("text/html");
+				if (response.ok && (request.mode === "navigate" || !isHtml)) {
 					const copy = response.clone();
 					void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
 				}

@@ -34,14 +34,14 @@ const PUBLIC_ROUTES = new Set([
 ]);
 
 /**
- * Lần chạy đầu tiên: tạo tài khoản Admin với mật khẩu ngẫu nhiên. Server nghe
- * trên toàn mạng LAN ngay từ đầu, nên không dùng mật khẩu cố định dễ đoán.
+ * Lần chạy đầu tiên: dùng thông tin mặc định dễ nhớ để cài đặt nhanh. Tài khoản
+ * vẫn bị buộc đổi mật khẩu trước khi có thể thao tác dữ liệu trên mạng LAN.
  */
 function seedFirstAdmin(db) {
   const existing = db.prepare('SELECT COUNT(*) AS count FROM users').get();
   if (Number(existing.count) > 0) return null;
 
-  const password = auth.generateReadablePassword();
+  const password = 'admin';
   const { hash, salt } = auth.hashPasswordSync(password);
   const at = new Date().toISOString();
   db.prepare(

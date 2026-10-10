@@ -1,6 +1,7 @@
 import type { InputHTMLAttributes } from "react";
 import { useEffect, useState } from "react";
 import { formatMoney } from "../lib/format";
+import { parsePastedMoney } from "../lib/money";
 
 interface MoneyInputProps
 	extends Omit<
@@ -39,6 +40,14 @@ export function MoneyInput({
 				const next = digits ? Number(digits) : 0;
 				setDisplay(digits ? formatMoney(next) : "");
 				onValueChange(next);
+			}}
+			onPaste={(event) => {
+				// "1,234.00" dán từ Excel là 1.234 đồng, không phải 123.400.
+				const pasted = parsePastedMoney(event.clipboardData.getData("text"));
+				if (pasted === null) return;
+				event.preventDefault();
+				setDisplay(displayFor(pasted));
+				onValueChange(pasted);
 			}}
 		/>
 	);

@@ -129,10 +129,11 @@ function register(router) {
     c.requirePage(PAGE);
     const from = cleanText(c.body.from, 250);
     const to = cleanText(c.body.to, 250);
+    const forceRefresh = c.body.forceRefresh === true;
     if (!from || !to) throw badRequest('Vui lòng nhập điểm đi và điểm đến trước khi lấy km.');
     const vietmapApiKey = cleanText(process.env.VIETMAP_API_KEY, 250);
     try {
-      return await estimateRoute({ db: c.db, from, to, vietmapApiKey });
+      return await estimateRoute({ db: c.db, from, to, vietmapApiKey, forceRefresh });
     } catch (cause) {
       const message = cause instanceof Error ? cleanText(cause.message, 320) : '';
       throw badRequest(
@@ -154,10 +155,10 @@ function register(router) {
     c.requirePage(PAGE);
     const id = Number(c.params.id);
     const isAdmin = canSeeEveryone(c.user);
-    editableRecord(c.db, id, c.user, isAdmin);
+    const record = editableRecord(c.db, id, c.user, isAdmin);
     const parsed = fuelRecordInput(c.body);
     const input = isAdmin ? parsed : applyConfiguredConsumption(c.db, parsed);
-    const employee = activeEmployee(c.db, c.user, isAdmin, c.body.employeeId);
+    const employee = activeEmployee(c.db, c.user, isAdmin, c.body.employeeId, record.employee_id);
     return saveFuelRecord(c.db, c.user, input, employee.id, id);
   });
 

@@ -67,15 +67,33 @@ function reportInputForUser(db, user, input) {
   return { ...input, employeeId: Number(employee?.id ?? -1) };
 }
 
+/**
+ * Nhân viên để chọn trong bộ lọc: người đang làm và người đã nghỉ nhưng còn
+ * phiếu hoặc kỳ tính xăng, để Admin vẫn xuất được báo cáo các tháng cũ.
+ */
+function filterEmployees(db) {
+  return db
+    .prepare(
+      `SELECT id, full_name, is_active FROM employees
+        WHERE is_active = 1
+           OR EXISTS (SELECT 1 FROM entries WHERE employee_id = employees.id)
+           OR EXISTS (SELECT 1 FROM fuel_records
+                       WHERE employee_id = employees.id AND status = 'active')
+        ORDER BY is_active DESC, full_name COLLATE NOCASE`,
+    )
+    .all()
+    .map((item) => ({
+      id: Number(item.id),
+      fullName: item.is_active ? item.full_name : `${item.full_name} (đã nghỉ)`,
+    }));
+}
+
 /** Danh sách nhân viên báo cáo trong đúng phạm vi mà người dùng được xem. */
 function reportCatalog(db, employeeId = null) {
-  const employeeWhere =
-    employeeId === null ? 'WHERE is_active = 1' : 'WHERE id = ? AND is_active = 1';
+  if (employeeId === null) return { employees: filterEmployees(db) };
   const employees = db
-    .prepare(
-      `SELECT id, full_name FROM employees ${employeeWhere} ORDER BY full_name COLLATE NOCASE`,
-    )
-    .all(...(employeeId === null ? [] : [employeeId]));
+    .prepare('SELECT id, full_name FROM employees WHERE id = ? AND is_active = 1')
+    .all(employeeId);
   return {
     employees: employees.map((item) => ({ id: Number(item.id), fullName: item.full_name })),
   };
@@ -149,7 +167,10 @@ function fuelHistoryFilters(query) {
 }
 
 function fuelHistoryReport(db, input) {
-  const where = ["status = 'active'", 'period_from >= ?', 'period_to <= ?'];
+  // Kỳ tính xăng thuộc khoảng báo cáo chứa ngày kết thúc kỳ, cùng quy ước với
+  // Tổng quan (entry_date = period_to): kỳ vắt qua hai tháng được tính đúng một
+  // lần, ở tháng kết thúc, thay vì biến mất khỏi cả hai tháng.
+  const where = ["status = 'active'", 'period_to >= ?', 'period_to <= ?'];
   const params = [input.from, input.to];
   if (input.fuelType) {
     where.push('fuel_type = ?');
@@ -227,12 +248,7 @@ function fuelHistoryReport(db, input) {
       distanceKm: Number(summary.distance_km),
       totalFee: Number(summary.total_fee),
     },
-    employees: db
-      .prepare(
-        'SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE',
-      )
-      .all()
-      .map((row) => ({ id: Number(row.id), fullName: row.full_name })),
+    employees: filterEmployees(db),
   };
 }
 
@@ -255,22 +271,14 @@ function reportData(db, input) {
             COALESCE((
               SELECT delivery_point FROM carriers
                WHERE id = e.carrier_id
-            ), '') AS carrier_delivery_point,
-            (
-              SELECT r.transport_fee
-                FROM carrier_customer_rates r
-               WHERE r.customer_id = e.customer_id
-                 AND r.carrier_id = e.carrier_id
-                 AND (r.spec_key = e.spec_key OR r.is_default = 1)
-               ORDER BY r.is_default ASC, r.id
-               LIMIT 1
-            ) AS standard_transport_fee
+            ), '') AS carrier_delivery_point
        FROM entries e
       WHERE ${where.join(' AND ')}
       ORDER BY e.entry_date ASC, e.id ASC`,
     )
     .all(...params);
-  const fuelWhere = ["f.status = 'active'", 'f.period_from >= ?', 'f.period_to <= ?'];
+  // Cùng quy ước với lịch sử tiền xăng: kỳ thuộc tháng chứa ngày kết thúc.
+  const fuelWhere = ["f.status = 'active'", 'f.period_to >= ?', 'f.period_to <= ?'];
   const fuelParams = [input.from, input.to];
   if (input.employeeId) {
     fuelWhere.push('f.employee_id = ?');
@@ -302,21 +310,40 @@ function reportData(db, input) {
       fuelLegsByRecordId.set(leg.fuel_record_id, legs);
     });
   }
+  // Nhân viên đã nghỉ vẫn có trang riêng nếu còn phiếu/kỳ xăng trong khoảng
+  // báo cáo; nếu không, tổng của báo cáo sẽ lệch với Tổng quan và danh sách phiếu.
+  const employeeIds = new Set(
+    [...entries, ...fuels].map((row) => row.employee_id).filter((id) => id != null),
+  );
   const employees = db
-    .prepare(
-      'SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE',
-    )
-    .all();
+    .prepare('SELECT id, full_name, is_active FROM employees ORDER BY full_name COLLATE NOCASE')
+    .all()
+    .filter(
+      (employee) =>
+        employee.is_active || employeeIds.has(employee.id) || employee.id === input.employeeId,
+    );
+  // Phiếu/kỳ xăng không gắn nhân viên (dữ liệu cũ, hoặc sau khi xóa nhóm dữ
+  // liệu nhân viên) được gom vào một trang riêng thay vì bị bỏ khỏi báo cáo.
+  if (!input.employeeId && [...entries, ...fuels].some((row) => row.employee_id == null)) {
+    employees.push({ id: null, full_name: 'Chưa gán nhân viên', is_active: 0 });
+  }
   const company =
     db.prepare('SELECT company_name, company_address FROM app_settings WHERE id = 1').get() || {};
   return { entries, fuels, fuelLegsByRecordId, employees, company };
 }
 
-/** Nguồn dữ liệu chung của báo cáo chênh lệch: phiếu có cước khác giá thiết lập. */
+/**
+ * Nguồn dữ liệu chung của báo cáo chênh lệch: phiếu có cước khác giá chuẩn đã
+ * chốt lúc lưu phiếu. Không tra bảng cước hiện tại, nên sửa/xóa bảng cước hay
+ * xóa nhà xe không làm đổi chênh lệch các tháng đã qua.
+ */
 const CARRIER_VARIANCE_PAGE_SIZE = 50;
 
 function carrierVarianceSource(input) {
-  const where = ['e.transport_fee <> r.transport_fee'];
+  const where = [
+    'e.standard_transport_fee IS NOT NULL',
+    'e.transport_fee <> e.standard_transport_fee',
+  ];
   const params = [];
   if (!input.all) {
     where.unshift('e.entry_date >= ?', 'e.entry_date <= ?');
@@ -329,15 +356,8 @@ function carrierVarianceSource(input) {
   return {
     sql: `FROM entries e
      LEFT JOIN employees em ON em.id = e.employee_id
-     INNER JOIN customers cu ON cu.id = e.customer_id
-     INNER JOIN carriers ca ON ca.id = e.carrier_id
-     INNER JOIN carrier_customer_rates r ON r.id = (
-       SELECT id FROM carrier_customer_rates
-        WHERE customer_id = cu.id AND carrier_id = ca.id
-          AND (spec_key = e.spec_key OR is_default = 1)
-        ORDER BY is_default ASC, id
-        LIMIT 1
-     )
+     LEFT JOIN customers cu ON cu.id = e.customer_id
+     LEFT JOIN carriers ca ON ca.id = e.carrier_id
      WHERE ${where.join(' AND ')}`,
     params,
   };
@@ -354,11 +374,13 @@ function carrierVariance(db, input, page = null) {
     .prepare(
       `WITH rows AS MATERIALIZED (
        SELECT e.id, e.entry_date, em.full_name AS employee_name,
-         ca.name AS carrier, cu.customer_name AS customer, cu.customer_key,
-         e.spec, r.transport_fee AS standard_fee, e.transport_fee AS actual_fee,
-         e.transport_fee - r.transport_fee AS difference, e.rate_variance_note,
+         COALESCE(ca.name, e.carrier) AS carrier,
+         COALESCE(cu.customer_name, e.customer) AS customer, e.customer_key,
+         e.spec, e.standard_transport_fee AS standard_fee, e.transport_fee AS actual_fee,
+         e.transport_fee - e.standard_transport_fee AS difference, e.rate_variance_note,
          ROW_NUMBER() OVER (
-           ORDER BY ca.name COLLATE NOCASE, cu.customer_name COLLATE NOCASE, e.entry_date ASC, e.id ASC
+           ORDER BY COALESCE(ca.name, e.carrier) COLLATE NOCASE,
+             COALESCE(cu.customer_name, e.customer) COLLATE NOCASE, e.entry_date ASC, e.id ASC
          ) AS position
        ${source.sql}
        ORDER BY position
@@ -393,13 +415,13 @@ function carrierVarianceSummary(db, input) {
   const row = db
     .prepare(
       `SELECT COUNT(*) AS entries,
-       COALESCE(SUM(e.transport_fee - r.transport_fee), 0) AS difference,
-       COALESCE(SUM(e.transport_fee > r.transport_fee), 0) AS over_entries,
-       COALESCE(SUM(CASE WHEN e.transport_fee > r.transport_fee
-         THEN e.transport_fee - r.transport_fee ELSE 0 END), 0) AS over_amount,
-       COALESCE(SUM(e.transport_fee < r.transport_fee), 0) AS under_entries,
-       COALESCE(SUM(CASE WHEN e.transport_fee < r.transport_fee
-         THEN r.transport_fee - e.transport_fee ELSE 0 END), 0) AS under_amount
+       COALESCE(SUM(e.transport_fee - e.standard_transport_fee), 0) AS difference,
+       COALESCE(SUM(e.transport_fee > e.standard_transport_fee), 0) AS over_entries,
+       COALESCE(SUM(CASE WHEN e.transport_fee > e.standard_transport_fee
+         THEN e.transport_fee - e.standard_transport_fee ELSE 0 END), 0) AS over_amount,
+       COALESCE(SUM(e.transport_fee < e.standard_transport_fee), 0) AS under_entries,
+       COALESCE(SUM(CASE WHEN e.transport_fee < e.standard_transport_fee
+         THEN e.standard_transport_fee - e.transport_fee ELSE 0 END), 0) AS under_amount
      ${source.sql}`,
     )
     .get(...source.params);
@@ -1643,7 +1665,7 @@ function employeeReportWorkbook(data, input, selected, extras, type) {
   const workbook = XLSX.utils.book_new();
   // Chỉ còn bảng kê theo khoảng ngày; báo cáo năm đã được bỏ.
   if (type === 'daily') {
-    if (!selected.length) throw badRequest('Không có nhân viên đang hoạt động để xuất báo cáo.');
+    if (!selected.length) throw badRequest('Không có nhân viên để xuất báo cáo.');
     validateExtraCostAssignments(extras, selected, input.employeeId);
     if (input.employeeId) {
       XLSX.utils.book_append_sheet(
@@ -1743,13 +1765,8 @@ function register(router) {
     const pageCount = Math.max(1, Math.ceil(summary.entries / pageSize));
     const page = Math.min(Math.max(Number(c.query.page) || 1, 1), pageCount);
     const items = carrierVariance(c.db, input, { limit: pageSize, offset: (page - 1) * pageSize });
-    const employees = c.db
-      .prepare(
-        'SELECT id, full_name FROM employees WHERE is_active = 1 ORDER BY full_name COLLATE NOCASE',
-      )
-      .all();
     return {
-      employees: employees.map((item) => ({ id: item.id, fullName: item.full_name })),
+      employees: filterEmployees(c.db),
       items,
       summary,
       page,

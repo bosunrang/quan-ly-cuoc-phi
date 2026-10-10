@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 42;
+const SCHEMA_VERSION = 43;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -76,6 +76,25 @@ function linkEntriesToCatalog(db) {
     UPDATE entries SET carrier_id = (
       SELECT id FROM carriers WHERE carriers.carrier_key = entries.carrier_key
     ) WHERE carrier_id IS NULL;
+  `);
+}
+
+/**
+ * Điền giá cước chuẩn (theo bảng cước hiện tại) cho các phiếu chưa chốt giá.
+ * Chỉ dùng khi nâng cấp và khi khôi phục backup cũ chưa có cột này; phiếu mới
+ * chốt giá ngay lúc lưu để sửa bảng cước sau này không đổi chênh lệch cũ.
+ */
+function backfillStandardTransportFees(db) {
+  db.exec(`
+    UPDATE entries SET standard_transport_fee = (
+      SELECT rate.transport_fee
+        FROM carrier_customer_rates rate
+       WHERE rate.customer_id = entries.customer_id
+         AND rate.carrier_id = entries.carrier_id
+         AND (rate.spec_key = entries.spec_key OR rate.is_default = 1)
+       ORDER BY rate.is_default ASC, rate.id
+       LIMIT 1
+    ) WHERE standard_transport_fee IS NULL;
   `);
 }
 
@@ -810,6 +829,18 @@ function migrate(db) {
       }
     }
 
+    if (current < 43) {
+      db.exec(`
+      -- Giá cước chuẩn được chốt trên phiếu tại lúc lưu. Trước đây giá chuẩn
+      -- tra theo bảng cước hiện tại, nên sửa/xóa bảng cước hoặc xóa nhà xe làm
+      -- thay đổi chênh lệch của các tháng đã qua. NULL: lúc lưu chưa có giá.
+      ALTER TABLE entries ADD COLUMN standard_transport_fee INTEGER
+        CHECK (standard_transport_fee IS NULL OR standard_transport_fee >= 0);
+    `);
+      // Phiếu cũ: chốt theo bảng cước đang có, là dữ liệu tốt nhất còn lại.
+      backfillStandardTransportFees(db);
+    }
+
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (error) {
@@ -870,6 +901,7 @@ function transaction(db, work) {
 module.exports = {
   openDatabase,
   linkEntriesToCatalog,
+  backfillStandardTransportFees,
   misaDedupeKey,
   transaction,
   normalizeSearchText,

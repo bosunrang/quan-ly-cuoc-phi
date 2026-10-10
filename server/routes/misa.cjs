@@ -88,25 +88,78 @@ function existingRows(db, rows) {
     ),
   ];
   const bySourceKey = new Map();
-  const byDedupeKey = new Map();
-  const select = (column, keys) => {
+  // Số dòng đã lưu theo từng khóa nghiệp vụ. Một hóa đơn có thể có nhiều dòng
+  // cùng mã hàng và số lượng nhưng khác số lô, nên phải đếm chứ không gộp.
+  const dedupeCounts = new Map();
+  const chunks = (keys, read) => {
     for (let offset = 0; offset < keys.length; offset += SQLITE_PARAMETER_CHUNK) {
       const batch = keys.slice(offset, offset + SQLITE_PARAMETER_CHUNK);
-      const placeholders = batch.map(() => '?').join(', ');
-      for (const row of db
-        .prepare(
-          `SELECT source_key, dedupe_key, product_name, customer_code, product_code
-             FROM misa_rows WHERE ${column} IN (${placeholders})`,
-        )
-        .all(...batch)) {
-        bySourceKey.set(row.source_key, row);
-        if (row.dedupe_key) byDedupeKey.set(row.dedupe_key, row);
-      }
+      read(batch, batch.map(() => '?').join(', '));
     }
   };
-  select('source_key', sourceKeys);
-  select('dedupe_key', dedupeKeys);
-  return { bySourceKey, byDedupeKey };
+  chunks(sourceKeys, (batch, placeholders) => {
+    for (const row of db
+      .prepare(
+        `SELECT source_key, dedupe_key, product_name, customer_code, product_code
+           FROM misa_rows WHERE source_key IN (${placeholders})`,
+      )
+      .all(...batch)) {
+      bySourceKey.set(row.source_key, row);
+    }
+  });
+  chunks(dedupeKeys, (batch, placeholders) => {
+    for (const row of db
+      .prepare(
+        `SELECT dedupe_key, COUNT(*) AS count
+           FROM misa_rows WHERE dedupe_key IN (${placeholders})
+          GROUP BY dedupe_key`,
+      )
+      .all(...batch)) {
+      dedupeCounts.set(row.dedupe_key, Number(row.count));
+    }
+  });
+  return { bySourceKey, dedupeCounts };
+}
+
+/**
+ * Phân loại từng dòng của file: mới, bổ sung thông tin cho dòng cũ, hoặc trùng.
+ *
+ * Dòng khớp nguyên khóa nguồn là chính dòng đã lưu. Các dòng còn lại so theo
+ * khóa nghiệp vụ (không gồm số lô, tên khách, địa chỉ vì có thể đổi giữa hai
+ * lần xuất): file có N dòng cùng khóa, CSDL đã có M dòng thì chỉ N − M dòng là
+ * mới. Nhờ vậy hai dòng khác lô của cùng hóa đơn được lưu đủ, còn nhập chồng
+ * khoảng ngày (kể cả khi lô/tên khách đã đổi) không nhân đôi dữ liệu.
+ */
+function classifyRows(db, rows) {
+  const existing = existingRows(db, rows);
+  const seenSourceKeys = new Set();
+  const unique = rows.map((row) => {
+    if (row.status === 'skipped') return { row, kind: 'skipped' };
+    if (seenSourceKeys.has(row.sourceKey)) return { row, kind: 'duplicateInFile' };
+    seenSourceKeys.add(row.sourceKey);
+    const previous = existing.bySourceKey.get(row.sourceKey);
+    return previous ? { row, kind: 'existing', previous } : { row, kind: 'candidate' };
+  });
+
+  // Dòng CSDL cùng khóa chưa được dòng nào trong file khớp theo khóa nguồn.
+  const unmatched = new Map(existing.dedupeCounts);
+  for (const item of unique) {
+    const key = item.kind === 'existing' ? item.previous.dedupe_key : '';
+    if (key && unmatched.has(key)) unmatched.set(key, Math.max(0, unmatched.get(key) - 1));
+  }
+
+  return unique.map((item) => {
+    if (item.kind === 'existing') {
+      return { ...item, kind: canEnrich(item.previous, item.row) ? 'enrich' : 'duplicate' };
+    }
+    if (item.kind !== 'candidate' || !item.row.dedupeKey) return item;
+    const remaining = unmatched.get(item.row.dedupeKey) ?? 0;
+    if (remaining > 0) {
+      unmatched.set(item.row.dedupeKey, remaining - 1);
+      return { ...item, kind: 'duplicateByBusinessKey' };
+    }
+    return item;
+  });
 }
 
 function canEnrich(previous, row) {
@@ -118,47 +171,30 @@ function canEnrich(previous, row) {
 }
 
 function previewRows(db, sourceRows) {
-  const normalizedRows = sourceRows.map(normalizeRow);
-  const existing = existingRows(db, normalizedRows);
-  const seenSourceKeys = new Set();
-  const seenDedupeKeys = new Set();
-  return normalizedRows.map((row) => {
-    if (row.status === 'skipped') return row;
-    if (seenSourceKeys.has(row.sourceKey)) {
+  return classifyRows(db, sourceRows.map(normalizeRow)).map(({ row, kind, previous }) => {
+    if (kind === 'duplicateInFile') {
       return { ...row, status: 'duplicate', reason: 'Dòng trùng trong file' };
     }
-    seenSourceKeys.add(row.sourceKey);
-    const previousBySource = existing.bySourceKey.get(row.sourceKey);
-    if (previousBySource) {
-      if (canEnrich(previousBySource, row)) {
-        return {
-          ...row,
-          reason:
-            !previousBySource.customer_code && row.customerCode
-              ? 'Bổ sung mã khách hàng'
-              : !previousBySource.product_code && row.productCode
-                ? 'Bổ sung mã hàng'
-                : 'Bổ sung tên mặt hàng',
-        };
-      }
+    if (kind === 'duplicate') {
       return { ...row, status: 'duplicate', reason: 'Dòng đã tồn tại' };
     }
-    if (row.dedupeKey) {
-      if (seenDedupeKeys.has(row.dedupeKey)) {
-        return {
-          ...row,
-          status: 'duplicate',
-          reason: 'Trùng mã khách hàng, đơn hàng, mã hàng, sản phẩm và số lượng trong file',
-        };
-      }
-      seenDedupeKeys.add(row.dedupeKey);
-      if (existing.byDedupeKey.has(row.dedupeKey)) {
-        return {
-          ...row,
-          status: 'duplicate',
-          reason: 'Trùng mã khách hàng, đơn hàng, mã hàng, sản phẩm và số lượng',
-        };
-      }
+    if (kind === 'duplicateByBusinessKey') {
+      return {
+        ...row,
+        status: 'duplicate',
+        reason: 'Trùng mã khách hàng, đơn hàng, mã hàng, sản phẩm và số lượng',
+      };
+    }
+    if (kind === 'enrich') {
+      return {
+        ...row,
+        reason:
+          !previous.customer_code && row.customerCode
+            ? 'Bổ sung mã khách hàng'
+            : !previous.product_code && row.productCode
+              ? 'Bổ sung mã hàng'
+              : 'Bổ sung tên mặt hàng',
+      };
     }
     return row;
   });
@@ -343,23 +379,11 @@ function register(router) {
         );
         let inserted = 0;
         let duplicates = 0;
-        const existing = existingRows(c.db, rows);
-        const seenSourceKeys = new Set();
-        const seenDedupeKeys = new Set();
-        for (const row of rows) {
-          if (seenSourceKeys.has(row.sourceKey)) {
+        for (const { row, kind } of classifyRows(c.db, rows)) {
+          if (kind !== 'candidate' && kind !== 'enrich') {
             duplicates += 1;
             continue;
           }
-          seenSourceKeys.add(row.sourceKey);
-          const previousBySource = existing.bySourceKey.get(row.sourceKey);
-          if (!previousBySource && row.dedupeKey) {
-            if (seenDedupeKeys.has(row.dedupeKey) || existing.byDedupeKey.has(row.dedupeKey)) {
-              duplicates += 1;
-              continue;
-            }
-          }
-          if (row.dedupeKey) seenDedupeKeys.add(row.dedupeKey);
           const result = insert.run(
             row.documentDate,
             row.documentCode,

@@ -74,10 +74,10 @@ async function vietmapCoordinates(address, apiKey) {
   return cacheResult(vietmapPlaceCache, key, { lat, lng });
 }
 
-async function vietmapRouteDistance(from, to, apiKey) {
+async function vietmapRouteDistance(from, to, apiKey, forceRefresh = false) {
   const key = routeKey(from, to);
   const cached = vietmapRouteCache.get(key);
-  if (cached) return cached;
+  if (cached && !forceRefresh) return cached;
 
   const [origin, destination] = await Promise.all([
     vietmapCoordinates(from, apiKey),
@@ -156,29 +156,31 @@ function saveVietmapDistance(db, from, to, distanceKm) {
   );
 }
 
-async function estimateRoute({ db, from, to, vietmapApiKey }) {
+async function estimateRoute({ db, from, to, vietmapApiKey, forceRefresh = false }) {
   const fromKey = normalizeSearchText(from);
   const toKey = normalizeSearchText(to);
-  const saved = db
-    .prepare('SELECT distance_km FROM route_distances WHERE from_key = ? AND to_key = ?')
-    .get(fromKey, toKey);
-  if (saved) {
-    return { km: saved.distance_km, source: 'Chặng đã lưu trong ứng dụng', estimated: false };
-  }
-  const reverseSaved = db
-    .prepare('SELECT distance_km FROM route_distances WHERE from_key = ? AND to_key = ?')
-    .get(toKey, fromKey);
-  if (reverseSaved) {
-    return {
-      km: reverseSaved.distance_km,
-      source: 'Chặng ngược đã lưu trong ứng dụng',
-      estimated: false,
-    };
+  if (!forceRefresh) {
+    const saved = db
+      .prepare('SELECT distance_km FROM route_distances WHERE from_key = ? AND to_key = ?')
+      .get(fromKey, toKey);
+    if (saved) {
+      return { km: saved.distance_km, source: 'Chặng đã lưu trong ứng dụng', estimated: false };
+    }
+    const reverseSaved = db
+      .prepare('SELECT distance_km FROM route_distances WHERE from_key = ? AND to_key = ?')
+      .get(toKey, fromKey);
+    if (reverseSaved) {
+      return {
+        km: reverseSaved.distance_km,
+        source: 'Chặng ngược đã lưu trong ứng dụng',
+        estimated: false,
+      };
+    }
   }
   if (!vietmapApiKey) {
     throw new Error('Chưa cấu hình VIETMAP_API_KEY trên máy chủ.');
   }
-  const result = await vietmapRouteDistance(from, to, vietmapApiKey);
+  const result = await vietmapRouteDistance(from, to, vietmapApiKey, forceRefresh);
   saveVietmapDistance(db, from, to, result.km);
   return result;
 }

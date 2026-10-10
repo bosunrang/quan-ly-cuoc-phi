@@ -204,6 +204,12 @@ function serveStatic(root, pathname, res) {
 
   let file = join(root, relative);
   if (!existsSync(file) || !statSync(file).isFile()) {
+    // File build cũ đã bị thay sau khi cập nhật: trả 404 để trình duyệt biết mà
+    // tải lại trang, thay vì nhận index.html dưới tên file .js rồi báo lỗi mãi.
+    if (relative.startsWith(`assets${sep}`)) {
+      sendError(res, notFound());
+      return true;
+    }
     file = join(root, 'index.html');
     if (!existsSync(file)) return false;
   }

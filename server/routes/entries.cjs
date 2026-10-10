@@ -111,7 +111,7 @@ function ensureStaffDuplicateReason(db, user, input, excludedEntryId = 0) {
   if (!canSeeEveryone(user)) ensureDuplicateReason(db, input, excludedEntryId);
 }
 
-function readEmployeeId(db, user, value) {
+function readEmployeeId(db, user, value, currentEmployeeId = null) {
   if (!canSeeEveryone(user)) {
     const employee = db
       .prepare('SELECT id FROM employees WHERE user_id = ? AND is_active = 1')
@@ -126,6 +126,9 @@ function readEmployeeId(db, user, value) {
   }
   const id = Number(value);
   if (!Number.isInteger(id)) throw badRequest('Nhân viên không hợp lệ.');
+  // Sửa phiếu cũ của nhân viên đã nghỉ: giữ nguyên người phụ trách vẫn hợp lệ,
+  // để Admin sửa lỗi nhập liệu mà không phải gán phiếu sang người khác.
+  if (currentEmployeeId !== null && id === currentEmployeeId) return id;
   const employee = db.prepare('SELECT id FROM employees WHERE id = ? AND is_active = 1').get(id);
   if (!employee) throw badRequest('Nhân viên không hoạt động hoặc không tồn tại.');
   return id;
@@ -162,35 +165,50 @@ function carrierForEntry(db, body, carrierName) {
   return carrier;
 }
 
-function standardTransportRate(db, body, input) {
-  const customer = customerForEntry(db, body, input.customer);
-  if (!customer) return null;
-  const carrier = carrierForEntry(db, body, input.carrier);
-  if (!carrier) return null;
-  const specKey = normalizeSearchText(input.spec);
-  return (
-    db
-      .prepare(
-        `SELECT transport_fee
+/** Giá cước chuẩn theo bảng cước hiện tại; null khi chưa thiết lập. */
+function currentStandardTransportFee(db, customerId, carrierId, spec) {
+  if (!customerId || !carrierId) return null;
+  const rate = db
+    .prepare(
+      `SELECT transport_fee
        FROM carrier_customer_rates
       WHERE customer_id = ? AND carrier_id = ?
         AND (spec_key = ? OR is_default = 1)
-      ORDER BY CASE WHEN spec_key = ? THEN 0 ELSE 1 END, id
+      ORDER BY is_default ASC, id
       LIMIT 1`,
-      )
-      .get(customer.id, carrier.id, specKey, specKey) ?? null
-  );
+    )
+    .get(customerId, carrierId, normalizeSearchText(spec));
+  return rate ? Number(rate.transport_fee) : null;
 }
 
-function ensureVarianceReason(db, body, input) {
+/**
+ * Giá chuẩn chốt trên phiếu. Sửa phiếu mà không đổi khách hàng, nhà xe hay
+ * quy cách thì giữ giá đã chốt lúc lập, để sửa bảng cước về sau không làm
+ * đổi chênh lệch của phiếu cũ.
+ */
+function standardTransportFeeFor(db, body, input, before = null) {
+  const customerId = customerForEntry(db, body, input.customer)?.id ?? null;
+  const carrierId = carrierForEntry(db, body, input.carrier)?.id ?? null;
+  if (
+    before &&
+    body.saveCarrierRate !== true &&
+    before.customer_id === customerId &&
+    before.carrier_id === carrierId &&
+    before.spec_key === normalizeSearchText(input.spec)
+  ) {
+    return before.standard_transport_fee ?? null;
+  }
+  return currentStandardTransportFee(db, customerId, carrierId, input.spec);
+}
+
+function ensureVarianceReason(body, input, standardFee) {
   // Khi người dùng chủ động lưu lại bảng cước, mức vừa nhập sẽ trở thành giá chuẩn.
   if (body.saveCarrierRate === true) {
     input.rateVarianceNote = '';
     return;
   }
-  const rate = standardTransportRate(db, body, input);
-  if (!rate) return;
-  if (input.transportFee <= Number(rate.transport_fee)) {
+  if (standardFee == null) return;
+  if (input.transportFee <= standardFee) {
     input.rateVarianceNote = '';
     return;
   }
@@ -389,18 +407,6 @@ function toApi(row, user) {
   };
 }
 
-// Nối theo mã khách hàng/nhà xe lưu trên phiếu (migration 41): đổi tên trong
-// danh mục không làm mất giá chuẩn của phiếu cũ.
-const STANDARD_TRANSPORT_RATE_SELECT = `(
-  SELECT rate.transport_fee
-    FROM carrier_customer_rates rate
-   WHERE rate.customer_id = e.customer_id
-     AND rate.carrier_id = e.carrier_id
-     AND (rate.spec_key = e.spec_key OR rate.is_default = 1)
-   ORDER BY rate.is_default ASC, rate.id
-   LIMIT 1
-) AS standard_transport_fee`;
-
 /**
  * Đọc một phiếu và kiểm tra quyền chạm vào nó.
  * Nhân viên chỉ được sửa/xóa phiếu do chính mình tạo.
@@ -471,8 +477,7 @@ function register(router) {
     const offset = Math.max(Number(c.query.offset) || 0, 0);
 
     // Lấy id của trang trước (MATERIALIZED để LIMIT/OFFSET dạng tham số vẫn
-    // chỉ đọc đúng một trang), rồi mới nối bảng và tính giá chuẩn. Nhờ đó các
-    // dòng bị OFFSET bỏ qua không phải tính cột con.
+    // chỉ đọc đúng một trang), rồi mới nối bảng.
     const rows = c.db
       .prepare(
         `WITH page AS MATERIALIZED (
@@ -481,8 +486,7 @@ function register(router) {
           ORDER BY e.entry_date DESC, e.id DESC
           LIMIT ? OFFSET ?
        )
-       SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name,
-              ${STANDARD_TRANSPORT_RATE_SELECT}
+       SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name
            FROM entries e
            JOIN users u ON u.id = e.created_by
            LEFT JOIN employees ON employees.id = e.employee_id
@@ -706,20 +710,30 @@ function register(router) {
     const input = readEntryInput(c.body);
     const employeeId = readEmployeeId(c.db, c.user, c.body.employeeId);
     ensureStaffUsesConfiguredRate(c.db, c.user, c.body, input);
-    ensureVarianceReason(c.db, c.body, input);
+    let standardFee = standardTransportFeeFor(c.db, c.body, input);
+    ensureVarianceReason(c.body, input, standardFee);
     const at = new Date().toISOString();
 
     return transaction(c.db, () => {
       ensureStaffDuplicateReason(c.db, c.user, input);
       const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, at);
       const catalog = catalogIdsForEntry(c.db, c.body, input, delivery);
+      // Vừa lưu bảng cước từ phiếu: mức vừa nhập là giá chuẩn của phiếu này.
+      if (c.body.saveCarrierRate === true) {
+        standardFee = currentStandardTransportFee(
+          c.db,
+          catalog.customerId,
+          catalog.carrierId,
+          input.spec,
+        );
+      }
       const result = c.db
         .prepare(
           `INSERT INTO entries
              (entry_date, customer, carrier, recipient, address, spec,
               ticket_fee, transport_fee, gate_fee, other_fee_name, other_fee, note, rate_variance_note, duplicate_reason, bill_status, misa_document_date, misa_document_code, employee_id,
-              customer_id, carrier_id, created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              customer_id, carrier_id, standard_transport_fee, created_by, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.entryDate,
@@ -742,16 +756,21 @@ function register(router) {
           employeeId,
           catalog.customerId,
           catalog.carrierId,
+          standardFee,
           c.user.id,
           at,
           at,
         );
       const id = Number(result.lastInsertRowid);
-      writeAudit(c.db, c.user, 'entry.create', 'entry', id, { ...input, employeeId, delivery });
+      writeAudit(c.db, c.user, 'entry.create', 'entry', id, {
+        ...input,
+        employeeId,
+        standardTransportFee: standardFee,
+        delivery,
+      });
       const row = c.db
         .prepare(
-          `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name,
-                  ${STANDARD_TRANSPORT_RATE_SELECT}
+          `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name
              FROM entries e JOIN users u ON u.id = e.created_by
              LEFT JOIN employees ON employees.id = e.employee_id WHERE e.id = ?`,
         )
@@ -767,20 +786,29 @@ function register(router) {
     const input = readEntryInput(c.body);
     ensureStaffUsesConfiguredRate(c.db, c.user, c.body, input);
     const employeeId = canSeeEveryone(c.user)
-      ? readEmployeeId(c.db, c.user, c.body.employeeId)
+      ? readEmployeeId(c.db, c.user, c.body.employeeId, before.employee_id)
       : before.employee_id;
-    ensureVarianceReason(c.db, c.body, input);
+    let standardFee = standardTransportFeeFor(c.db, c.body, input, before);
+    ensureVarianceReason(c.body, input, standardFee);
     return transaction(c.db, () => {
       ensureStaffDuplicateReason(c.db, c.user, input, before.id);
       const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, new Date().toISOString());
       const catalog = catalogIdsForEntry(c.db, c.body, input, delivery);
+      if (c.body.saveCarrierRate === true) {
+        standardFee = currentStandardTransportFee(
+          c.db,
+          catalog.customerId,
+          catalog.carrierId,
+          input.spec,
+        );
+      }
       c.db
         .prepare(
           `UPDATE entries SET
              entry_date = ?, customer = ?, carrier = ?, recipient = ?,
              address = ?, spec = ?, ticket_fee = ?, transport_fee = ?,
              gate_fee = ?, other_fee_name = ?, other_fee = ?, note = ?, rate_variance_note = ?, duplicate_reason = ?, bill_status = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?,
-             customer_id = ?, carrier_id = ?, updated_at = ?
+             customer_id = ?, carrier_id = ?, standard_transport_fee = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
@@ -804,18 +832,24 @@ function register(router) {
           employeeId,
           catalog.customerId,
           catalog.carrierId,
+          standardFee,
           new Date().toISOString(),
           before.id,
         );
       writeAudit(c.db, c.user, 'entry.update', 'entry', before.id, {
         before: toApi(before, c.user),
-        after: input,
+        after: {
+          ...input,
+          employeeId,
+          customerId: catalog.customerId,
+          carrierId: catalog.carrierId,
+          standardTransportFee: standardFee,
+        },
         delivery,
       });
       const row = c.db
         .prepare(
-          `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name,
-                  ${STANDARD_TRANSPORT_RATE_SELECT}
+          `SELECT e.*, u.full_name AS created_by_name, employees.full_name AS employee_name
              FROM entries e JOIN users u ON u.id = e.created_by
              LEFT JOIN employees ON employees.id = e.employee_id WHERE e.id = ?`,
         )

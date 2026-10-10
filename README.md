@@ -39,8 +39,8 @@ npm run dev
 ```
 
 Giao diện chạy ở `http://localhost:5173` và tự chuyển tiếp `/api` sang server ở
-cổng 3100. Lần chạy đầu tiên, mật khẩu Admin vẫn được in ra console — hãy giữ
-lại để kiểm tra chế độ bảo mật và dùng cho bản đóng gói sau này.
+cổng 3100. Lần chạy đầu tiên, đăng nhập bằng `admin` / `admin`; ứng dụng sẽ bắt
+buộc đặt mật khẩu mới trước khi cho phép thao tác dữ liệu.
 
 Muốn chạy như bản thật (một cổng duy nhất):
 
@@ -136,6 +136,15 @@ Lưu ý vận hành:
 
 - **Máy chính phải bật** thì máy nhân viên mới làm việc được. Đóng cửa sổ ứng
   dụng không sao — nó chỉ thu nhỏ xuống khay và server vẫn chạy.
+- **Tự chạy khi bật máy**: chuột phải icon dưới khay → tick *Khởi động cùng
+  Windows*. Mỗi công ty tick riêng; máy chạy chung Nam Hưng Việt và NAVIVA thì
+  tick ở cả hai. Khi Windows đăng nhập, ứng dụng tự mở đúng công ty và nằm dưới
+  khay, không hỏi chọn công ty. Mở bằng tay vẫn hỏi như cũ, nút chọn sẵn là
+  công ty mở lần trước trên máy đó.
+- Ứng dụng chỉ tự chạy **sau khi Windows đã đăng nhập**. Nếu máy chính phải
+  gõ mật khẩu lúc mở máy, sau khi mất điện hay Windows tự cập nhật vẫn cần
+  người đăng nhập; muốn máy tự vào thì bật tự đăng nhập của Windows (Win+R →
+  `netplwiz`) — cân nhắc vì ai ngồi vào máy cũng dùng được.
 - Lần đầu chạy, Windows Firewall sẽ hỏi. Chọn cho phép ở **mạng Private**.
 - Nên đặt IP tĩnh cho máy chính để địa chỉ không đổi.
 - **Sao lưu tự động**: máy chủ tạo một snapshot SQLite mỗi ngày trong thư mục

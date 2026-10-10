@@ -16,6 +16,7 @@ import {
 	fuelRepository,
 } from "../../domain/fuel/fuel.repository";
 import { formatDate, formatMoney, todayIso } from "../../shared/lib/format";
+import { parsePastedMoney } from "../../shared/lib/money";
 import { normalizeText } from "../../shared/lib/text";
 import { Alert } from "../../shared/ui/Alert";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
@@ -258,7 +259,9 @@ export function FuelPage() {
 		[baseKm, setBaseKm] = useState("40"),
 		[origin, setOrigin] = useState(""),
 		[legs, setLegs] = useState<Leg[]>([newLeg()]),
-		[estimatingLegId, setEstimatingLegId] = useState<string | null>(null);
+		[estimatingLegId, setEstimatingLegId] = useState<string | null>(null),
+		[saving, setSaving] = useState(false);
+	const savingRef = useRef(false);
 	const initialPeriodTo = useRef(periodTo);
 	const hasLoadedInitialPrice = useRef(false);
 	// Danh mục (địa điểm, giá, quãng đường) khá nặng và hiếm khi đổi: chỉ tải
@@ -408,31 +411,38 @@ export function FuelPage() {
 		setVehicleType(nextVehicleType);
 		setConsumption(String(profile.consumptionLiters));
 		setBaseKm(String(profile.consumptionBaseKm));
+		// Khi chọn Ô tô, áp dụng giá 0 theo quy tắc xe công ty.
+		if (nextVehicleType === "truck") setFuelPrice("0");
 	};
 	const setLeg = (index: number, patch: Partial<Leg>) =>
 		setLegs((rows) =>
 			rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
 		);
-	const setDestination = (
-		index: number,
+	/** Km dùng lại được cho chặng from → destination: trong lộ trình hoặc đã lưu. */
+	const reusableDistance = (
+		rows: Leg[],
+		routeOrigin: string,
+		from: string,
 		destination: string,
 		allowLegacyRouteMatch = false,
+		skipIndex = -1,
 	) => {
-		const from = index ? legs[index - 1].destination : origin;
 		const routeLocationMatches = (left: string, right: string) =>
 			sameLocation(left, right) ||
 			(allowLegacyRouteMatch && compatibleLocation(left, right));
-		const liveDirect = legs.find((leg, legIndex) => {
-			const legFrom = legIndex ? legs[legIndex - 1].destination : origin;
+		const liveDirect = rows.find((leg, legIndex) => {
+			const legFrom = legIndex ? rows[legIndex - 1].destination : routeOrigin;
 			return (
+				legIndex !== skipIndex &&
 				decimal(leg.km) > 0 &&
 				routeLocationMatches(legFrom, from) &&
 				routeLocationMatches(leg.destination, destination)
 			);
 		});
-		const liveReverse = legs.find((leg, legIndex) => {
-			const legFrom = legIndex ? legs[legIndex - 1].destination : origin;
+		const liveReverse = rows.find((leg, legIndex) => {
+			const legFrom = legIndex ? rows[legIndex - 1].destination : routeOrigin;
 			return (
+				legIndex !== skipIndex &&
 				decimal(leg.km) > 0 &&
 				routeLocationMatches(legFrom, destination) &&
 				routeLocationMatches(leg.destination, from)
@@ -448,8 +458,8 @@ export function FuelPage() {
 				routeLocationMatches(item.from, destination) &&
 				routeLocationMatches(item.to, from),
 		);
-		const reusableDistance = liveDirect ?? liveReverse ?? saved ?? reverseSaved;
-		const reusableSource = liveDirect
+		const found = liveDirect ?? liveReverse ?? saved ?? reverseSaved;
+		const source = liveDirect
 			? "Chặng vừa nhập trong lộ trình"
 			: liveReverse
 				? "Chặng ngược vừa nhập trong lộ trình"
@@ -458,14 +468,82 @@ export function FuelPage() {
 					: reverseSaved
 						? "Chặng ngược đã lưu trong ứng dụng"
 						: undefined;
-		setLeg(index, {
+		return found ? { km: String(found.km), source } : null;
+	};
+	/**
+	 * Điểm đi của chặng `index` vừa đổi (xóa chặng trước, đổi điểm đến chặng
+	 * trước hoặc đổi điểm xuất phát): km cũ thuộc về tuyến khác nên phải bỏ, rồi
+	 * dùng lại km đã biết của tuyến mới nếu có; nếu không, để trống cho người
+	 * dùng nhập hoặc bấm cập nhật km.
+	 */
+	const withRecalculatedLeg = (
+		rows: Leg[],
+		index: number,
+		routeOrigin: string,
+	) => {
+		const leg = rows[index];
+		if (!leg) return rows;
+		const from = index ? rows[index - 1].destination : routeOrigin;
+		const reused =
+			from.trim() && leg.destination.trim()
+				? reusableDistance(
+						rows,
+						routeOrigin,
+						from,
+						leg.destination,
+						false,
+						index,
+					)
+				: null;
+		return rows.map((row, i) =>
+			i === index
+				? { ...row, km: reused?.km ?? "", source: reused?.source }
+				: row,
+		);
+	};
+	const setDestination = (
+		index: number,
+		destination: string,
+		allowLegacyRouteMatch = false,
+	) => {
+		const from = index ? legs[index - 1].destination : origin;
+		const reused = reusableDistance(
+			legs,
+			origin,
+			from,
 			destination,
-			source: reusableSource,
-			...(legs[index].km || !reusableDistance
-				? {}
-				: { km: String(reusableDistance.km) }),
+			allowLegacyRouteMatch,
+		);
+		const startsNextLeg = !sameLocation(legs[index].destination, destination);
+		setLegs((rows) => {
+			const next = rows.map((row, i) =>
+				i === index
+					? {
+							...row,
+							destination,
+							source: reused?.source,
+							...(row.km || !reused ? {} : { km: reused.km }),
+						}
+					: row,
+			);
+			return startsNextLeg
+				? withRecalculatedLeg(next, index + 1, origin)
+				: next;
 		});
 	};
+	const changeOrigin = (value: string) => {
+		const startsFirstLeg = !sameLocation(origin, value);
+		setOrigin(value);
+		if (startsFirstLeg) setLegs((rows) => withRecalculatedLeg(rows, 0, value));
+	};
+	const removeLeg = (index: number) =>
+		setLegs((rows) =>
+			withRecalculatedLeg(
+				rows.filter((_, i) => i !== index),
+				index,
+				origin,
+			),
+		);
 	const estimateAllLegs = async () => {
 		const routeWithMissingPlace = routeLegs.find(
 			(leg) => !leg.from.trim() || !leg.to.trim(),
@@ -506,7 +584,13 @@ export function FuelPage() {
 			// Nhờ đó, thêm B → C chỉ gọi VietMap cho B → C, không làm thay đổi A → B.
 			if (decimal(legs[index].km) > 0) continue;
 			try {
-				const result = await fuelRepository.estimateRoute(from, destination);
+				// Người dùng vừa xóa km nên cần lấy lại kết quả trực tiếp từ VietMap,
+				// không dùng quãng đường cũ mà ứng dụng đã lưu.
+				const result = await fuelRepository.estimateRoute(
+					from,
+					destination,
+					true,
+				);
 				estimated.set(legs[index].id, {
 					from,
 					destination,
@@ -584,6 +668,22 @@ export function FuelPage() {
 	const deleteRecord = async (record: FuelData["records"][number]) => {
 		await fuelRepository.deleteRecord(record.id);
 		await loadHistory();
+	};
+	const submit = async () => {
+		// Khóa ngay khi bấm: bấm đúp hoặc mạng chậm không được tạo hai bản ghi.
+		if (savingRef.current) return;
+		savingRef.current = true;
+		setSaving(true);
+		try {
+			await save();
+		} catch (cause) {
+			setError(
+				cause instanceof Error ? cause.message : "Không lưu được tính xăng.",
+			);
+		} finally {
+			savingRef.current = false;
+			setSaving(false);
+		}
 	};
 	const save = async () => {
 		if (!employeeId) throw new Error("Vui lòng chọn nhân viên.");
@@ -743,6 +843,14 @@ export function FuelPage() {
 											const digits = event.target.value.replace(/\D/g, "");
 											setFuelPrice(digits ? formatMoney(Number(digits)) : "");
 										}}
+										onPaste={(event) => {
+											const pasted = parsePastedMoney(
+												event.clipboardData.getData("text"),
+											);
+											if (pasted === null) return;
+											event.preventDefault();
+											setFuelPrice(formatMoney(pasted));
+										}}
 									/>
 								</label>
 							</div>
@@ -786,7 +894,7 @@ export function FuelPage() {
 													: "Ví dụ: Kho Naviva, 123 đường A, TP.HCM"
 											}
 											locations={data.locations}
-											onChange={(value) => !index && setOrigin(value)}
+											onChange={(value) => !index && changeOrigin(value)}
 										/>
 									</div>
 									<div className="fuel-route-field">
@@ -827,9 +935,7 @@ export function FuelPage() {
 											className="row-action is-danger fuel-delete-leg"
 											type="button"
 											aria-label="Xóa chặng"
-											onClick={() =>
-												setLegs((rows) => rows.filter((_, i) => i !== index))
-											}
+											onClick={() => removeLeg(index)}
 										>
 											<Trash2 size={16} />
 										</button>
@@ -980,19 +1086,18 @@ export function FuelPage() {
 							className="button primary"
 							type="button"
 							disabled={
-								!hasFuelPrice || !totalKm || Boolean(incompleteRouteLeg)
+								saving ||
+								!hasFuelPrice ||
+								!totalKm ||
+								Boolean(incompleteRouteLeg)
 							}
-							onClick={() =>
-								void save().catch((cause) =>
-									setError(
-										cause instanceof Error
-											? cause.message
-											: "Không lưu được tính xăng.",
-									),
-								)
-							}
+							onClick={() => void submit()}
 						>
-							{editingRecord ? "Cập nhật tính xăng" : "Lưu tính xăng"}
+							{saving
+								? "Đang lưu…"
+								: editingRecord
+									? "Cập nhật tính xăng"
+									: "Lưu tính xăng"}
 						</button>
 					</div>
 				</section>
@@ -1504,6 +1609,14 @@ function PriceDialog({
 						onChange={(event) => {
 							const digits = event.target.value.replace(/\D/g, "");
 							setPrice(digits ? formatMoney(Number(digits)) : "");
+						}}
+						onPaste={(event) => {
+							const pasted = parsePastedMoney(
+								event.clipboardData.getData("text"),
+							);
+							if (pasted === null) return;
+							event.preventDefault();
+							setPrice(formatMoney(pasted));
 						}}
 					/>
 				</label>

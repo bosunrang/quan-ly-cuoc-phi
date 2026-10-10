@@ -26,7 +26,11 @@ function consumptionProfiles(db) {
   };
 }
 
-function activeEmployee(db, user, isAdmin, requestedEmployeeId) {
+function activeEmployee(db, user, isAdmin, requestedEmployeeId, currentEmployeeId = null) {
+  // Admin sửa kỳ xăng cũ của nhân viên đã nghỉ: giữ nguyên người phụ trách.
+  if (isAdmin && currentEmployeeId !== null && Number(requestedEmployeeId) === currentEmployeeId) {
+    return { id: currentEmployeeId };
+  }
   const employee = isAdmin
     ? db
         .prepare('SELECT id FROM employees WHERE id = ? AND is_active = 1')

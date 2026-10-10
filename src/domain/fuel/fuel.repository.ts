@@ -82,11 +82,12 @@ export const fuelRepository = {
 	estimateRoute: (
 		from: string,
 		to: string,
+		forceRefresh = false,
 	): Promise<{ km: number; source: string; estimated: boolean }> =>
 		api(
 			"POST",
 			"/api/fuel/route-estimate",
-			{ from, to },
+			{ from, to, forceRefresh },
 			{ timeoutMs: 30_000 },
 		),
 	savePrice: (input: Omit<FuelPrice, "id">): Promise<FuelPrice> =>

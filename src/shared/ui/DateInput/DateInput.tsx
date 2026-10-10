@@ -95,8 +95,19 @@ export function DateInput({
 			)
 				setOpen(false);
 		};
+		// Esc chỉ đóng lịch. Bắt ở pha capture và chặn lan tiếp, để hộp thoại
+		// chứa ô ngày (ví dụ phiếu cước đang nhập) không đóng theo và mất dữ liệu.
+		const closeOnEscape = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.stopPropagation();
+			setOpen(false);
+		};
 		document.addEventListener("mousedown", close);
-		return () => document.removeEventListener("mousedown", close);
+		document.addEventListener("keydown", closeOnEscape, true);
+		return () => {
+			document.removeEventListener("mousedown", close);
+			document.removeEventListener("keydown", closeOnEscape, true);
+		};
 	}, [open]);
 	const year = view.getFullYear(),
 		month = view.getMonth();

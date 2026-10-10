@@ -11,7 +11,7 @@ export interface Entry {
 	spec: string;
 	ticketFee: number;
 	transportFee: number;
-	/** Cước đang thiết lập trong bảng giá; null khi không tìm thấy mức phù hợp. */
+	/** Giá chuẩn chốt lúc lưu phiếu; null khi lúc đó chưa có mức phù hợp trong bảng cước. */
 	standardTransportFee: number | null;
 	gateFee: number;
 	otherFeeName: string;

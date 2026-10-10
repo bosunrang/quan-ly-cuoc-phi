@@ -4,6 +4,11 @@ const { canSeeEveryone } = require('../permissions.cjs');
 const { badRequest, isIsoDate, localIsoDate } = require('../http.cjs');
 
 const PAGE = 'dashboard';
+// Chênh lệch so với giá chuẩn đã chốt trên phiếu, cùng nguồn với báo cáo
+// chênh lệch nhà xe: sửa bảng cước không làm đổi số liệu các tháng đã qua.
+const VARIANCE_WHERE =
+  'e.standard_transport_fee IS NOT NULL AND e.transport_fee <> e.standard_transport_fee';
+
 function readPeriod(query) {
   const today = localIsoDate();
   const defaultFrom = `${today.slice(0, 7)}-01`;
@@ -69,32 +74,21 @@ function register(router) {
       .get(...fuelWhere.params);
     const variance = c.db
       .prepare(
-        `SELECT COUNT(*) AS entries, COALESCE(SUM(ABS(e.transport_fee - r.transport_fee)), 0) AS amount
+        `SELECT COUNT(*) AS entries,
+         COALESCE(SUM(ABS(e.transport_fee - e.standard_transport_fee)), 0) AS amount
        FROM entries e
-       INNER JOIN carrier_customer_rates r ON r.id = (
-         SELECT id FROM carrier_customer_rates
-          WHERE customer_id = e.customer_id AND carrier_id = e.carrier_id
-            AND (spec_key = e.spec_key OR is_default = 1)
-          ORDER BY is_default ASC, id LIMIT 1
-       )
-       WHERE ${entryWhere.sql} AND e.transport_fee <> r.transport_fee`,
+       WHERE ${entryWhere.sql} AND ${VARIANCE_WHERE}`,
       )
       .get(...entryWhere.params);
     const monthlyVariance = c.db
       .prepare(
         `SELECT substr(e.entry_date, 1, 7) AS month,
-         COALESCE(SUM(r.transport_fee), 0) AS standard_fee,
+         COALESCE(SUM(e.standard_transport_fee), 0) AS standard_fee,
          COALESCE(SUM(e.transport_fee), 0) AS actual_fee,
-         COALESCE(SUM(e.transport_fee - r.transport_fee), 0) AS difference,
+         COALESCE(SUM(e.transport_fee - e.standard_transport_fee), 0) AS difference,
          COUNT(*) AS entries
        FROM entries e
-       INNER JOIN carrier_customer_rates r ON r.id = (
-         SELECT id FROM carrier_customer_rates
-          WHERE customer_id = e.customer_id AND carrier_id = e.carrier_id
-            AND (spec_key = e.spec_key OR is_default = 1)
-          ORDER BY is_default ASC, id LIMIT 1
-       )
-       WHERE ${entryWhere.sql} AND e.transport_fee <> r.transport_fee
+       WHERE ${entryWhere.sql} AND ${VARIANCE_WHERE}
        GROUP BY substr(e.entry_date, 1, 7)
        ORDER BY month ASC`,
       )
