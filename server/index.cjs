@@ -7,6 +7,8 @@ const { openDatabase, SCHEMA_VERSION } = require('./db.cjs');
 const { startAutomaticBackups } = require('./automatic-backup.cjs');
 const auth = require('./auth.cjs');
 const { writeAudit } = require('./audit.cjs');
+const { fetchPetrolimexPrices } = require('./fuel/online-prices.cjs');
+const { syncPetrolimexE10PriceWhenDue } = require('./fuel/price-sync.cjs');
 const { pagesForUser } = require('./permissions.cjs');
 const { isLocalRequest } = require('./client-address.cjs');
 const {
@@ -183,6 +185,9 @@ function createApp({ dbFile, staticRoot, allowDevLogin = false, automaticBackupD
     db,
     seeded,
     server,
+    syncFuelPrices() {
+      return syncPetrolimexE10PriceWhenDue(db, fetchPetrolimexPrices);
+    },
     listen(port, host) {
       return new Promise((resolve, reject) => {
         server.once('error', reject);

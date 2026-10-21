@@ -246,6 +246,10 @@ async function startBackend() {
     automaticBackupDir: path.join(dataDir, 'backups'),
   });
   const address = await backend.listen(company.port, '0.0.0.0');
+  // Cập nhật giá E10 Vùng 1 sau khi server đã sẵn sàng, không làm chậm cửa sổ app.
+  void backend.syncFuelPrices().catch((error) => {
+    console.warn('Chưa thể tự đồng bộ giá Xăng E10 Vùng 1:', error.message);
+  });
   origin = `http://127.0.0.1:${address.port}`;
   return address.port;
 }

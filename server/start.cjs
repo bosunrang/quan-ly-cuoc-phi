@@ -33,6 +33,10 @@ async function main() {
   });
 
   await app.listen(PORT, HOST);
+  // Không chặn việc khởi động nếu Petrolimex đang tạm thời không phản hồi.
+  void app.syncFuelPrices().catch((error) => {
+    console.warn('Chưa thể tự đồng bộ giá Xăng E10 Vùng 1:', error.message);
+  });
   console.log(`${COMPANY.name}: server đang chạy tại http://localhost:${PORT}`);
   if (API_ONLY) console.log('Chế độ API nội bộ: giao diện chỉ chạy qua Vite.');
 

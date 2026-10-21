@@ -14,6 +14,7 @@ const {
 } = require('../fuel/calculation.cjs');
 const { estimateRoute } = require('../fuel/routes.cjs');
 const { fetchPetrolimexPrices } = require('../fuel/online-prices.cjs');
+const { syncPetrolimexE10PriceWhenDue } = require('../fuel/price-sync.cjs');
 const {
   activeEmployee,
   consumptionProfiles,
@@ -41,6 +42,13 @@ function register(router) {
   router.get('/api/fuel', async (c) => {
     c.requirePage(PAGE);
     const isAdmin = canSeeEveryone(c.user);
+    // Đồng bộ trước khi trả màn hình. Nếu Petrolimex tạm lỗi, người dùng vẫn
+    // dùng được mốc giá đã lưu gần nhất.
+    try {
+      await syncPetrolimexE10PriceWhenDue(c.db, fetchPetrolimexPrices);
+    } catch {
+      // Giá online là tiện ích bổ sung, không được làm màn tính xăng bị lỗi.
+    }
     return listFuelData(c.db, c.user, isAdmin, c.query, FUEL_TYPES);
   });
 
