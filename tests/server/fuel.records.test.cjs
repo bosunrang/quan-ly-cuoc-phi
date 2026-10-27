@@ -135,6 +135,73 @@ test('năm nhà xe cùng bến chỉ tính một chặng xăng', () => {
   );
 });
 
+test('ghép lộ trình có tên nhà xe khi điểm giao chỉ lưu phần địa chỉ', () => {
+  const deliveries = deliveryRows([
+    {
+      entry_date: '2026-10-19',
+      carrier: 'X.E Việt Nam',
+      carrier_delivery_point: 'Phố Nguyễn Quốc Trị, Khu đô thị Nam Trung Yên',
+      rate_variance_note: '',
+      duplicate_reason: '',
+      bill_status: 'Có bill',
+    },
+  ]);
+  const details = dailyDetailRows(deliveries, [
+    {
+      periodFrom: '2026-10-19',
+      periodTo: '2026-10-19',
+      distanceKm: 3,
+      fuelPrice: 20_000,
+      totalFee: 20_000,
+      legs: [
+        {
+          from: 'Minh Dũng, 70 Nguyễn Hoàng',
+          to: 'X.E Việt Nam, Phố Nguyễn Quốc Trị, Khu đô thị Nam Trung Yên',
+          km: 3,
+        },
+      ],
+    },
+  ]);
+
+  assert.equal(details.length, 1);
+  assert.equal(details[0].delivery.entry.carrier, 'X.E Việt Nam');
+  assert.equal(
+    details[0].fuelLeg.to,
+    'X.E Việt Nam, Phố Nguyễn Quốc Trị, Khu đô thị Nam Trung Yên',
+  );
+});
+
+test('sắp xếp chung ngày giao hàng và ngày chỉ có lộ trình xăng', () => {
+  const deliveries = deliveryRows(
+    ['2026-10-20', '2026-10-26', '2026-10-27'].map((entry_date) => ({
+      entry_date,
+      carrier: 'Nhà xe A',
+      rate_variance_note: '',
+      duplicate_reason: '',
+      bill_status: 'Có bill',
+    })),
+  );
+  const fuels = ['2026-10-19', '2026-10-22', '2026-10-23'].map((periodFrom) => ({
+    periodFrom,
+    periodTo: periodFrom,
+    distanceKm: 10,
+    fuelPrice: 20_000,
+    totalFee: 20_000,
+    legs: [{ from: 'Kho', to: 'Điểm giao', km: 10 }],
+  }));
+
+  const details = dailyDetailRows(deliveries, fuels);
+
+  assert.deepEqual(
+    details.filter((row) => row.entryDate).map((row) => row.entryDate),
+    ['19/10/2026', '20/10/2026', '22/10/2026', '23/10/2026', '26/10/2026', '27/10/2026'],
+  );
+  assert.deepEqual(
+    details.filter((row) => row.dayNumber).map((row) => row.dayNumber),
+    [1, 2, 3, 4, 5, 6],
+  );
+});
+
 test('kỳ tính xăng không có phiếu giao vẫn có STT và ngày', () => {
   const details = dailyDetailRows(
     [],

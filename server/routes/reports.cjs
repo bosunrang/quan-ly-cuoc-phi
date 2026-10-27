@@ -780,9 +780,11 @@ function routeDestinationCarrierKey(value) {
   return normalizeSearchText(String(value || '').split(',', 1)[0]);
 }
 
-function deliveryRouteKey(delivery) {
-  return routeDestinationCarrierKey(
-    delivery.entry.carrier_delivery_point || delivery.entry.carrier,
+function deliveryRouteKeys(delivery) {
+  return new Set(
+    [delivery.entry.carrier_delivery_point, delivery.entry.carrier]
+      .map(routeDestinationCarrierKey)
+      .filter(Boolean),
   );
 }
 
@@ -827,7 +829,7 @@ function detailRowsForFuels(fuelRows, deliveries = []) {
       const matches = carrierKey
         ? deliveries.filter(
             (delivery) =>
-              unmatchedDeliveries.has(delivery) && deliveryRouteKey(delivery) === carrierKey,
+              unmatchedDeliveries.has(delivery) && deliveryRouteKeys(delivery).has(carrierKey),
           )
         : [];
       const matchedDeliveries = matches.length ? matches : [null];
@@ -867,11 +869,7 @@ function dailyFuelSummary(fuelRows, rowCount) {
 
 function dailyDetailRows(deliveries, fuels) {
   const remainingFuels = [...fuels];
-  const rows = [];
-  let nextDayNumber = deliveries.reduce(
-    (largest, delivery) => Math.max(largest, number(delivery.dayNumber)),
-    0,
-  );
+  const dayBlocks = [];
   for (let offset = 0; offset < deliveries.length; ) {
     const firstDelivery = deliveries[offset];
     const groupSize = firstDelivery.isGroupStart ? firstDelivery.groupSize : 1;
@@ -885,14 +883,15 @@ function dailyDetailRows(deliveries, fuels) {
     }
     const fuelSummary = dailyFuelSummary(fuelRows, dayRows.length);
     dayRows.forEach((row, index) => {
-      rows.push({
+      dayRows[index] = {
         ...row,
-        dayNumber: index === 0 ? firstDelivery.dayNumber : null,
+        dayNumber: null,
         entryDate: index === 0 ? firstDelivery.entryDate : null,
         daySpan: index === 0 ? dayRows.length : null,
         ...(index === 0 ? fuelSummary : {}),
-      });
+      };
     });
+    dayBlocks.push({ date, rows: dayRows });
   }
   while (remainingFuels.length) {
     const firstFuel = remainingFuels.shift();
@@ -910,20 +909,27 @@ function dailyDetailRows(deliveries, fuels) {
         }
       }
     }
-    nextDayNumber += 1;
     const fuelDate = formatDate(firstFuel.periodFrom);
     const dayRows = detailRowsForFuels(sameDayFuels);
     const fuelSummary = dailyFuelSummary(sameDayFuels, dayRows.length);
     dayRows.forEach((row, index) => {
-      rows.push({
+      dayRows[index] = {
         ...row,
-        dayNumber: index === 0 ? nextDayNumber : null,
+        dayNumber: null,
         entryDate: index === 0 ? fuelDate : null,
         daySpan: index === 0 ? dayRows.length : null,
         ...(index === 0 ? fuelSummary : {}),
-      });
+      };
     });
+    dayBlocks.push({ date: firstFuel.periodFrom, rows: dayRows });
   }
+  dayBlocks.sort((left, right) => left.date.localeCompare(right.date));
+  const rows = dayBlocks.flatMap((block, index) =>
+    block.rows.map((row, rowIndex) => ({
+      ...row,
+      dayNumber: rowIndex === 0 ? index + 1 : null,
+    })),
+  );
   return rows.length ? rows : [{ delivery: null, fuelRow: null, fuelSpan: 1 }];
 }
 
