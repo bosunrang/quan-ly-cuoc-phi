@@ -12,7 +12,6 @@ type EmployeeReportFilters = {
 	to: string;
 	employeeId?: string;
 	type: "daily";
-	extraCosts?: Array<{ name: string; amount: string; employeeId?: string }>;
 };
 
 function employeeReportQuery(filters: EmployeeReportFilters): URLSearchParams {
@@ -22,9 +21,6 @@ function employeeReportQuery(filters: EmployeeReportFilters): URLSearchParams {
 		type: filters.type,
 	});
 	if (filters.employeeId) query.set("employeeId", filters.employeeId);
-	if (filters.extraCosts?.length) {
-		query.set("extraCosts", JSON.stringify(filters.extraCosts));
-	}
 	return query;
 }
 

@@ -81,6 +81,7 @@ describe("chuyển phiếu sang dữ liệu biểu mẫu", () => {
 			otherFee: 0,
 			totalFee: 385_000,
 			note: "",
+			generalNote: "Giao buổi sáng",
 			rateVarianceNote: "",
 			duplicateReason: "",
 			billStatus: "Có bill",
@@ -98,6 +99,7 @@ describe("chuyển phiếu sang dữ liệu biểu mẫu", () => {
 		expect(input).not.toHaveProperty("createdBy");
 		expect(input).not.toHaveProperty("totalFee");
 		expect(input.customer).toBe("Công ty ABC");
+		expect(input.generalNote).toBe("Giao buổi sáng");
 	});
 });
 

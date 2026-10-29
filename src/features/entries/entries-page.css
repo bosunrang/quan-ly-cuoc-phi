@@ -144,8 +144,6 @@
 .entry-list-table td { height: 62px; vertical-align: middle; white-space: normal; }
 .entry-list-table td strong { color: var(--text-strong); }
 .entry-list-table .entry-money { color: var(--text-strong); font-weight: 750; font-variant-numeric: tabular-nums; text-align: center; }
-.entry-other-cost { display: grid; gap: 2px; justify-items: center; }
-.entry-other-cost small { max-width: 100%; overflow: hidden; color: var(--muted); font: var(--type-caption) var(--sans); text-overflow: ellipsis; white-space: nowrap; }
 .entry-list-table .entry-money.is-over-rate { color: var(--status-danger-text); }
 .entry-list-table .entry-money.is-under-rate { color: var(--text-success); }
 .entry-note-heading,

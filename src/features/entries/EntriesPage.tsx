@@ -249,7 +249,7 @@ export function EntriesPage() {
 										<th>Bill</th>
 										<th>Cước phí</th>
 										<th>Phí vào cổng</th>
-										<th>Chi phí khác</th>
+										<th className="entry-note-heading">Ghi chú</th>
 										<th>Thao tác</th>
 									</tr>
 								</thead>
@@ -314,17 +314,8 @@ export function EntriesPage() {
 												<td className="entry-money">
 													{entry.gateFee ? formatMoney(entry.gateFee) : "—"}
 												</td>
-												<td className="entry-money">
-													{entry.otherFee ? (
-														<span className="entry-other-cost">
-															<small>
-																{entry.otherFeeName || "Chi phí khác"}
-															</small>
-															{formatMoney(entry.otherFee)}
-														</span>
-													) : (
-														"—"
-													)}
+												<td className="entry-note-cell">
+													{entry.generalNote || "—"}
 												</td>
 												<td>
 													{canEdit || canDelete ? (

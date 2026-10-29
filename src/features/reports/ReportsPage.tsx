@@ -3,10 +3,8 @@ import {
 	ArrowUpRight,
 	Download,
 	FileSpreadsheet,
-	Plus,
 	Printer,
 	ReceiptText,
-	Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type {
@@ -17,18 +15,11 @@ import { reportRepository } from "../../domain/reports/report.repository";
 import { formatDate, formatMoney, todayIso } from "../../shared/lib/format";
 import { Alert } from "../../shared/ui/Alert";
 import { DateInput } from "../../shared/ui/DateInput/DateInput";
-import { MoneyInput } from "../../shared/ui/MoneyInput";
 import { EmptyState, LoadingState, PanelHeader } from "../../shared/ui/Panel";
 import { printableReportHtml } from "./print-report";
 import "./reports.css";
 import { Pagination } from "../../shared/ui/Pagination";
 
-type ExtraCost = {
-	id: number;
-	name: string;
-	amount: string;
-	employeeId: string;
-};
 const REPORT_FROM_DRAFT_KEY = "cuocphi.report-from-draft";
 const REPORT_TO_DRAFT_KEY = "cuocphi.report-to-draft";
 
@@ -72,9 +63,6 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 	const [carrierEmployeeId, setCarrierEmployeeId] = useState("");
 	const [carrierPage, setCarrierPage] = useState(1);
 	const [dailyEmployeeId, setDailyEmployeeId] = useState("");
-	const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([
-		{ id: 1, name: "", amount: "", employeeId: "" },
-	]);
 	const [data, setData] = useState<ReportData | null>(null);
 	const [variance, setVariance] = useState<CarrierVarianceReport | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -126,13 +114,6 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 			to,
 			employeeId,
 			type: "daily" as const,
-			extraCosts: extraCosts.map(
-				({ name, amount, employeeId: assignedEmployeeId }) => ({
-					name,
-					amount,
-					employeeId: assignedEmployeeId,
-				}),
-			),
 		};
 	};
 	const exportFile = async () => {
@@ -219,24 +200,6 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 		} finally {
 			setExportingCarrier(false);
 		}
-	};
-	const updateExtraCost = (
-		id: number,
-		field: "name" | "amount" | "employeeId",
-		value: string,
-	) => {
-		setExtraCosts((current) =>
-			current.map((item) =>
-				item.id === id ? { ...item, [field]: value } : item,
-			),
-		);
-	};
-	const removeExtraCost = (id: number) => {
-		setExtraCosts((current) =>
-			current.length === 1
-				? [{ id: 1, name: "", amount: "", employeeId: "" }]
-				: current.filter((item) => item.id !== id),
-		);
 	};
 	const rememberFrom = (value: string) => {
 		setFrom(value);
@@ -373,77 +336,6 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 									onChange={rememberTo}
 								/>
 							</div>
-						</div>
-						<div className="report-extra-cost-list">
-							{extraCosts.map((item, index) => (
-								<div
-									className={`report-extra-cost${!selectedDailyEmployeeId ? " is-assigned" : ""}`}
-									key={item.id}
-								>
-									{!selectedDailyEmployeeId && (
-										<label className="field report-extra-cost-employee">
-											Chi phí khác (nhân viên)
-											<select
-												value={item.employeeId}
-												onChange={(event) =>
-													updateExtraCost(
-														item.id,
-														"employeeId",
-														event.target.value,
-													)
-												}
-											>
-												<option value="">Chọn nhân viên</option>
-												{reportData.employees.map((employee) => (
-													<option value={employee.id} key={employee.id}>
-														{employee.fullName}
-													</option>
-												))}
-											</select>
-										</label>
-									)}
-									<label className="field">
-										{index === 0 ? "Tên chi phí khác" : "Tên chi phí"}
-										<input
-											value={item.name}
-											onChange={(event) =>
-												updateExtraCost(item.id, "name", event.target.value)
-											}
-											placeholder="Ví dụ: Tiền Grab, tiền ăn..."
-										/>
-									</label>
-									<div className="field">
-										<span>Số tiền</span>
-										<MoneyInput
-											value={Number(item.amount.replace(/\D/g, "")) || 0}
-											onValueChange={(value) =>
-												updateExtraCost(item.id, "amount", String(value))
-											}
-											placeholder="Nhập số tiền (đ)"
-										/>
-									</div>
-									<button
-										className="row-action is-danger report-extra-cost-remove"
-										type="button"
-										onClick={() => removeExtraCost(item.id)}
-										aria-label="Xóa chi phí khác"
-									>
-										<Trash2 size={16} />
-									</button>
-								</div>
-							))}
-							<button
-								className="button secondary report-extra-cost-add"
-								type="button"
-								onClick={() =>
-									setExtraCosts((current) => [
-										...current,
-										{ id: Date.now(), name: "", amount: "", employeeId: "" },
-									])
-								}
-							>
-								<Plus size={16} /> Thêm chi phí
-							</button>
 						</div>
 						<div className="report-card-footer">
 							<span>

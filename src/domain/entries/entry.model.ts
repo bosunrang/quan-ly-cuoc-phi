@@ -19,6 +19,8 @@ export interface Entry {
 	/** Máy chủ tự cộng các khoản phí, giao diện không tự tính. */
 	totalFee: number;
 	note: string;
+	/** Ghi chú tự do của phiếu, tách biệt với danh sách sản phẩm MISA. */
+	generalNote: string;
 	rateVarianceNote: string;
 	duplicateReason: string;
 	billStatus: BillStatus;
@@ -57,6 +59,7 @@ export interface EntryInput {
 	otherFeeName: string;
 	otherFee: number;
 	note: string;
+	generalNote: string;
 	rateVarianceNote: string;
 	/** Chỉ bắt buộc khi trùng ngày gửi và khách hàng. */
 	duplicateReason: string;
@@ -210,6 +213,7 @@ export function emptyEntryInput(entryDate: string): EntryInput {
 		otherFeeName: "",
 		otherFee: 0,
 		note: "",
+		generalNote: "",
 		rateVarianceNote: "",
 		duplicateReason: "",
 		billStatus: "",
@@ -236,6 +240,7 @@ export function toEntryInput(entry: Entry): EntryInput {
 		otherFeeName: entry.otherFeeName,
 		otherFee: entry.otherFee,
 		note: entry.note,
+		generalNote: entry.generalNote,
 		rateVarianceNote: entry.rateVarianceNote,
 		duplicateReason: entry.duplicateReason,
 		billStatus: entry.billStatus,

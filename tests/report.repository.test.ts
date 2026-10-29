@@ -11,13 +11,12 @@ const mockedApi = vi.mocked(api);
 describe("bộ lọc xuất báo cáo", () => {
 	beforeEach(() => mockedApi.mockClear());
 
-	it("Excel và PDF gửi cùng ngày, nhân viên và chi phí khác lên máy chủ", async () => {
+	it("Excel và PDF gửi cùng ngày và nhân viên lên máy chủ", async () => {
 		const filters = {
 			from: "2026-10-01",
 			to: "2026-10-03",
 			employeeId: "12",
 			type: "daily" as const,
-			extraCosts: [{ name: "Grab", amount: "45000", employeeId: "12" }],
 		};
 		await reportRepository.export(filters);
 		await reportRepository.print(filters);
@@ -32,7 +31,6 @@ describe("bộ lọc xuất báo cáo", () => {
 				to: filters.to,
 				type: filters.type,
 				employeeId: filters.employeeId,
-				extraCosts: JSON.stringify(filters.extraCosts),
 			}),
 		);
 	});

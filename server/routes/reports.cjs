@@ -99,37 +99,6 @@ function reportCatalog(db, employeeId = null) {
   };
 }
 
-function extraCosts(query) {
-  const raw = String(query.extraCosts ?? '').trim();
-  const legacy = raw ? [] : [{ name: query.extraCostName, amount: query.extraCostAmount }];
-  let values = legacy;
-  if (raw) {
-    try {
-      values = JSON.parse(raw);
-    } catch {
-      throw badRequest('Danh sách chi phí khác không hợp lệ.');
-    }
-  }
-  if (!Array.isArray(values) || values.length > 20)
-    throw badRequest('Danh sách chi phí khác không hợp lệ.');
-  return values
-    .map((item) => {
-      const name = String(item?.name ?? '').trim();
-      const rawAmount = String(item?.amount ?? '').trim();
-      if (!name && !rawAmount) return null;
-      if (!name) throw badRequest('Vui lòng nhập tên chi phí khác.');
-      const amount = Number(rawAmount.replace(/[^\d]/g, ''));
-      if (!Number.isFinite(amount) || amount <= 0)
-        throw badRequest('Số tiền chi phí khác phải lớn hơn 0.');
-      const employeeId = String(item?.employeeId ?? '').trim();
-      if (employeeId && (!Number.isInteger(Number(employeeId)) || Number(employeeId) < 1)) {
-        throw badRequest('Nhân viên chịu chi phí khác không hợp lệ.');
-      }
-      return { name, amount, employeeId: employeeId ? Number(employeeId) : null };
-    })
-    .filter(Boolean);
-}
-
 function fuelHistoryFilters(query) {
   const from = String(query.from ?? '').trim();
   const to = String(query.to ?? '').trim();
@@ -604,15 +573,13 @@ function employeeCosts(data, employeeId) {
   );
   const transport = rows.reduce((sum, row) => sum + number(row.transport_fee), 0);
   const gate = rows.reduce((sum, row) => sum + number(row.gate_fee), 0);
-  const other = rows.reduce((sum, row) => sum + number(row.other_fee), 0);
   return {
     rows,
     transport,
     gate,
-    other,
     fuelOther,
     fuel,
-    total: transport + gate + other + fuelOther + fuel,
+    total: transport + gate + fuelOther + fuel,
   };
 }
 
@@ -939,13 +906,12 @@ function billStatusValue(status) {
   return null;
 }
 
-function dailySheet(data, input, employee, extras) {
+function dailySheet(data, input, employee) {
   const ws = XLSX.utils.aoa_to_sheet([]);
   const {
     rows: entries,
     transport,
     gate,
-    other,
     fuelOther,
     fuel,
     total,
@@ -1121,11 +1087,9 @@ function dailySheet(data, input, employee, extras) {
       .map((item) => item.name)
       .filter(Boolean)
       .join(' / ');
-    const entryExtraCost = number(delivery?.entry.other_fee);
-    const entryExtraNote = String(delivery?.entry.other_fee_name ?? '').trim();
-    const totalExtraCost = routeExtraCost + entryExtraCost;
+    const totalExtraCost = routeExtraCost;
     set(ws, `Q${excelRow}`, totalExtraCost || '-', totalExtraCost ? dailyMoney : dailyCentered);
-    const finalNote = [delivery?.noteValue, entryExtraNote, routeExtraNote]
+    const finalNote = [delivery?.noteValue, delivery?.entry.general_note, routeExtraNote]
       .map((value) => String(value ?? '').trim())
       .filter(Boolean)
       .filter((value, index, values) => values.indexOf(value) === index)
@@ -1156,6 +1120,9 @@ function dailySheet(data, input, employee, extras) {
     const groupSize = delivery.carrierGroupSize;
     const groupExtras = detailExtras.slice(index, index + groupSize);
     const totalExtraCost = groupExtras.reduce((sum, item) => sum + item.totalExtraCost, 0);
+    const hasEntryGeneralNote = details
+      .slice(index, index + groupSize)
+      .some((item) => String(item.delivery?.entry.general_note ?? '').trim());
     const finalNote = groupExtras
       .map((item) => item.finalNote)
       .filter(Boolean)
@@ -1164,9 +1131,11 @@ function dailySheet(data, input, employee, extras) {
     const startRow = detailStartRow + index;
     const lastRow = startRow + groupSize - 1;
     set(ws, `Q${startRow}`, totalExtraCost || '-', totalExtraCost ? dailyMoney : dailyCentered);
-    set(ws, `R${startRow}`, finalNote || '-', dailyCentered);
     merge(ws, `Q${startRow}:Q${lastRow}`);
-    merge(ws, `R${startRow}:R${lastRow}`);
+    if (!hasEntryGeneralNote) {
+      set(ws, `R${startRow}`, finalNote || '-', dailyCentered);
+      merge(ws, `R${startRow}:R${lastRow}`);
+    }
   });
   const summaryRow = detailStartRow + detailRows + 1;
   const summaryLabel = {
@@ -1190,17 +1159,12 @@ function dailySheet(data, input, employee, extras) {
   };
   addSummary(summaryRow, 'Cước vận chuyển', transport);
   addSummary(summaryRow + 1, 'Phí vào cổng', gate);
-  const otherTotal = other + fuelOther;
+  const otherTotal = fuelOther;
   const otherRowOffset = otherTotal > 0 ? 1 : 0;
   addSummary(summaryRow + 2, 'Tiền xăng', fuel);
   if (otherRowOffset) addSummary(summaryRow + 3, 'Chi phí khác', otherTotal);
-  extras.forEach((extra, index) => {
-    const row = summaryRow + 3 + otherRowOffset + index;
-    addSummary(row, extra.name, extra.amount);
-  });
-  const grandTotalRow = summaryRow + 3 + otherRowOffset + extras.length;
-  const extraTotal = extras.reduce((sum, item) => sum + item.amount, 0);
-  addSummary(grandTotalRow, 'TỔNG TIỀN', total + extraTotal, true);
+  const grandTotalRow = summaryRow + 3 + otherRowOffset;
+  addSummary(grandTotalRow, 'TỔNG TIỀN', total, true);
   const signDateRow = grandTotalRow + 2;
   const signRow = grandTotalRow + 3;
   const signature = {
@@ -1230,7 +1194,7 @@ function dailySheet(data, input, employee, extras) {
   return ws;
 }
 
-function dailySummarySheet(data, input, employees, extras) {
+function dailySummarySheet(data, input, employees) {
   const ws = XLSX.utils.aoa_to_sheet([]);
   const summaryBaseStyle = { ...baseStyle, font: { name: 'Times New Roman', sz: 12 } };
   const summaryCentered = {
@@ -1251,13 +1215,7 @@ function dailySummarySheet(data, input, employees, extras) {
   const rows = employees.map((employee) => ({
     employee,
     ...employeeCosts(data, employee.id),
-    extra: extras
-      .filter((item) => item.employeeId === employee.id)
-      .reduce((sum, item) => sum + item.amount, 0),
   }));
-  rows.forEach((row) => {
-    row.totalPayment = row.total + row.extra;
-  });
   ws['!cols'] = [
     { wch: 7.5 },
     { wch: 28 },
@@ -1315,8 +1273,8 @@ function dailySummarySheet(data, input, employees, extras) {
       row.transport,
       row.gate,
       row.fuel,
-      row.other + row.fuelOther + row.extra,
-      row.totalPayment,
+      row.fuelOther,
+      row.total,
     ];
     values.forEach((value, column) => {
       set(
@@ -1333,8 +1291,8 @@ function dailySummarySheet(data, input, employees, extras) {
       transport: sum.transport + row.transport,
       gate: sum.gate + row.gate,
       fuel: sum.fuel + row.fuel,
-      extra: sum.extra + row.other + row.fuelOther + row.extra,
-      total: sum.total + row.totalPayment,
+      extra: sum.extra + row.fuelOther,
+      total: sum.total + row.total,
     }),
     { transport: 0, gate: 0, fuel: 0, extra: 0, total: 0 },
   );
@@ -1556,19 +1514,6 @@ function uniqueSheetName(name, used) {
   return candidate;
 }
 
-function validateExtraCostAssignments(extras, selectedEmployees, selectedEmployeeId) {
-  const selectedIds = new Set(selectedEmployees.map((employee) => Number(employee.id)));
-  if (selectedEmployeeId) {
-    if (extras.some((item) => item.employeeId && item.employeeId !== selectedEmployeeId)) {
-      throw badRequest('Chi phí khác không thuộc nhân viên đang xuất báo cáo.');
-    }
-    return;
-  }
-  if (extras.some((item) => !item.employeeId || !selectedIds.has(item.employeeId))) {
-    throw badRequest('Vui lòng chọn nhân viên chịu phí cho từng chi phí khác.');
-  }
-}
-
 function carrierVarianceSheet(items, input) {
   const ws = XLSX.utils.aoa_to_sheet([]);
   ws['!cols'] = [
@@ -1667,34 +1612,20 @@ function carrierVarianceSheet(items, input) {
 }
 
 /** Một workbook duy nhất phục vụ cả tải Excel và in PDF. */
-function employeeReportWorkbook(data, input, selected, extras, type) {
+function employeeReportWorkbook(data, input, selected, type) {
   const workbook = XLSX.utils.book_new();
   // Chỉ còn bảng kê theo khoảng ngày; báo cáo năm đã được bỏ.
   if (type === 'daily') {
     if (!selected.length) throw badRequest('Không có nhân viên để xuất báo cáo.');
-    validateExtraCostAssignments(extras, selected, input.employeeId);
     if (input.employeeId) {
-      XLSX.utils.book_append_sheet(
-        workbook,
-        dailySheet(data, input, selected[0], extras),
-        'Bảng kê cước',
-      );
+      XLSX.utils.book_append_sheet(workbook, dailySheet(data, input, selected[0]), 'Bảng kê cước');
     } else {
-      XLSX.utils.book_append_sheet(
-        workbook,
-        dailySummarySheet(data, input, selected, extras),
-        'Tổng hợp',
-      );
+      XLSX.utils.book_append_sheet(workbook, dailySummarySheet(data, input, selected), 'Tổng hợp');
       const usedNames = new Set(workbook.SheetNames);
       for (const employee of selected) {
         XLSX.utils.book_append_sheet(
           workbook,
-          dailySheet(
-            data,
-            input,
-            employee,
-            extras.filter((item) => item.employeeId === employee.id),
-          ),
+          dailySheet(data, input, employee),
           uniqueSheetName(employee.full_name, usedNames),
         );
       }
@@ -1807,12 +1738,11 @@ function register(router) {
     c.requirePage(EMPLOYEE_PAGE);
     const input = reportInputForUser(c.db, c.user, filters(c.query));
     const type = String(c.query.type ?? 'daily');
-    const extras = type === 'daily' ? extraCosts(c.query) : [];
     const data = reportData(c.db, input);
     const selected = input.employeeId
       ? data.employees.filter((item) => item.id === input.employeeId)
       : data.employees;
-    const workbook = employeeReportWorkbook(data, input, selected, extras, type);
+    const workbook = employeeReportWorkbook(data, input, selected, type);
     const contentBase64 = landscapeWorkbookBase64(workbook);
     const suffix = input.employeeId
       ? `Bảng kê ${selected[0].full_name} từ ${formatFileDate(input.from)} đến ${formatFileDate(input.to)}`
@@ -1820,7 +1750,6 @@ function register(router) {
     writeAudit(c.db, c.user, 'report.export', 'report', null, {
       type,
       ...input,
-      extraCosts: extras,
       sheetCount: workbook.SheetNames.length,
     });
     return { fileName: `${suffix}.xlsx`, contentBase64 };
@@ -1829,26 +1758,21 @@ function register(router) {
     c.requirePage(EMPLOYEE_PAGE);
     const input = reportInputForUser(c.db, c.user, filters(c.query));
     const type = String(c.query.type ?? 'daily');
-    const extras = type === 'daily' ? extraCosts(c.query) : [];
     const data = reportData(c.db, input);
     const selected = input.employeeId
       ? data.employees.filter((item) => item.id === input.employeeId)
       : data.employees;
-    const workbook = employeeReportWorkbook(data, input, selected, extras, type);
+    const workbook = employeeReportWorkbook(data, input, selected, type);
     const sheets = workbook.SheetNames.map((name) =>
       worksheetForPrint(workbook.Sheets[name], name),
     );
     writeAudit(c.db, c.user, 'report.print', 'report', null, {
       type,
       ...input,
-      extraCosts: extras,
       sheetCount: sheets.length,
     });
     return { type, sheets };
   });
 }
 
-module.exports = {
-  register,
-  _test: { deliveryRows, dailyDetailRows, uniqueSheetName, validateExtraCostAssignments },
-};
+module.exports = { register, _test: { deliveryRows, dailyDetailRows, uniqueSheetName } };

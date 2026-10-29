@@ -143,9 +143,6 @@ export function EntryDialog({
 	const [rate, setRate] = useState<EntryRate | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [showFieldErrors, setShowFieldErrors] = useState(false);
-	const [otherFeeActive, setOtherFeeActive] = useState(
-		Boolean(initial.otherFee || initial.otherFeeName),
-	);
 	const [duplicateDetected, setDuplicateDetected] = useState(
 		Boolean(initial.duplicateReason),
 	);
@@ -1014,49 +1011,22 @@ export function EntryDialog({
 						/>
 					)}
 				</Field>
-				<Field
-					label="Chi phí khác"
-					error={fieldError(
-						Boolean(form.otherFeeName.trim()) && form.otherFee === 0,
-						"Vui lòng nhập số tiền chi phí khác.",
-					)}
-				>
-					{(id) => (
-						<MoneyInput
-							id={id}
-							value={form.otherFee}
-							placeholder="Để trống nếu không có chi phí"
-							onFocus={() => setOtherFeeActive(true)}
-							onValueChange={(otherFee) =>
-								setForm((current) => ({ ...current, otherFee }))
-							}
-						/>
-					)}
-				</Field>
-			</FieldGrid>
-			{otherFeeActive && (
-				<Field
-					label="Tên chi phí khác"
-					error={fieldError(
-						form.otherFee > 0 && !form.otherFeeName.trim(),
-						"Vui lòng nhập tên chi phí khác.",
-					)}
-				>
+				<Field label="Ghi chú">
 					{(id) => (
 						<input
 							id={id}
-							value={form.otherFeeName}
-							placeholder="Ví dụ: Tiền ăn, gửi xe, Grab..."
+							value={form.generalNote}
+							placeholder="Nhập ghi chú nếu cần"
 							onChange={(event) =>
 								setForm((current) => ({
 									...current,
-									otherFeeName: event.target.value,
+									generalNote: event.target.value,
 								}))
 							}
 						/>
 					)}
 				</Field>
-			)}
+			</FieldGrid>
 			{transportOverRate && (
 				<div className="entry-rate-warning">
 					<AlertCircle size={17} />

@@ -9,6 +9,27 @@ const PAGE = 'dashboard';
 const VARIANCE_WHERE =
   'e.standard_transport_fee IS NOT NULL AND e.transport_fee <> e.standard_transport_fee';
 
+/** Chỉ nhận khoản phát sinh hợp lệ đã lưu tại thẻ tính giá xăng. */
+function fuelExtraTotal(value) {
+  try {
+    const items = JSON.parse(value || '[]');
+    if (!Array.isArray(items)) return 0;
+    return items.reduce((sum, item) => {
+      const amount = Number(item?.amount);
+      return Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
+    }, 0);
+  } catch {
+    return 0;
+  }
+}
+
+/** total_fee gồm cả khoản phát sinh; tách ra để Tổng quan không cộng hai lần. */
+function fuelCosts(record) {
+  const total = Number(record.total_fee) || 0;
+  const other = fuelExtraTotal(record.extra_costs);
+  return { fuel: Math.max(0, total - other), other };
+}
+
 function readPeriod(query) {
   const today = localIsoDate();
   const defaultFrom = `${today.slice(0, 7)}-01`;
@@ -62,16 +83,17 @@ function register(router) {
     const entrySummary = c.db
       .prepare(
         `SELECT COUNT(*) AS entries, COALESCE(SUM(e.transport_fee), 0) AS transport,
-       COALESCE(SUM(e.gate_fee), 0) AS gate, COALESCE(SUM(e.other_fee), 0) AS other,
+       COALESCE(SUM(e.gate_fee), 0) AS gate,
        COUNT(DISTINCT e.customer) AS customers
        FROM entries e WHERE ${entryWhere.sql}`,
       )
       .get(...entryWhere.params);
-    const fuelSummary = c.db
+    const fuelRecords = c.db
       .prepare(
-        `SELECT COALESCE(SUM(f.total_fee), 0) AS fuel FROM fuel_records f WHERE ${fuelWhere.sql}`,
+        `SELECT f.entry_date AS day, f.total_fee, f.extra_costs
+         FROM fuel_records f WHERE ${fuelWhere.sql}`,
       )
-      .get(...fuelWhere.params);
+      .all(...fuelWhere.params);
     const variance = c.db
       .prepare(
         `SELECT COUNT(*) AS entries,
@@ -111,7 +133,7 @@ function register(router) {
     for (const row of c.db
       .prepare(
         `SELECT e.entry_date AS day, COALESCE(SUM(e.transport_fee), 0) AS transport,
-       COALESCE(SUM(e.gate_fee), 0) AS gate, COALESCE(SUM(e.other_fee), 0) AS other
+       COALESCE(SUM(e.gate_fee), 0) AS gate
        FROM entries e WHERE ${entryWhere.sql} GROUP BY e.entry_date`,
       )
       .all(...entryWhere.params)) {
@@ -119,16 +141,13 @@ function register(router) {
         day: row.day,
         transport: Number(row.transport),
         gate: Number(row.gate),
-        other: Number(row.other),
+        other: 0,
         fuel: 0,
       });
     }
-    for (const row of c.db
-      .prepare(
-        `SELECT f.entry_date AS day, COALESCE(SUM(f.total_fee), 0) AS fuel
-       FROM fuel_records f WHERE ${fuelWhere.sql} GROUP BY f.entry_date`,
-      )
-      .all(...fuelWhere.params)) {
+    let fuel = 0;
+    let other = 0;
+    for (const row of fuelRecords) {
       const current = daily.get(row.day) ?? {
         day: row.day,
         transport: 0,
@@ -136,13 +155,15 @@ function register(router) {
         other: 0,
         fuel: 0,
       };
-      current.fuel = Number(row.fuel);
+      const costs = fuelCosts(row);
+      current.fuel += costs.fuel;
+      current.other += costs.other;
+      fuel += costs.fuel;
+      other += costs.other;
       daily.set(row.day, current);
     }
     const transport = Number(entrySummary.transport);
     const gate = Number(entrySummary.gate);
-    const other = Number(entrySummary.other);
-    const fuel = Number(fuelSummary.fuel);
     return {
       scope: canSeeEveryone(c.user) ? 'all' : 'own',
       period,

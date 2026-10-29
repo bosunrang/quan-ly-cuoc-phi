@@ -9,7 +9,7 @@ const XLSX = require('xlsx-js-style');
 const { strFromU8, unzipSync } = require('fflate');
 const { createApp } = require('../../server/index.cjs');
 const {
-  _test: { deliveryRows, dailyDetailRows, uniqueSheetName, validateExtraCostAssignments },
+  _test: { deliveryRows, dailyDetailRows, uniqueSheetName },
 } = require('../../server/routes/reports.cjs');
 
 let app;
@@ -286,35 +286,6 @@ test('tên sheet báo cáo được làm sạch và không trùng nhau', () => {
   assert.notEqual(firstLongName, secondLongName);
 });
 
-test('chi phí khác chỉ được cộng cho đúng nhân viên trên báo cáo', () => {
-  const employees = [{ id: 10 }, { id: 20 }];
-  assert.doesNotThrow(() =>
-    validateExtraCostAssignments(
-      [{ name: 'Tiền ăn', amount: 50_000, employeeId: null }],
-      [employees[0]],
-      10,
-    ),
-  );
-  assert.throws(
-    () =>
-      validateExtraCostAssignments(
-        [{ name: 'Tiền ăn', amount: 50_000, employeeId: 20 }],
-        [employees[0]],
-        10,
-      ),
-    /không thuộc nhân viên đang xuất báo cáo/,
-  );
-  assert.throws(
-    () =>
-      validateExtraCostAssignments(
-        [{ name: 'Tiền ăn', amount: 50_000, employeeId: null }],
-        employees,
-        null,
-      ),
-    /chọn nhân viên chịu phí/,
-  );
-});
-
 test('gợi ý lộ trình gồm khách hàng chưa lưu địa chỉ', async () => {
   const customer = await call('POST', '/api/customers', {
     customerName: 'Y Tế Ben Kin',
@@ -584,13 +555,22 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
     otherFeeName: 'Phí giao ngoài giờ',
     otherFee: 2_500,
     note: '300 TT + 100 Gene-HBVax',
+    generalNote: 'Giao tại cổng sau',
     rateVarianceNote: 'Khách yêu cầu giao gấp',
     billStatus: 'Không bill',
     employeeId: employee.data.id,
   });
   assert.equal(entry.status, 200);
 
-  for (const [recipient, product, duplicateReason, billStatus, otherFeeName, otherFee] of [
+  for (const [
+    recipient,
+    product,
+    duplicateReason,
+    billStatus,
+    otherFeeName,
+    otherFee,
+    generalNote,
+  ] of [
     [
       'Điểm giao thứ hai',
       '200 sản phẩm B',
@@ -598,8 +578,9 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
       'Có bill',
       'Phí chờ bốc',
       1_000,
+      'Để hàng ở sảnh.',
     ],
-    ['Điểm giao thứ ba', '300 sản phẩm C', 'Cùng ngày có nhiều điểm giao', 'Không bill', '', 0],
+    ['Điểm giao thứ ba', '300 sản phẩm C', 'Cùng ngày có nhiều điểm giao', 'Không bill', '', 0, ''],
   ]) {
     const extraEntry = await call('POST', '/api/entries', {
       entryDate: '2026-10-03',
@@ -615,6 +596,7 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
       otherFeeName,
       otherFee,
       note: product,
+      generalNote,
       rateVarianceNote: '',
       duplicateReason,
       billStatus,
@@ -706,8 +688,8 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   assert.equal(printCells.get('N12').value, '30,0');
   assert.equal(printCells.get('O12').value, '20.000');
   assert.equal(printCells.get('P12').value, '96.000');
-  assert.equal(printCells.get('Q12').value, '9.500');
-  assert.equal(printCells.get('C21').value, '259.500');
+  assert.equal(printCells.get('Q12').value, '7.000');
+  assert.equal(printCells.get('C21').value, '256.000');
   for (const mergeRange of sheet['!merges']) {
     const address = XLSX.utils.encode_cell(mergeRange.s);
     const cell = printCells.get(address);
@@ -779,10 +761,11 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   assert.equal(sheet.H14.v, '300 sản phẩm C');
   assert.equal(sheet.O12.v, 20_000);
   assert.equal(sheet.P12.v, 96_000);
-  assert.equal(sheet.Q12.v, 9_500);
-  assert.equal(sheet.R12.v, 'Khách yêu cầu giao gấp / Phí giao ngoài giờ / Gửi xe');
-  assert.equal(sheet.Q13.v, 1_000);
-  assert.equal(sheet.R13.v, 'Cùng ngày có nhiều điểm giao / Phí chờ bốc');
+  assert.equal(sheet.Q12.v, 7_000);
+  assert.equal(sheet.R12.v, 'Khách yêu cầu giao gấp / Giao tại cổng sau / Gửi xe');
+  assert.equal(sheet.Q13.v, '-');
+  assert.equal(sheet.R13.v, 'Cùng ngày có nhiều điểm giao / Để hàng ở sảnh.');
+  assert.equal(sheet.R14.v, '-');
   assert.doesNotMatch(sheet.R12.v, /bill/i);
   assert.doesNotMatch(sheet.R13.v, /bill/i);
   for (const column of [14, 15]) {
@@ -809,13 +792,13 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   }
   assert.equal(
     sheet['!merges'].some(
-      (item) => item.s.c === 16 && item.s.r === 12 && item.e.c === 16 && item.e.r === 13,
+      (item) => item.s.c === 17 && item.s.r === 12 && item.e.c === 17 && item.e.r === 13,
     ),
-    true,
+    false,
   );
   assert.equal(
     sheet['!merges'].some(
-      (item) => item.s.c === 17 && item.s.r === 12 && item.e.c === 17 && item.e.r === 13,
+      (item) => item.s.c === 16 && item.s.r === 12 && item.e.c === 16 && item.e.r === 13,
     ),
     true,
   );
@@ -848,8 +831,8 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   assert.equal(sheet.C17.v, 140_000);
   assert.equal(sheet.C18.v, 10_000);
   assert.equal(sheet.C19.v, 96_000);
-  assert.equal(sheet.C20.v, 13_500);
-  assert.equal(sheet.C21.v, 259_500);
+  assert.equal(sheet.C20.v, 10_000);
+  assert.equal(sheet.C21.v, 256_000);
   assert.equal(sheet.P23.v, 'Ngày… tháng…năm….');
   assert.equal(sheet.A24.v, 'Giám Đốc Duyệt');
   assert.equal(sheet.F24.v, 'Kế Toán Trưởng');

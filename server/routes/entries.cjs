@@ -72,6 +72,7 @@ function readEntryInput(body) {
     otherFeeName,
     otherFee,
     note: text(body.note, 'sản phẩm', { max: 1000, required: true }),
+    generalNote: text(body.generalNote, 'ghi chú', { max: 1000 }),
     rateVarianceNote: text(body.rateVarianceNote, 'lý do chênh lệch cước', { max: 1000 }),
     duplicateReason: text(body.duplicateReason, 'lý do nhập trùng', { max: 1000 }),
     billStatus: billStatus(body.billStatus),
@@ -389,6 +390,7 @@ function toApi(row, user) {
     otherFee: row.other_fee,
     totalFee: Number(row.total_fee) + Number(row.other_fee),
     note: row.note,
+    generalNote: row.general_note,
     rateVarianceNote: row.rate_variance_note,
     duplicateReason: row.duplicate_reason,
     billStatus: row.bill_status || '',
@@ -731,9 +733,9 @@ function register(router) {
         .prepare(
           `INSERT INTO entries
              (entry_date, customer, carrier, recipient, address, spec,
-              ticket_fee, transport_fee, gate_fee, other_fee_name, other_fee, note, rate_variance_note, duplicate_reason, bill_status, misa_document_date, misa_document_code, employee_id,
+              ticket_fee, transport_fee, gate_fee, other_fee_name, other_fee, note, general_note, rate_variance_note, duplicate_reason, bill_status, misa_document_date, misa_document_code, employee_id,
               customer_id, carrier_id, standard_transport_fee, created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.entryDate,
@@ -748,6 +750,7 @@ function register(router) {
           input.otherFeeName,
           input.otherFee,
           input.note,
+          input.generalNote,
           input.rateVarianceNote,
           input.duplicateReason,
           input.billStatus,
@@ -807,7 +810,7 @@ function register(router) {
           `UPDATE entries SET
              entry_date = ?, customer = ?, carrier = ?, recipient = ?,
              address = ?, spec = ?, ticket_fee = ?, transport_fee = ?,
-             gate_fee = ?, other_fee_name = ?, other_fee = ?, note = ?, rate_variance_note = ?, duplicate_reason = ?, bill_status = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?,
+             gate_fee = ?, other_fee_name = ?, other_fee = ?, note = ?, general_note = ?, rate_variance_note = ?, duplicate_reason = ?, bill_status = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?,
              customer_id = ?, carrier_id = ?, standard_transport_fee = ?, updated_at = ?
            WHERE id = ?`,
         )
@@ -824,6 +827,7 @@ function register(router) {
           input.otherFeeName,
           input.otherFee,
           input.note,
+          input.generalNote,
           input.rateVarianceNote,
           input.duplicateReason,
           input.billStatus,

@@ -1578,6 +1578,36 @@ describe('nhân viên thấy phiếu được giao nhưng chỉ quản lý phi�
 });
 
 describe('kiểm tra dữ liệu đầu vào', () => {
+  test('lưu và sửa ghi chú tự do của phiếu', async () => {
+    const delivery = await configureStaffRate('Đơn vị có ghi chú tự do');
+    const created = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: newEntry({
+        entryDate: '2026-09-29',
+        customer: delivery.customer.customerName,
+        carrier: delivery.carrier.name,
+        spec: 'Tất cả',
+        recipient: '',
+        generalNote: 'Gọi trước khi giao hàng.',
+      }),
+    });
+    assert.equal(created.status, 200);
+    assert.equal(created.data.generalNote, 'Gọi trước khi giao hàng.');
+
+    const updated = await call('PATCH', `/api/entries/${created.data.id}`, {
+      token: staffAToken,
+      body: newEntry({
+        entryDate: '2026-09-29',
+        customer: delivery.customer.customerName,
+        carrier: delivery.carrier.name,
+        spec: 'Tất cả',
+        generalNote: 'Giao tại kho phụ.',
+      }),
+    });
+    assert.equal(updated.status, 200);
+    assert.equal(updated.data.generalNote, 'Giao tại kho phụ.');
+  });
+
   test('lưu và sửa chi phí khác trong tổng tiền phiếu', async () => {
     const delivery = await configureStaffRate('Đơn vị có chi phí phát sinh');
     const created = await call('POST', '/api/entries', {

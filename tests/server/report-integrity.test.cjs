@@ -351,3 +351,43 @@ test('kỳ xăng vắt qua hai tháng được tính ở tháng kết thúc, kh�
   assert.equal(edited.status, 200, JSON.stringify(edited.data));
   assert.equal(edited.data.totalFee, 22000);
 });
+
+test('Tổng quan chỉ lấy chi phí khác từ kỳ tính xăng', async () => {
+  const employee = await createEmployee('Nhân viên Tổng quan Chi phí khác');
+  await createEntry({
+    entryDate: '2026-10-10',
+    customer: 'Khách chi phí khác',
+    employeeId: employee.id,
+    transportFee: 10_000,
+    otherFeeName: 'Khoản cũ theo phiếu',
+    otherFee: 9_000,
+  });
+  const fuel = await call('POST', '/api/fuel/records', {
+    body: fuelBody({
+      employeeId: employee.id,
+      periodFrom: '2026-10-10',
+      periodTo: '2026-10-10',
+      extraCosts: [{ name: 'Gửi xe', amount: 5_000, legIndex: 0 }],
+    }),
+  });
+  assert.equal(fuel.status, 200);
+  assert.equal(fuel.data.totalFee, 25_000);
+
+  const dashboard = await call(
+    'GET',
+    `/api/dashboard?from=2026-10-01&to=2026-10-31&employeeId=${employee.id}`,
+  );
+  assert.equal(dashboard.status, 200);
+  assert.equal(dashboard.data.summary.transport, 10_000);
+  assert.equal(dashboard.data.summary.fuel, 20_000);
+  assert.equal(dashboard.data.summary.other, 5_000);
+  assert.equal(dashboard.data.summary.total, 35_000);
+  assert.deepEqual(dashboard.data.daily[0], {
+    day: '2026-10-10',
+    transport: 10_000,
+    gate: 0,
+    other: 5_000,
+    fuel: 20_000,
+    total: 35_000,
+  });
+});
