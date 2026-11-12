@@ -11,6 +11,7 @@ const assert = require('node:assert/strict');
 const { mkdtempSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
+const XLSX = require('xlsx-js-style');
 
 const { createApp } = require('../../server/index.cjs');
 
@@ -219,6 +220,165 @@ test('sửa, xóa bảng cước hay xóa nhà xe không đổi chênh lệch c�
   assert.equal(variance.data.items[0].difference, 25000);
   dashboard = await call('GET', `/api/dashboard?${septemberRange}`);
   assert.equal(dashboard.data.summary.varianceEntries, 1);
+});
+
+test('cước theo số lượng khớp giữa phiếu, chênh lệch, Tổng quan, Excel và bản in', async () => {
+  const employee = await createEmployee('Nhân viên cước theo số lượng');
+  const customer = (
+    await call('POST', '/api/customers', {
+      body: { customerName: 'Khách cước theo số lượng' },
+    })
+  ).data;
+  const carrier = (
+    await call('POST', '/api/carriers', {
+      body: { name: 'Xe cước theo số lượng' },
+    })
+  ).data;
+  await call('PATCH', `/api/carriers/${carrier.id}/customers`, {
+    body: { customerIds: [customer.id] },
+  });
+  const ratePath = `/api/carriers/${carrier.id}/customers/${customer.id}/rates`;
+  const rate = (
+    await call('POST', ratePath, {
+      body: { isDefault: true, transportFee: 50_000, gateFee: 10_000 },
+    })
+  ).data;
+  const input = entryBody({
+    entryDate: '2026-12-01',
+    employeeId: employee.id,
+    customerId: customer.id,
+    customer: customer.customerName,
+    carrierId: carrier.id,
+    carrier: carrier.name,
+    spec: 'Tất cả',
+    quantity: 5,
+    transportUnitFee: 50_000,
+    transportFee: 1, // Máy chủ phải tự tính lại, không tin tổng tiền từ trình duyệt.
+    gateFee: 10_000,
+  });
+  const range = `from=2026-12-01&to=2026-12-31&employeeId=${employee.id}`;
+  const created = await call('POST', '/api/entries', { body: input });
+  assert.equal(created.status, 200, JSON.stringify(created.data));
+  const id = created.data.id;
+  assert.equal(created.data.transportUnitFee, 50_000);
+  assert.equal(created.data.transportFee, 250_000);
+  assert.equal(created.data.totalFee, 260_000);
+  assert.equal(created.data.standardTransportFee, 50_000);
+  let variance = await call('GET', `/api/reports/carrier-variance?${range}`);
+  assert.equal(variance.data.summary.entries, 0);
+  let dashboard = await call('GET', `/api/dashboard?${range}`);
+  assert.equal(dashboard.data.summary.transport, 250_000);
+  assert.equal(dashboard.data.summary.total, 260_000);
+  assert.equal(dashboard.data.summary.varianceAmount, 0);
+  assert.equal(dashboard.data.daily[0].transport, 250_000);
+
+  // Cách nhập tổng cước cũ 250k cho 5 thùng cũng so với giá chuẩn 250k.
+  const legacy = await call('POST', '/api/entries', {
+    body: { ...input, transportUnitFee: null, transportFee: 250_000 },
+  });
+  assert.equal(legacy.status, 200, JSON.stringify(legacy.data));
+  assert.equal(legacy.data.transportFee, 250_000);
+  assert.equal(legacy.data.transportUnitFee, null);
+  assert.equal(
+    (await call('GET', `/api/reports/carrier-variance?${range}`)).data.summary.entries,
+    0,
+  );
+  await call('DELETE', `/api/entries/${legacy.data.id}`);
+
+  const missingReason = await call('PATCH', `/api/entries/${id}`, {
+    body: { ...input, transportUnitFee: 60_000 },
+  });
+  assert.equal(missingReason.status, 400);
+  const increased = { ...input, transportUnitFee: 60_000, rateVarianceNote: 'Phụ thu mỗi thùng' };
+  const updated = await call('PATCH', `/api/entries/${id}`, { body: increased });
+  assert.equal(updated.status, 200, JSON.stringify(updated.data));
+  assert.equal(updated.data.transportFee, 300_000);
+  assert.equal(updated.data.totalFee, 310_000);
+  variance = await call('GET', `/api/reports/carrier-variance?${range}`);
+  assert.equal(variance.data.items[0].standardFee, 250_000);
+  assert.equal(variance.data.items[0].actualFee, 300_000);
+  assert.equal(variance.data.items[0].difference, 50_000);
+  assert.equal(variance.data.summary.overAmount, 50_000);
+  dashboard = await call('GET', `/api/dashboard?${range}`);
+  assert.equal(dashboard.data.summary.varianceAmount, 50_000);
+  assert.equal(dashboard.data.monthlyVariance[0].standardFee, 250_000);
+  assert.equal(dashboard.data.monthlyVariance[0].difference, 50_000);
+  const list = await call('GET', `/api/entries?${range}`);
+  assert.equal(list.data.items[0].transportUnitFee, 60_000);
+  assert.equal(list.data.total, 310_000);
+
+  const exported = await call('GET', `/api/reports/carrier-variance/export?${range}`);
+  const workbook = XLSX.read(Buffer.from(exported.data.contentBase64, 'base64'), {
+    type: 'buffer',
+  });
+  const sheet = workbook.Sheets['Chênh lệch cước'];
+  assert.equal(sheet.H5.v, 250_000);
+  assert.equal(sheet.I5.v, 300_000);
+  assert.equal(sheet.J5.v, 50_000);
+  const dailyExport = await call('GET', `/api/reports/export?${range}&type=daily`);
+  assert.equal(dailyExport.status, 200);
+  const dailyWorkbook = XLSX.read(Buffer.from(dailyExport.data.contentBase64, 'base64'), {
+    type: 'buffer',
+  });
+  const dailyCells = Object.values(dailyWorkbook.Sheets[dailyWorkbook.SheetNames[0]]);
+  assert.ok(dailyCells.some((cell) => cell?.v === 300_000));
+  assert.ok(dailyCells.some((cell) => cell?.v === 50_000));
+  const print = await call('GET', `/api/reports/print?${range}&type=daily`);
+  assert.equal(print.status, 200);
+  const cells = sheetCells(print.data.sheets[0]);
+  assert.ok(cells.includes('300.000'));
+  assert.ok(cells.includes('50.000'));
+
+  const backup = await call('GET', '/api/settings/backup');
+  const backupEntry = backup.data.data.entries.find((row) => row.id === id);
+  assert.equal(backupEntry.transport_unit_fee, 60_000);
+  const restored = await call('POST', '/api/settings/backup/restore', {
+    body: { backup: backup.data },
+  });
+  assert.equal(restored.status, 200);
+  assert.equal(
+    app.db.prepare('SELECT transport_unit_fee FROM entries WHERE id = ?').get(id)
+      .transport_unit_fee,
+    60_000,
+  );
+
+  const decreased = await call('PATCH', `/api/entries/${id}`, {
+    body: { ...input, quantity: 2, transportUnitFee: 40_000 },
+  });
+  assert.equal(decreased.status, 200);
+  assert.equal(decreased.data.transportFee, 80_000);
+  variance = await call('GET', `/api/reports/carrier-variance?${range}`);
+  assert.equal(variance.data.items[0].standardFee, 100_000);
+  assert.equal(variance.data.summary.underAmount, 20_000);
+
+  // Lưu bảng giá chỉ lưu đơn giá 60k, không lưu thành tiền 300k.
+  const savedRate = await call('PATCH', `/api/entries/${id}`, {
+    body: { ...increased, saveCarrierRate: true },
+  });
+  assert.equal(savedRate.status, 200);
+  assert.equal(savedRate.data.standardTransportFee, 60_000);
+  const rates = await call(
+    'GET',
+    `/api/entries/rates?customerId=${customer.id}&carrierId=${carrier.id}`,
+  );
+  assert.equal(rates.data.items[0].transportFee, 60_000);
+  await call('PATCH', `${ratePath}/${rate.id}`, {
+    body: { isDefault: true, transportFee: 70_000, gateFee: 10_000 },
+  });
+  const changedQuantity = await call('PATCH', `/api/entries/${id}`, {
+    body: { ...increased, quantity: 2 },
+  });
+  assert.equal(changedQuantity.status, 200);
+  assert.equal(changedQuantity.data.transportFee, 120_000);
+  assert.equal(changedQuantity.data.standardTransportFee, 60_000);
+  assert.equal(
+    (await call('GET', `/api/reports/carrier-variance?${range}`)).data.summary.entries,
+    0,
+  );
+  const tooLarge = await call('POST', '/api/entries', {
+    body: { ...input, quantity: 100_000_000 },
+  });
+  assert.equal(tooLarge.status, 400);
 });
 
 test('khôi phục backup cũ chưa có giá chuẩn trên phiếu thì chốt theo bảng cước trong backup', async () => {

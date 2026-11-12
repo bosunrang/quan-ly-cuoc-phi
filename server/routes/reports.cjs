@@ -310,8 +310,8 @@ const CARRIER_VARIANCE_PAGE_SIZE = 50;
 
 function carrierVarianceSource(input) {
   const where = [
-    'e.standard_transport_fee IS NOT NULL',
-    'e.transport_fee <> e.standard_transport_fee',
+    '(e.standard_transport_fee * COALESCE(e.quantity, 1)) IS NOT NULL',
+    'e.transport_fee <> (e.standard_transport_fee * COALESCE(e.quantity, 1))',
   ];
   const params = [];
   if (!input.all) {
@@ -345,8 +345,8 @@ function carrierVariance(db, input, page = null) {
        SELECT e.id, e.entry_date, em.full_name AS employee_name,
          COALESCE(ca.name, e.carrier) AS carrier,
          COALESCE(cu.customer_name, e.customer) AS customer, e.customer_key,
-         e.spec, e.standard_transport_fee AS standard_fee, e.transport_fee AS actual_fee,
-         e.transport_fee - e.standard_transport_fee AS difference, e.rate_variance_note,
+         e.spec, (e.standard_transport_fee * COALESCE(e.quantity, 1)) AS standard_fee, e.transport_fee AS actual_fee,
+         e.transport_fee - (e.standard_transport_fee * COALESCE(e.quantity, 1)) AS difference, e.rate_variance_note,
          ROW_NUMBER() OVER (
            ORDER BY COALESCE(ca.name, e.carrier) COLLATE NOCASE,
              COALESCE(cu.customer_name, e.customer) COLLATE NOCASE, e.entry_date ASC, e.id ASC
@@ -384,13 +384,13 @@ function carrierVarianceSummary(db, input) {
   const row = db
     .prepare(
       `SELECT COUNT(*) AS entries,
-       COALESCE(SUM(e.transport_fee - e.standard_transport_fee), 0) AS difference,
-       COALESCE(SUM(e.transport_fee > e.standard_transport_fee), 0) AS over_entries,
-       COALESCE(SUM(CASE WHEN e.transport_fee > e.standard_transport_fee
-         THEN e.transport_fee - e.standard_transport_fee ELSE 0 END), 0) AS over_amount,
-       COALESCE(SUM(e.transport_fee < e.standard_transport_fee), 0) AS under_entries,
-       COALESCE(SUM(CASE WHEN e.transport_fee < e.standard_transport_fee
-         THEN e.standard_transport_fee - e.transport_fee ELSE 0 END), 0) AS under_amount
+       COALESCE(SUM(e.transport_fee - (e.standard_transport_fee * COALESCE(e.quantity, 1))), 0) AS difference,
+       COALESCE(SUM(e.transport_fee > (e.standard_transport_fee * COALESCE(e.quantity, 1))), 0) AS over_entries,
+       COALESCE(SUM(CASE WHEN e.transport_fee > (e.standard_transport_fee * COALESCE(e.quantity, 1))
+         THEN e.transport_fee - (e.standard_transport_fee * COALESCE(e.quantity, 1)) ELSE 0 END), 0) AS over_amount,
+       COALESCE(SUM(e.transport_fee < (e.standard_transport_fee * COALESCE(e.quantity, 1))), 0) AS under_entries,
+       COALESCE(SUM(CASE WHEN e.transport_fee < (e.standard_transport_fee * COALESCE(e.quantity, 1))
+         THEN (e.standard_transport_fee * COALESCE(e.quantity, 1)) - e.transport_fee ELSE 0 END), 0) AS under_amount
      ${source.sql}`,
     )
     .get(...source.params);
@@ -1013,7 +1013,8 @@ function dailySheet(data, input, employee) {
       const priceDifference =
         entry.standard_transport_fee == null
           ? null
-          : number(entry.transport_fee) - number(entry.standard_transport_fee);
+          : number(entry.transport_fee) -
+            number(entry.standard_transport_fee) * (entry.quantity ?? 1);
       const bill = billStatusValue(delivery.billStatus);
       const gateFee = number(entry.gate_fee);
       const displayDifference =

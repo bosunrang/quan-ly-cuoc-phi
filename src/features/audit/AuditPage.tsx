@@ -45,6 +45,8 @@ const detailLabels: Record<string, string> = {
 	recipient: "Người nhận",
 	address: "Địa chỉ giao hàng",
 	spec: "Quy cách",
+	quantity: "Số lượng",
+	transportUnitFee: "Đơn giá vận chuyển",
 	ticketFee: "Phí cước",
 	transportFee: "Cước vận chuyển",
 	gateFee: "Phí vào cổng",

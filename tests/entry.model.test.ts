@@ -6,6 +6,7 @@ import {
 	emptyEntryInput,
 	entryCarrierOptions,
 	entryRateOptions,
+	entryTransportFee,
 	toEntryInput,
 	validateEntry,
 } from "../src/domain/entries/entry.model";
@@ -18,13 +19,49 @@ const valid = {
 	address: "105 Hàm Nghi",
 	spec: "Thùng 20kg",
 	transportFee: 350_000,
+	transportUnitFee: null,
 	note: "20 thùng hàng",
 	billStatus: "Có bill" as const,
 };
 
 describe("kiểm tra phiếu cước", () => {
+	it("nhân đơn giá với số lượng, không nhân phí cổng và không tính lại tổng cước cũ", () => {
+		const input = {
+			...valid,
+			quantity: 5,
+			transportUnitFee: 50_000,
+			gateFee: 10_000,
+		};
+		expect(entryTransportFee(input)).toBe(250_000);
+		expect(validateEntry(input)).toBeNull();
+		expect(entryTransportFee({ ...input, quantity: 2 })).toBe(100_000);
+		expect(entryTransportFee({ ...input, quantity: null })).toBe(50_000);
+		expect(entryTransportFee({ ...input, transportUnitFee: null })).toBe(
+			350_000,
+		);
+		expect(validateEntry({ ...input, transportUnitFee: -1 })).toContain(
+			"Đơn giá",
+		);
+		expect(validateEntry({ ...input, transportUnitFee: 1.5 })).toContain(
+			"Đơn giá",
+		);
+		expect(validateEntry({ ...input, quantity: 100_000_000 })).toContain(
+			"giới hạn",
+		);
+	});
 	it("chấp nhận phiếu hợp lệ", () => {
 		expect(validateEntry(valid)).toBeNull();
+	});
+
+	it("mặc định số lượng là 1, cho phép bỏ trống và chỉ nhận số nguyên dương", () => {
+		expect(emptyEntryInput("2026-08-29").quantity).toBe(1);
+		expect(validateEntry({ ...valid, quantity: null })).toBeNull();
+		expect(validateEntry({ ...valid, quantity: 3 })).toBeNull();
+		for (const quantity of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+			expect(validateEntry({ ...valid, quantity })).toBe(
+				"Số lượng phải là số nguyên lớn hơn 0.",
+			);
+		}
 	});
 
 	it("từ chối ngày sai định dạng", () => {
@@ -73,6 +110,7 @@ describe("chuyển phiếu sang dữ liệu biểu mẫu", () => {
 			recipient: "Chị Lan",
 			address: "105 Hàm Nghi",
 			spec: "Thùng 20kg",
+			quantity: 3,
 			ticketFee: 20_000,
 			transportFee: 350_000,
 			standardTransportFee: 350_000,
@@ -100,6 +138,19 @@ describe("chuyển phiếu sang dữ liệu biểu mẫu", () => {
 		expect(input).not.toHaveProperty("totalFee");
 		expect(input.customer).toBe("Công ty ABC");
 		expect(input.generalNote).toBe("Giao buổi sáng");
+		expect(input.quantity).toBe(3);
+		// Phiếu cũ có tổng tiền không chia hết: giữ tổng gốc khi chỉ sửa ghi chú.
+		expect(input.transportUnitFee).toBeNull();
+		expect(entryTransportFee(input)).toBe(350_000);
+		const priced = toEntryInput({
+			...entry,
+			quantity: 5,
+			transportFee: 250_000,
+			transportUnitFee: 50_000,
+		});
+		expect(priced.transportUnitFee).toBe(50_000);
+		expect(entryTransportFee(priced)).toBe(250_000);
+		expect(entryTransportFee({ ...priced, quantity: 2 })).toBe(100_000);
 	});
 });
 

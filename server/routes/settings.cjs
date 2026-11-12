@@ -149,6 +149,8 @@ const BACKUP_TABLES = {
       'rate_variance_note',
       'duplicate_reason',
       'bill_status',
+      'quantity',
+      'transport_unit_fee',
       'customer_id',
       'carrier_id',
       'standard_transport_fee',
@@ -305,6 +307,9 @@ function importRows(db, name, rows, userId, knownUserIds) {
     if (name === 'entries') value.duplicate_reason ??= '';
     // Backup cũ chưa có thông tin hóa đơn vẫn khôi phục được.
     if (name === 'entries') value.bill_status ??= '';
+    // Backup cũ chưa có số lượng vẫn giữ trạng thái chưa xác định.
+    if (name === 'entries') value.quantity ??= null;
+    if (name === 'entries') value.transport_unit_fee ??= null;
     // Backup cũ chưa có chi phí khác thì xem như không phát sinh.
     if (name === 'entries') value.other_fee ??= 0;
     if (name === 'entries') value.other_fee_name ??= '';

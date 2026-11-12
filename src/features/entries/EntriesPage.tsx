@@ -35,6 +35,7 @@ interface EditorState {
 	editingId: number | null;
 	/** Tên nhân viên của phiếu đang sửa, kể cả khi người đó đã nghỉ. */
 	employeeName?: string | null;
+	standardTransportFee?: number | null;
 }
 
 const ENTRY_DATE_DRAFT_KEY = "cuocphi.entry-date-draft";
@@ -255,7 +256,10 @@ export function EntriesPage() {
 								</thead>
 								<tbody>
 									{data.items.map((entry) => {
-										const standardTransportFee = entry.standardTransportFee;
+										const standardTransportFee =
+											entry.standardTransportFee == null
+												? null
+												: entry.standardTransportFee * (entry.quantity ?? 1);
 										const rateDifference =
 											standardTransportFee == null
 												? null
@@ -331,6 +335,8 @@ export function EntriesPage() {
 																			initial: toEntryInput(entry),
 																			editingId: entry.id,
 																			employeeName: entry.employeeName,
+																			standardTransportFee:
+																				entry.standardTransportFee,
 																		})
 																	}
 																>
@@ -375,6 +381,7 @@ export function EntriesPage() {
 					initial={editor.initial}
 					editingId={editor.editingId}
 					employeeName={editor.employeeName}
+					standardTransportFee={editor.standardTransportFee}
 					formOptions={options}
 					onEntryDateChange={editor.editingId ? undefined : rememberEntryDate}
 					onSave={save}

@@ -9,9 +9,13 @@ export interface Entry {
 	recipient: string;
 	address: string;
 	spec: string;
+	quantity: number | null;
+	/** Đơn giá; null với phiếu cũ chỉ lưu tổng cước. */
+	transportUnitFee?: number | null;
 	ticketFee: number;
+	/** Thành tiền cước vận chuyển của cả phiếu. */
 	transportFee: number;
-	/** Giá chuẩn chốt lúc lưu phiếu; null khi lúc đó chưa có mức phù hợp trong bảng cước. */
+	/** Đơn giá chuẩn chốt lúc lưu phiếu; nhân số lượng khi đối chiếu thành tiền. */
 	standardTransportFee: number | null;
 	gateFee: number;
 	otherFeeName: string;
@@ -52,6 +56,10 @@ export interface EntryInput {
 	recipient: string;
 	address: string;
 	spec: string;
+	/** Số lượng theo quy cách; để trống khi chưa xác định. */
+	quantity: number | null;
+	/** Máy chủ nhân đơn giá với số lượng. Thiếu giá trị: giữ cách nhập tổng cước cũ. */
+	transportUnitFee?: number | null;
 	ticketFee: number;
 	transportFee: number;
 	gateFee: number;
@@ -207,6 +215,8 @@ export function emptyEntryInput(entryDate: string): EntryInput {
 		recipient: "",
 		address: "",
 		spec: "",
+		quantity: 1,
+		transportUnitFee: 0,
 		ticketFee: 0,
 		transportFee: 0,
 		gateFee: 0,
@@ -225,6 +235,8 @@ export function emptyEntryInput(entryDate: string): EntryInput {
 }
 
 export function toEntryInput(entry: Entry): EntryInput {
+	const quantity = entry.quantity ?? 1;
+	const unitFee = entry.transportFee / quantity;
 	return {
 		entryDate: entry.entryDate,
 		customerId: entry.customerId ?? undefined,
@@ -234,6 +246,9 @@ export function toEntryInput(entry: Entry): EntryInput {
 		recipient: entry.recipient,
 		address: entry.address,
 		spec: entry.spec,
+		quantity,
+		transportUnitFee:
+			entry.transportUnitFee ?? (Number.isInteger(unitFee) ? unitFee : null),
 		ticketFee: entry.ticketFee,
 		transportFee: entry.transportFee,
 		gateFee: entry.gateFee,
@@ -251,6 +266,13 @@ export function toEntryInput(entry: Entry): EntryInput {
 	};
 }
 
+/** Tiền cước thực tế; phí cổng và các phí khác được cộng một lần theo phiếu. */
+export function entryTransportFee(input: EntryInput): number {
+	return input.transportUnitFee == null
+		? input.transportFee
+		: input.transportUnitFee * (input.quantity ?? 1);
+}
+
 /**
  * Kiểm tra trước khi gửi để báo lỗi ngay tại biểu mẫu.
  * Máy chủ vẫn kiểm tra lại — đây chỉ là lớp tiện lợi cho người dùng.
@@ -266,22 +288,34 @@ export function validateEntry(
 	if (!input.customer.trim()) return "Vui lòng nhập tên khách hàng.";
 	if (!input.carrier.trim()) return "Vui lòng nhập nhà xe.";
 	if (!input.spec.trim()) return "Vui lòng nhập quy cách.";
+	if (
+		input.quantity != null &&
+		(!Number.isSafeInteger(input.quantity) || input.quantity <= 0)
+	)
+		return "Số lượng phải là số nguyên lớn hơn 0.";
 	if (!input.billStatus) return "Vui lòng chọn bill.";
 	if (!input.note.trim()) return "Vui lòng nhập sản phẩm.";
+	if (
+		input.transportUnitFee != null &&
+		(!Number.isSafeInteger(input.transportUnitFee) ||
+			input.transportUnitFee < 0)
+	)
+		return "Đơn giá vận chuyển phải là số nguyên không âm.";
+	const transportFee = entryTransportFee(input);
 	for (const [value, label] of [
 		[input.ticketFee, "Phí vé"],
-		[input.transportFee, "Cước vận chuyển"],
+		[transportFee, "Cước vận chuyển"],
 		[input.gateFee, "Phí cổng"],
 		[input.otherFee, "Chi phí khác"],
 	] as const) {
-		if (!Number.isInteger(value)) return `${label} phải là số nguyên.`;
+		if (!Number.isSafeInteger(value)) return `${label} phải là số nguyên.`;
 		if (value < 0) return `${label} không được âm.`;
+		if (value > 1_000_000_000_000) return `${label} vượt quá giới hạn.`;
 	}
 	if (input.otherFee > 0 && !input.otherFeeName.trim())
 		return "Vui lòng nhập tên chi phí khác.";
 	if (input.otherFeeName.trim() && input.otherFee === 0)
 		return "Vui lòng nhập số tiền chi phí khác.";
-	if (input.transportFee === 0)
-		return "Vui lòng nhập cước vận chuyển lớn hơn 0.";
+	if (transportFee === 0) return "Vui lòng nhập cước vận chuyển lớn hơn 0.";
 	return null;
 }

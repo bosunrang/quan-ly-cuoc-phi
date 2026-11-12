@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 43;
+const SCHEMA_VERSION = 45;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -839,6 +839,21 @@ function migrate(db) {
     `);
       // Phiếu cũ: chốt theo bảng cước đang có, là dữ liệu tốt nhất còn lại.
       backfillStandardTransportFees(db);
+    }
+
+    if (current < 44) {
+      db.exec(`
+      ALTER TABLE entries ADD COLUMN quantity INTEGER
+        CHECK (quantity IS NULL OR (typeof(quantity) = 'integer' AND quantity > 0 AND quantity <= 9007199254740991));
+    `);
+    }
+
+    if (current < 45) {
+      // transport_fee tiếp tục lưu thành tiền để giữ nguyên tiền trên phiếu cũ.
+      db.exec(`
+      ALTER TABLE entries ADD COLUMN transport_unit_fee INTEGER
+        CHECK (transport_unit_fee IS NULL OR transport_unit_fee >= 0);
+    `);
     }
 
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);

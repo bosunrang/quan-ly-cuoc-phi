@@ -3,6 +3,18 @@
 	scrollbar-gutter: stable;
 }
 
+.entry-dialog .entry-shipping-fields {
+	grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.entry-shipping-fields > .field:nth-child(-n + 2) {
+	grid-column: span 2;
+}
+
+.entry-dialog .entry-fee-fields {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .entry-dialog .field textarea.entry-product-textarea {
 	min-height: 36px;
 	overflow-y: hidden;
@@ -186,6 +198,10 @@
 	.entry-dialog .field-grid {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 12px;
+	}
+
+	.entry-shipping-fields > .field:nth-child(-n + 2) {
+		grid-column: auto;
 	}
 
 	.entry-dialog .field input,

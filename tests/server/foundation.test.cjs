@@ -1471,6 +1471,65 @@ describe('phân quyền thẻ', () => {
   });
 });
 
+test('số lượng được lưu, sửa, xóa và giữ qua backup; backup cũ vẫn khôi phục được', async () => {
+  const input = newEntry({ customer: 'Khách kiểm tra số lượng', quantity: 3 });
+  const created = await call('POST', '/api/entries', { token: adminToken, body: input });
+  assert.equal(created.status, 200);
+  assert.equal(created.data.quantity, 3);
+  assert.equal(created.data.totalFee, 215000);
+  const id = created.data.id;
+  try {
+    for (const quantity of [0, -1, 1.5, 'abc', Number.MAX_SAFE_INTEGER + 1]) {
+      const invalid = await call('PATCH', `/api/entries/${id}`, {
+        token: adminToken,
+        body: { ...input, quantity },
+      });
+      assert.equal(invalid.status, 400);
+    }
+    const updated = await call('PATCH', `/api/entries/${id}`, {
+      token: adminToken,
+      body: { ...input, quantity: 7 },
+    });
+    assert.equal(updated.status, 200);
+    assert.equal(updated.data.quantity, 7);
+    assert.equal(updated.data.totalFee, 215000);
+    const listed = await call('GET', '/api/entries?search=Khách kiểm tra số lượng', {
+      token: adminToken,
+    });
+    assert.equal(listed.data.items.find((item) => item.id === id).quantity, 7);
+
+    const exported = await call('GET', '/api/settings/backup', { token: adminToken });
+    const row = exported.data.data.entries.find((item) => item.id === id);
+    assert.equal(row.quantity, 7);
+    const restored = await call('POST', '/api/settings/backup/restore', {
+      token: adminToken,
+      body: { backup: exported.data },
+    });
+    assert.equal(restored.status, 200);
+    assert.equal(app.db.prepare('SELECT quantity FROM entries WHERE id = ?').get(id).quantity, 7);
+
+    delete row.quantity;
+    const restoredOld = await call('POST', '/api/settings/backup/restore', {
+      token: adminToken,
+      body: { backup: exported.data },
+    });
+    assert.equal(restoredOld.status, 200);
+    assert.equal(
+      app.db.prepare('SELECT quantity FROM entries WHERE id = ?').get(id).quantity,
+      null,
+    );
+
+    const cleared = await call('PATCH', `/api/entries/${id}`, {
+      token: adminToken,
+      body: { ...input, quantity: null },
+    });
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.data.quantity, null);
+  } finally {
+    await call('DELETE', `/api/entries/${id}`, { token: adminToken });
+  }
+});
+
 describe('nhân viên thấy phiếu được giao nhưng chỉ quản lý phiếu tự tạo', () => {
   test('nhân viên thấy cả phiếu tự nhập và phiếu Admin nhập giúp', async () => {
     const staffDelivery = await configureStaffRate('Khách của A');

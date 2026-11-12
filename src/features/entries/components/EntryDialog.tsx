@@ -12,6 +12,7 @@ import type {
 import {
 	entryCarrierOptions,
 	entryRateOptions,
+	entryTransportFee,
 	validateEntry,
 } from "../../../domain/entries/entry.model";
 import { entryRepository } from "../../../domain/entries/entry.repository";
@@ -29,6 +30,7 @@ interface Props {
 	editingId: number | null;
 	/** Tên nhân viên của phiếu đang sửa, để hiện đúng cả người đã nghỉ. */
 	employeeName?: string | null;
+	standardTransportFee?: number | null;
 	formOptions?: EntryFormOptions | null;
 	onEntryDateChange?: (entryDate: string) => void;
 	onSave: (input: EntryInput) => Promise<void>;
@@ -118,6 +120,7 @@ export function EntryDialog({
 	initial,
 	editingId,
 	employeeName = null,
+	standardTransportFee,
 	formOptions = null,
 	onEntryDateChange,
 	onSave,
@@ -321,7 +324,11 @@ export function EntryDialog({
 	);
 	const chooseRate = (nextRate: EntryRate | null) => {
 		setRate(nextRate);
-		setForm((current) => ({ ...current, spec: nextRate?.spec ?? "" }));
+		setForm((current) => ({
+			...current,
+			spec: nextRate?.spec ?? "",
+			transportUnitFee: nextRate?.transportFee ?? current.transportUnitFee,
+		}));
 	};
 
 	const loadOrders = async (id: number, date: string) => {
@@ -490,6 +497,7 @@ export function EntryDialog({
 		try {
 			await onSave({
 				...form,
+				transportFee: entryTransportFee(form),
 				customerId: customerId ?? undefined,
 				carrierId: carrierId ?? undefined,
 			});
@@ -500,10 +508,29 @@ export function EntryDialog({
 			throw cause;
 		}
 	};
-	const transportOverRate = Boolean(
-		rate && form.transportFee > rate.transportFee,
+	const transportTotal = entryTransportFee(form);
+	const keepSavedStandard = Boolean(
+		editingId &&
+			standardTransportFee !== undefined &&
+			!form.saveCarrierRate &&
+			(initial.customerId
+				? customerId === initial.customerId
+				: form.customer === initial.customer) &&
+			(initial.carrierId
+				? carrierId === initial.carrierId
+				: form.carrier === initial.carrier) &&
+			normalizeText(form.spec) === normalizeText(initial.spec),
 	);
-	const difference = rate ? form.transportFee - rate.transportFee : 0;
+	const standardUnitFee = keepSavedStandard
+		? standardTransportFee
+		: rate?.transportFee;
+	const standardTotal =
+		standardUnitFee == null ? null : standardUnitFee * (form.quantity ?? 1);
+	const transportOverRate =
+		!form.saveCarrierRate &&
+		standardTotal != null &&
+		transportTotal > standardTotal;
+	const difference = standardTotal == null ? 0 : transportTotal - standardTotal;
 	const fieldError = (invalid: boolean, message: string) =>
 		showFieldErrors && invalid ? message : undefined;
 	return (
@@ -766,7 +793,7 @@ export function EntryDialog({
 					/>
 				)}
 			</Field>
-			<FieldGrid>
+			<div className="field-grid entry-shipping-fields">
 				<Field
 					label="Nhà xe *"
 					error={fieldError(!form.carrier.trim(), "Vui lòng chọn nhà xe.")}
@@ -953,6 +980,33 @@ export function EntryDialog({
 					}
 				</Field>
 				<Field
+					label="Số lượng"
+					error={fieldError(
+						form.quantity != null &&
+							(!Number.isSafeInteger(form.quantity) || form.quantity <= 0),
+						"Số lượng phải là số nguyên lớn hơn 0.",
+					)}
+				>
+					{(id) => (
+						<input
+							id={id}
+							type="number"
+							inputMode="numeric"
+							min={1}
+							step={1}
+							value={form.quantity ?? ""}
+							placeholder="Số lượng"
+							onChange={(event) => {
+								const quantity = event.target.value;
+								setForm((current) => ({
+									...current,
+									quantity: quantity === "" ? null : Number(quantity),
+								}));
+							}}
+						/>
+					)}
+				</Field>
+				<Field
 					label="Bill *"
 					error={fieldError(!form.billStatus, "Vui lòng chọn bill.")}
 				>
@@ -973,28 +1027,52 @@ export function EntryDialog({
 						</select>
 					)}
 				</Field>
-			</FieldGrid>
-			{rate && (
+			</div>
+			{standardUnitFee != null && (
 				<div className="entry-rate-standard">
-					Cước chuẩn: <strong>{formatMoney(rate.transportFee)} đ</strong> · Phí
-					cổng chuẩn: <strong>{formatMoney(rate.gateFee)} đ</strong>
+					Cước chuẩn: {formatMoney(standardUnitFee)} đ × {form.quantity ?? 1}
+					{" = "}
+					<strong>{formatMoney(standardTotal ?? 0)} đ</strong>
+					{rate && (
+						<>
+							{" "}
+							· Phí cổng chuẩn: <strong>{formatMoney(rate.gateFee)} đ</strong>
+						</>
+					)}
 				</div>
 			)}
-			<FieldGrid>
+			<div className="field-grid entry-fee-fields">
 				<Field
-					label="Cước vận chuyển *"
+					label={
+						form.transportUnitFee == null
+							? "Tổng cước vận chuyển *"
+							: "Đơn giá vận chuyển *"
+					}
+					hint={
+						form.transportUnitFee == null
+							? "Phiếu cũ lưu tổng cước; nhập tổng tiền thực tế."
+							: "Cước cho 1 đơn vị quy cách"
+					}
 					error={fieldError(
-						form.transportFee === 0,
-						"Vui lòng nhập cước vận chuyển.",
+						transportTotal <= 0 ||
+							!Number.isSafeInteger(transportTotal) ||
+							transportTotal > 1_000_000_000_000,
+						transportTotal <= 0
+							? "Vui lòng nhập cước vận chuyển."
+							: "Thành tiền cước vượt quá giới hạn hợp lệ.",
 					)}
 				>
 					{(id) => (
 						<MoneyInput
 							id={id}
-							value={form.transportFee}
+							value={form.transportUnitFee ?? form.transportFee}
 							placeholder="Nhập cước vận chuyển"
-							onValueChange={(transportFee) =>
-								setForm((current) => ({ ...current, transportFee }))
+							onValueChange={(value) =>
+								setForm((current) =>
+									current.transportUnitFee == null
+										? { ...current, transportFee: value }
+										: { ...current, transportUnitFee: value },
+								)
 							}
 						/>
 					)}
@@ -1026,7 +1104,17 @@ export function EntryDialog({
 						/>
 					)}
 				</Field>
-			</FieldGrid>
+			</div>
+			<div className="entry-rate-standard">
+				Thành tiền cước:{" "}
+				{form.transportUnitFee != null && (
+					<>
+						{formatMoney(form.transportUnitFee)} đ × {form.quantity ?? 1}
+						{" = "}
+					</>
+				)}
+				<strong>{formatMoney(transportTotal)} đ</strong>
+			</div>
 			{transportOverRate && (
 				<div className="entry-rate-warning">
 					<AlertCircle size={17} />

@@ -42,6 +42,12 @@ Giao diện chạy ở `http://localhost:5173` và tự chuyển tiếp `/api` s
 cổng 3100. Lần chạy đầu tiên, đăng nhập bằng `admin` / `admin`; ứng dụng sẽ bắt
 buộc đặt mật khẩu mới trước khi cho phép thao tác dữ liệu.
 
+Khi lập phiếu, số lượng mặc định là 1. **Thành tiền cước = đơn giá vận chuyển ×
+số lượng**; phí vào cổng và phí khác được cộng một lần theo phiếu. Chênh lệch
+đối chiếu thành tiền thực tế với **đơn giá chuẩn đã chốt × số lượng**. Ví dụ,
+50.000 đồng × 5 thùng = 250.000 đồng, không phát sinh chênh lệch nếu đơn giá
+chuẩn cũng là 50.000 đồng. Lưu bảng cước từ phiếu chỉ lưu đơn giá.
+
 Muốn chạy như bản thật (một cổng duy nhất):
 
 ```bash

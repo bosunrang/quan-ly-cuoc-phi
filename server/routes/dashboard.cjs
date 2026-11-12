@@ -7,7 +7,7 @@ const PAGE = 'dashboard';
 // Chênh lệch so với giá chuẩn đã chốt trên phiếu, cùng nguồn với báo cáo
 // chênh lệch nhà xe: sửa bảng cước không làm đổi số liệu các tháng đã qua.
 const VARIANCE_WHERE =
-  'e.standard_transport_fee IS NOT NULL AND e.transport_fee <> e.standard_transport_fee';
+  '(e.standard_transport_fee * COALESCE(e.quantity, 1)) IS NOT NULL AND e.transport_fee <> (e.standard_transport_fee * COALESCE(e.quantity, 1))';
 
 /** Chỉ nhận khoản phát sinh hợp lệ đã lưu tại thẻ tính giá xăng. */
 function fuelExtraTotal(value) {
@@ -97,7 +97,7 @@ function register(router) {
     const variance = c.db
       .prepare(
         `SELECT COUNT(*) AS entries,
-         COALESCE(SUM(ABS(e.transport_fee - e.standard_transport_fee)), 0) AS amount
+         COALESCE(SUM(ABS(e.transport_fee - (e.standard_transport_fee * COALESCE(e.quantity, 1)))), 0) AS amount
        FROM entries e
        WHERE ${entryWhere.sql} AND ${VARIANCE_WHERE}`,
       )
@@ -105,9 +105,9 @@ function register(router) {
     const monthlyVariance = c.db
       .prepare(
         `SELECT substr(e.entry_date, 1, 7) AS month,
-         COALESCE(SUM(e.standard_transport_fee), 0) AS standard_fee,
+         COALESCE(SUM((e.standard_transport_fee * COALESCE(e.quantity, 1))), 0) AS standard_fee,
          COALESCE(SUM(e.transport_fee), 0) AS actual_fee,
-         COALESCE(SUM(e.transport_fee - e.standard_transport_fee), 0) AS difference,
+         COALESCE(SUM(e.transport_fee - (e.standard_transport_fee * COALESCE(e.quantity, 1))), 0) AS difference,
          COUNT(*) AS entries
        FROM entries e
        WHERE ${entryWhere.sql} AND ${VARIANCE_WHERE}

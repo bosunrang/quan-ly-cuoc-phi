@@ -39,6 +39,10 @@ function billStatus(value) {
 }
 
 function readEntryInput(body) {
+  const quantity = body.quantity == null || body.quantity === '' ? null : Number(body.quantity);
+  if (quantity !== null && (!Number.isSafeInteger(quantity) || quantity <= 0)) {
+    throw badRequest('Số lượng phải là số nguyên lớn hơn 0.');
+  }
   const entryDate = String(body.entryDate ?? '').trim();
   if (!isIsoDate(entryDate)) {
     throw badRequest('Ngày không hợp lệ (cần dạng YYYY-MM-DD).');
@@ -47,7 +51,12 @@ function readEntryInput(body) {
   if (misaDocumentDate && !isIsoDate(misaDocumentDate)) {
     throw badRequest('Ngày chứng từ MISA không hợp lệ.');
   }
-  const transportFee = money(body.transportFee, 'Cước vận chuyển');
+  const transportUnitFee =
+    body.transportUnitFee == null ? null : money(body.transportUnitFee, 'Đơn giá vận chuyển');
+  const transportFee = money(
+    transportUnitFee == null ? body.transportFee : transportUnitFee * (quantity ?? 1),
+    'Cước vận chuyển',
+  );
   const otherFee = money(body.otherFee, 'Chi phí khác');
   const otherFeeName = text(body.otherFeeName, 'tên chi phí khác', { max: 200 });
   if (transportFee === 0) {
@@ -66,6 +75,8 @@ function readEntryInput(body) {
     recipient: text(body.recipient, 'người nhận'),
     address: text(body.address, 'địa chỉ', { max: 400 }),
     spec: text(body.spec, 'quy cách', { required: true }),
+    quantity,
+    transportUnitFee,
     ticketFee: money(body.ticketFee, 'Phí vé'),
     transportFee,
     gateFee: money(body.gateFee, 'Phí cổng'),
@@ -209,7 +220,7 @@ function ensureVarianceReason(body, input, standardFee) {
     return;
   }
   if (standardFee == null) return;
-  if (input.transportFee <= standardFee) {
+  if (input.transportFee <= standardFee * (input.quantity ?? 1)) {
     input.rateVarianceNote = '';
     return;
   }
@@ -260,6 +271,10 @@ function saveCarrierRate(db, user, customerId, carrierId, input, at) {
   const isDefault = normalizeSearchText(input.spec) === 'tat ca';
   const spec = isDefault ? 'Tất cả' : input.spec;
   const specKey = isDefault ? DEFAULT_SPEC_KEY : normalizeSearchText(spec);
+  const unitFee = money(
+    input.transportUnitFee ?? input.transportFee / (input.quantity ?? 1),
+    'Đơn giá vận chuyển',
+  );
   const before = db
     .prepare(
       `SELECT * FROM carrier_customer_rates
@@ -276,17 +291,7 @@ function saveCarrierRate(db, user, customerId, carrierId, input, at) {
        transport_fee = excluded.transport_fee,
        gate_fee = excluded.gate_fee,
        updated_at = excluded.updated_at`,
-  ).run(
-    carrierId,
-    customerId,
-    spec,
-    specKey,
-    Number(isDefault),
-    input.transportFee,
-    input.gateFee,
-    at,
-    at,
-  );
+  ).run(carrierId, customerId, spec, specKey, Number(isDefault), unitFee, input.gateFee, at, at);
   const rate = db
     .prepare(
       `SELECT * FROM carrier_customer_rates
@@ -381,6 +386,8 @@ function toApi(row, user) {
     recipient: row.recipient,
     address: row.address,
     spec: row.spec,
+    quantity: row.quantity ?? null,
+    transportUnitFee: row.transport_unit_fee ?? null,
     ticketFee: row.ticket_fee,
     transportFee: row.transport_fee,
     standardTransportFee:
@@ -732,10 +739,10 @@ function register(router) {
       const result = c.db
         .prepare(
           `INSERT INTO entries
-             (entry_date, customer, carrier, recipient, address, spec,
+             (entry_date, customer, carrier, recipient, address, spec, quantity, transport_unit_fee,
               ticket_fee, transport_fee, gate_fee, other_fee_name, other_fee, note, general_note, rate_variance_note, duplicate_reason, bill_status, misa_document_date, misa_document_code, employee_id,
               customer_id, carrier_id, standard_transport_fee, created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.entryDate,
@@ -744,6 +751,8 @@ function register(router) {
           input.recipient,
           input.address,
           input.spec,
+          input.quantity,
+          input.transportUnitFee,
           input.ticketFee,
           input.transportFee,
           input.gateFee,
@@ -809,7 +818,7 @@ function register(router) {
         .prepare(
           `UPDATE entries SET
              entry_date = ?, customer = ?, carrier = ?, recipient = ?,
-             address = ?, spec = ?, ticket_fee = ?, transport_fee = ?,
+             address = ?, spec = ?, quantity = ?, transport_unit_fee = ?, ticket_fee = ?, transport_fee = ?,
              gate_fee = ?, other_fee_name = ?, other_fee = ?, note = ?, general_note = ?, rate_variance_note = ?, duplicate_reason = ?, bill_status = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?,
              customer_id = ?, carrier_id = ?, standard_transport_fee = ?, updated_at = ?
            WHERE id = ?`,
@@ -821,6 +830,8 @@ function register(router) {
           input.recipient,
           input.address,
           input.spec,
+          input.quantity,
+          input.transportUnitFee,
           input.ticketFee,
           input.transportFee,
           input.gateFee,
