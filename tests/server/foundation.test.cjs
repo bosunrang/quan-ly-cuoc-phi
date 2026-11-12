@@ -1601,6 +1601,76 @@ test('Admin và nhân viên lưu được giao trực tiếp cước 0; báo cá
   }
 });
 
+test('nhân viên lập cả hai hình thức cùng ngày; giao trực tiếp không cần bảng giá và không tạo nhà xe giả', async () => {
+  const delivery = await configureStaffRate('Khách có hai hình thức giao');
+  const input = newEntry({
+    entryDate: '2026-12-10',
+    customerId: delivery.customer.id,
+    customer: delivery.customer.customerName,
+    carrierId: delivery.carrier.id,
+    carrier: delivery.carrier.name,
+  });
+  const ids = [];
+  try {
+    const carrier = await call('POST', '/api/entries', { token: staffAToken, body: input });
+    assert.equal(carrier.status, 200);
+    ids.push(carrier.data.id);
+    const directInput = {
+      ...input,
+      deliveryMethod: 'direct',
+      carrier: '',
+      billStatus: '',
+      transportUnitFee: 12345,
+      gateFee: 9876,
+    };
+    const checkPath = `/api/entries/duplicate-check?entryDate=${input.entryDate}&customer=${encodeURIComponent(input.customer)}&deliveryMethod=direct`;
+    assert.equal((await call('GET', checkPath, { token: staffAToken })).data.duplicate, false);
+    const direct = await call('POST', '/api/entries', { token: staffAToken, body: directInput });
+    assert.equal(direct.status, 200, JSON.stringify(direct.data));
+    ids.push(direct.data.id);
+    assert.equal(direct.data.deliveryMethod, 'direct');
+    assert.equal(direct.data.carrierId, null);
+    assert.equal(direct.data.carrier, '');
+    assert.equal(direct.data.billStatus, '');
+    assert.equal(direct.data.totalFee, 0);
+    assert.equal(direct.data.standardTransportFee, null);
+    assert.equal((await call('GET', checkPath, { token: staffAToken })).data.duplicate, true);
+    assert.equal(
+      (await call('POST', '/api/entries', { token: staffAToken, body: directInput })).status,
+      409,
+    );
+    assert.equal(
+      (
+        await call('POST', '/api/entries', {
+          token: staffAToken,
+          body: { ...directInput, customerId: 99999999, customer: 'Đơn vị không tồn tại' },
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await call('POST', '/api/entries', {
+          token: staffAToken,
+          body: { ...input, deliveryMethod: 'invalid' },
+        })
+      ).status,
+      400,
+    );
+    const context = await call(
+      'GET',
+      `/api/entries/customer-context?customerId=${delivery.customer.id}`,
+      { token: staffAToken },
+    );
+    assert.deepEqual(
+      context.data.carriers.map((item) => item.id),
+      [delivery.carrier.id],
+    );
+  } finally {
+    for (const id of ids) await call('DELETE', `/api/entries/${id}`, { token: adminToken });
+  }
+});
+
 test('số lượng được lưu, sửa, xóa và giữ qua backup; backup cũ vẫn khôi phục được', async () => {
   const input = newEntry({ customer: 'Khách kiểm tra số lượng', quantity: 3 });
   const created = await call('POST', '/api/entries', { token: adminToken, body: input });

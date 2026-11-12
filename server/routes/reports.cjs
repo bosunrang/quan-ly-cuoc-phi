@@ -242,7 +242,8 @@ function reportData(db, input) {
             COALESCE((
               SELECT delivery_point FROM carriers
                WHERE id = e.carrier_id
-            ), '') AS carrier_delivery_point
+            ), '') AS carrier_delivery_point,
+            (SELECT customer_name FROM customers WHERE id = e.customer_id) AS customer_route_name
        FROM entries e
       WHERE ${where.join(' AND ')}
       ORDER BY e.entry_date ASC, e.id ASC`,
@@ -269,7 +270,7 @@ function reportData(db, input) {
     const placeholders = fuelRecordIds.map(() => '?').join(', ');
     const fuelLegs = db
       .prepare(
-        `SELECT fuel_record_id, sequence_no, from_name, to_name, distance_km
+        `SELECT fuel_record_id, sequence_no, from_name, to_name, distance_km, to_customer_id, to_carrier_id
          FROM fuel_record_legs
         WHERE fuel_record_id IN (${placeholders})
         ORDER BY fuel_record_id, sequence_no`,
@@ -277,7 +278,13 @@ function reportData(db, input) {
       .all(...fuelRecordIds);
     fuelLegs.forEach((leg) => {
       const legs = fuelLegsByRecordId.get(leg.fuel_record_id) || [];
-      legs.push({ from: leg.from_name, to: leg.to_name, km: Number(leg.distance_km) });
+      legs.push({
+        from: leg.from_name,
+        to: leg.to_name,
+        km: Number(leg.distance_km),
+        ...(leg.to_customer_id ? { toCustomerId: leg.to_customer_id } : {}),
+        ...(leg.to_carrier_id ? { toCarrierId: leg.to_carrier_id } : {}),
+      });
       fuelLegsByRecordId.set(leg.fuel_record_id, legs);
     });
   }
@@ -659,10 +666,13 @@ function deliveryRows(entries) {
     }
     dayNumber += 1;
     const carrierGroups = new Map();
-    group.forEach((entry) => {
-      const key = String(entry.carrier || '')
-        .trim()
-        .toLowerCase();
+    group.forEach((entry, index) => {
+      const key =
+        entry.delivery_method === 'direct'
+          ? `direct:${index}`
+          : String(entry.carrier || '')
+              .trim()
+              .toLowerCase();
       const carrierEntries = carrierGroups.get(key) || [];
       carrierEntries.push(entry);
       carrierGroups.set(key, carrierEntries);
@@ -685,14 +695,18 @@ function deliveryRows(entries) {
           dayNumber: dayIndex === 0 ? dayNumber : null,
           entryDate: dayIndex === 0 ? formatDate(entryDate) : null,
           entryDateIso: entryDate,
-          carrier: carrierIndex === 0 ? entry.carrier : null,
+          carrier:
+            entry.delivery_method === 'direct' ? '-' : carrierIndex === 0 ? entry.carrier : null,
           carrierNote: carrierIndex === 0 ? carrierNote : null,
-          carrierHasNote: Boolean(carrierNote),
-          billStatus: hasUniformCarrierBill
-            ? carrierIndex === 0
-              ? carrierBillStatus
-              : null
-            : entry.bill_status,
+          carrierHasNote: Boolean(carrierNote) || entry.delivery_method === 'direct',
+          billStatus:
+            entry.delivery_method === 'direct'
+              ? ''
+              : hasUniformCarrierBill
+                ? carrierIndex === 0
+                  ? carrierBillStatus
+                  : null
+                : entry.bill_status,
           groupSize: group.length,
           isGroupStart: dayIndex === 0,
           carrierGroupSize: carrierEntries.length,
@@ -753,7 +767,10 @@ function routeDestinationCarrierKey(value) {
 
 function deliveryRouteKeys(delivery) {
   return new Set(
-    [delivery.entry.carrier_delivery_point, delivery.entry.carrier]
+    (delivery.entry.delivery_method === 'direct'
+      ? [delivery.entry.customer, delivery.entry.customer_route_name]
+      : [delivery.entry.carrier_delivery_point, delivery.entry.carrier]
+    )
       .map(routeDestinationCarrierKey)
       .filter(Boolean),
   );
@@ -797,12 +814,24 @@ function detailRowsForFuels(fuelRows, deliveries = []) {
     const recordRows = [];
     fuelLegs(fuelRow).forEach((fuelLeg) => {
       const carrierKey = routeDestinationCarrierKey(fuelLeg.to);
-      const matches = carrierKey
-        ? deliveries.filter(
-            (delivery) =>
-              unmatchedDeliveries.has(delivery) && deliveryRouteKeys(delivery).has(carrierKey),
-          )
-        : [];
+      const matches =
+        carrierKey || fuelLeg.toCustomerId || fuelLeg.toCarrierId
+          ? deliveries.filter((delivery) => {
+              if (!unmatchedDeliveries.has(delivery)) return false;
+              const direct = delivery.entry.delivery_method === 'direct';
+              if (fuelLeg.toCustomerId)
+                return direct && delivery.entry.customer_id === fuelLeg.toCustomerId;
+              if (fuelLeg.toCarrierId && direct) return false;
+              if (fuelLeg.toCarrierId && delivery.entry.carrier_id === fuelLeg.toCarrierId)
+                return true;
+              return (
+                (!fuelLeg.toCarrierId ||
+                  delivery.entry.carrier_id === fuelLeg.toCarrierId ||
+                  delivery.entry.carrier_delivery_point) &&
+                deliveryRouteKeys(delivery).has(carrierKey)
+              );
+            })
+          : [];
       const matchedDeliveries = matches.length ? matches : [null];
       matchedDeliveries.forEach((delivery, matchIndex) => {
         if (delivery) unmatchedDeliveries.delete(delivery);
@@ -1019,7 +1048,7 @@ function dailySheet(data, input, employee) {
           ? null
           : number(entry.transport_fee) -
             number(entry.standard_transport_fee) * (entry.quantity ?? 1);
-      const bill = billStatusValue(delivery.billStatus);
+      const bill = entry.delivery_method === 'direct' ? '-' : billStatusValue(delivery.billStatus);
       const gateFee = number(entry.gate_fee);
       const displayDifference =
         priceDifference == null || priceDifference === 0 ? '-' : priceDifference;

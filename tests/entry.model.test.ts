@@ -25,6 +25,26 @@ const valid = {
 };
 
 describe("kiểm tra phiếu cước", () => {
+	it("phiếu giao trực tiếp không cần nhà xe hoặc Bill và luôn tính cước bằng 0", () => {
+		const input = {
+			...emptyEntryInput("2026-12-12", "direct"),
+			customerId: 1,
+			customer: "Trạm y tế A",
+			spec: "Thùng nhỏ",
+			note: "Hàng giao trực tiếp",
+		};
+		expect(input.deliveryMethod).toBe("direct");
+		expect(emptyEntryInput("2026-12-12", "direct").spec).toBe("Tất cả");
+		expect(input.quantity).toBe(1);
+		expect(validateEntry(input)).toBeNull();
+		expect(
+			entryTransportFee({ ...input, transportUnitFee: 50_000, quantity: 5 }),
+		).toBe(0);
+		expect(validateEntry({ ...input, spec: "" })).toBeNull();
+		expect(validateEntry({ ...input, deliveryMethod: "carrier" })).toContain(
+			"nhà xe",
+		);
+	});
 	it("nhân đơn giá với số lượng, không nhân phí cổng và không tính lại tổng cước cũ", () => {
 		const input = {
 			...valid,

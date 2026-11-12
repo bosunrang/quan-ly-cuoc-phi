@@ -29,6 +29,8 @@ type ExtraCost = { id: string; name: string; amount: number };
 type Leg = {
 	id: string;
 	destination: string;
+	toCustomerId?: number;
+	toCarrierId?: number;
 	km: string;
 	source?: string;
 	extraCosts: ExtraCost[];
@@ -160,7 +162,11 @@ function LocationInput({
 	placeholder: string;
 	locations: FuelData["locations"];
 	readOnly?: boolean;
-	onChange: (value: string, allowLegacyRouteMatch?: boolean) => void;
+	onChange: (
+		value: string,
+		allowLegacyRouteMatch?: boolean,
+		location?: FuelData["locations"][number],
+	) => void;
 }) {
 	const [open, setOpen] = useState(false);
 	const matches = useMemo(() => {
@@ -179,6 +185,7 @@ function LocationInput({
 		onChange(
 			exact.length === 1 ? locationRouteText(exact[0]) : value,
 			exact.length === 1,
+			exact.length === 1 ? exact[0] : undefined,
 		);
 	};
 	return (
@@ -206,7 +213,7 @@ function LocationInput({
 								key={`${item.type}-${item.id}`}
 								onMouseDown={(event) => event.preventDefault()}
 								onClick={() => {
-									onChange(locationRouteText(item), true);
+									onChange(locationRouteText(item), true, item);
 									setOpen(false);
 								}}
 							>
@@ -375,6 +382,8 @@ export function FuelPage() {
 		from: index ? legs[index - 1].destination : origin,
 		to: leg.destination,
 		km: decimal(leg.km),
+		...(leg.toCustomerId ? { toCustomerId: leg.toCustomerId } : {}),
+		...(leg.toCarrierId ? { toCarrierId: leg.toCarrierId } : {}),
 	}));
 	const incompleteRouteLeg = routeLegs.find(
 		(leg) => !leg.from.trim() || !leg.to.trim() || leg.km <= 0,
@@ -505,6 +514,7 @@ export function FuelPage() {
 		index: number,
 		destination: string,
 		allowLegacyRouteMatch = false,
+		location?: FuelData["locations"][number],
 	) => {
 		const from = index ? legs[index - 1].destination : origin;
 		const reused = reusableDistance(
@@ -521,6 +531,10 @@ export function FuelPage() {
 					? {
 							...row,
 							destination,
+							toCustomerId:
+								location?.type === "customer" ? location.id : undefined,
+							toCarrierId:
+								location?.type === "carrier" ? location.id : undefined,
 							source: reused?.source,
 							...(row.km || !reused ? {} : { km: reused.km }),
 						}
@@ -656,6 +670,8 @@ export function FuelPage() {
 				? recordLegs.map((leg, legIndex) => ({
 						id: newLegId(),
 						destination: leg.to,
+						toCustomerId: leg.toCustomerId,
+						toCarrierId: leg.toCarrierId,
 						km: String(leg.km),
 						extraCosts: record.extraCosts
 							.filter((item) => (item.legIndex ?? 0) === legIndex)
@@ -904,8 +920,13 @@ export function FuelPage() {
 											ariaLabel={`Điểm ${String.fromCharCode(66 + index)}`}
 											placeholder="Ví dụ: Bệnh viện A, số nhà, đường, tỉnh/TP"
 											locations={data.locations}
-											onChange={(value, allowLegacyRouteMatch) =>
-												setDestination(index, value, allowLegacyRouteMatch)
+											onChange={(value, allowLegacyRouteMatch, location) =>
+												setDestination(
+													index,
+													value,
+													allowLegacyRouteMatch,
+													location,
+												)
 											}
 										/>
 									</div>

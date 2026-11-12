@@ -18,6 +18,7 @@
 }
 
 .entry-intro > div:nth-child(2) { min-width: 0; flex: 1; }
+.entry-create-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .entry-intro h2 { margin: 0; color: var(--ink); font-size: var(--type-subhead); }
 .entry-intro p { margin: 5px 0 0; color: var(--muted); font-size: var(--type-caption); }
 .entry-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -181,8 +182,9 @@
 		height: 40px;
 	}
 
-	.entry-intro > .button {
-		width: 100%;
+	.entry-create-actions { width: 100%; }
+	.entry-create-actions > .button {
+		flex: 1;
 		min-height: 44px;
 		justify-content: center;
 	}

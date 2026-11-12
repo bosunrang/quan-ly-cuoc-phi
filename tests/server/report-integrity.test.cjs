@@ -512,6 +512,164 @@ test('kỳ xăng vắt qua hai tháng được tính ở tháng kết thúc, kh�
   assert.equal(edited.data.totalFee, 22000);
 });
 
+test('giao trực tiếp khớp đúng điểm đến trong ngày có cả nhà xe, giữ Km/tiền xăng và không gộp các đơn vị', async () => {
+  const employee = await createEmployee('Nhân viên giao hỗn hợp');
+  const units = [];
+  for (const name of ['Trạm y tế A', 'Trạm y tế B', 'Trạm y tế C']) {
+    const unit = await call('POST', '/api/customers', {
+      body: { customerName: name, address: 'Số 1, Hà Nội' },
+    });
+    assert.equal(unit.status, 200);
+    units.push(unit.data);
+  }
+  const carrier = (await call('POST', '/api/carriers', { body: { name: 'Xe giao hỗn hợp' } })).data;
+  const base = { entryDate: '2026-12-12', employeeId: employee.id, spec: 'Thùng nhỏ', quantity: 2 };
+  const directInput = (unit, product) =>
+    entryBody({
+      ...base,
+      deliveryMethod: 'direct',
+      customerId: unit.id,
+      customer: unit.customerName,
+      note: product,
+      carrierId: carrier.id,
+      carrier: carrier.name,
+      billStatus: 'Có bill',
+      transportUnitFee: 100000,
+      gateFee: 20000,
+      ticketFee: 30000,
+      otherFee: 40000,
+      otherFeeName: 'Phí không được thu',
+      saveCarrierRate: true,
+    });
+  // Thứ tự nhập khác thứ tự lộ trình; hai đơn đến A dùng chung một chặng.
+  const created = [];
+  for (const [index, product] of [
+    [0, 'Sản phẩm A1'],
+    [2, 'Sản phẩm C'],
+    [1, 'Sản phẩm B'],
+    [0, 'Sản phẩm A2'],
+  ]) {
+    const result = await call('POST', '/api/entries', { body: directInput(units[index], product) });
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    assert.equal(result.data.totalFee, 0);
+    assert.equal(result.data.carrierId, null);
+    assert.equal(result.data.billStatus, '');
+    created.push(result.data);
+  }
+  const sent = await createEntry({
+    ...base,
+    customerId: units[0].id,
+    customer: units[0].customerName,
+    carrierId: carrier.id,
+    carrier: carrier.name,
+    transportFee: 50000,
+    gateFee: 5000,
+    note: 'Sản phẩm gửi xe',
+  });
+  const fuel = await call('POST', '/api/fuel/records', {
+    body: fuelBody({
+      employeeId: employee.id,
+      periodFrom: base.entryDate,
+      periodTo: base.entryDate,
+      legs: [
+        { from: 'Kho', to: 'Tên điểm đến trước khi đổi', km: 10, toCustomerId: units[1].id },
+        { from: 'B', to: 'Tên nhà xe trước khi đổi', km: 20, toCarrierId: carrier.id },
+        { from: 'Xe', to: `${units[0].customerName}, Số 1, Hà Nội`, km: 30 },
+        { from: 'A', to: `${units[2].customerName}, Hà Nội`, km: 40 },
+      ],
+    }),
+  });
+  assert.equal(fuel.status, 200, JSON.stringify(fuel.data));
+  assert.equal(fuel.data.totalFee, 50000);
+  const range = `from=${base.entryDate}&to=${base.entryDate}&employeeId=${employee.id}`;
+  const printed = await call('GET', `/api/reports/print?${range}&type=daily`);
+  assert.equal(printed.status, 200);
+  const rows = printed.data.sheets[0].rows;
+  const productRows = rows.filter((row) =>
+    row.cells.some(
+      (cell) => cell.address === `H${row.number}` && cell.value.startsWith('Sản phẩm '),
+    ),
+  );
+  assert.equal(productRows.length, 5);
+  const cell = (row, col) =>
+    row.cells.find((item) => item.address === `${col}${row.number}`)?.value;
+  assert.deepEqual(
+    productRows.map((row) => cell(row, 'H')),
+    ['Sản phẩm B', 'Sản phẩm gửi xe', 'Sản phẩm A1', 'Sản phẩm A2', 'Sản phẩm C'],
+  );
+  assert.equal(cell(productRows[0], 'D'), 'Tên điểm đến trước khi đổi');
+  assert.equal(cell(productRows[1], 'D'), 'Tên nhà xe trước khi đổi');
+  assert.equal(cell(productRows[2], 'D'), `${units[0].customerName}, Số 1, Hà Nội`);
+  assert.equal(cell(productRows[4], 'D'), `${units[2].customerName}, Hà Nội`);
+  for (const row of [productRows[0], productRows[2], productRows[3], productRows[4]]) {
+    for (const col of ['E', 'J', 'K', 'L', 'M'])
+      assert.equal(cell(row, col), '-', `${col} phải trống cho giao trực tiếp`);
+    assert.equal(cell(row, 'I'), 'Tất cả');
+  }
+  assert.equal(cell(productRows[1], 'J'), '50.000');
+  const km = productRows.map((row) => cell(row, 'N')).filter((value) => value != null);
+  assert.deepEqual(km, ['10,0', '20,0', '30,0', '40,0']);
+  const exported = await call('GET', `/api/reports/export?${range}&type=daily`);
+  const workbook = XLSX.read(Buffer.from(exported.data.contentBase64, 'base64'), {
+    type: 'buffer',
+    cellNF: true,
+  });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  assert.equal(sheet.H12.v, 'Sản phẩm B');
+  assert.equal(sheet.J12.v, 0);
+  assert.equal(XLSX.utils.format_cell(sheet.J12), '-');
+  assert.equal(sheet.D12.v, 'Tên điểm đến trước khi đổi');
+  const dashboard = await call('GET', `/api/dashboard?${range}`);
+  assert.equal(dashboard.data.summary.entries, 5);
+  assert.equal(dashboard.data.summary.transport, 50000);
+  assert.equal(dashboard.data.summary.fuel, 50000);
+  assert.equal(dashboard.data.summary.total, 105000);
+  const history = await call('GET', `/api/fuel/records?employeeId=${employee.id}`);
+  const savedFuel = history.data.records.find((item) => item.id === fuel.data.id);
+  assert.equal(savedFuel.legs[0].toCustomerId, units[1].id);
+  assert.equal(savedFuel.legs[1].toCarrierId, carrier.id);
+  const invalidRef = await call('POST', '/api/fuel/records', {
+    body: fuelBody({
+      employeeId: employee.id,
+      periodFrom: base.entryDate,
+      periodTo: base.entryDate,
+      legs: [{ from: 'Kho', to: 'Sai', km: 1, toCustomerId: 999999 }],
+    }),
+  });
+  assert.equal(invalidRef.status, 400);
+  const backup = await call('GET', '/api/settings/backup');
+  assert.equal(
+    backup.data.data.entries.find((item) => item.id === created[0].id).delivery_method,
+    'direct',
+  );
+  assert.equal(
+    backup.data.data.fuelLegs.find(
+      (item) => item.fuel_record_id === fuel.data.id && item.sequence_no === 1,
+    ).to_customer_id,
+    units[1].id,
+  );
+  // Dòng phiếu/lộ trình của backup cũ chưa có trường mới vẫn khôi phục được.
+  delete backup.data.data.entries.find((item) => item.id === sent.id).delivery_method;
+  const oldLeg = backup.data.data.fuelLegs.find(
+    (item) => item.fuel_record_id === fuel.data.id && item.sequence_no === 3,
+  );
+  delete oldLeg.to_customer_id;
+  delete oldLeg.to_carrier_id;
+  assert.equal(
+    (await call('POST', '/api/settings/backup/restore', { body: { backup: backup.data } })).status,
+    200,
+  );
+  const afterRestore = await call('GET', `/api/reports/print?${range}&type=daily`);
+  assert.deepEqual(afterRestore.data.sheets, printed.data.sheets);
+  const converted = await call('PATCH', `/api/entries/${sent.id}`, {
+    body: directInput(units[0], 'Sản phẩm gửi xe'),
+  });
+  assert.equal(converted.status, 200);
+  assert.equal(converted.data.deliveryMethod, 'direct');
+  assert.equal(converted.data.carrierId, null);
+  assert.equal(converted.data.totalFee, 0);
+});
+
 test('Tổng quan chỉ lấy chi phí khác từ kỳ tính xăng', async () => {
   const employee = await createEmployee('Nhân viên Tổng quan Chi phí khác');
   await createEntry({

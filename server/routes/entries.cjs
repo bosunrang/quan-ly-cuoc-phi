@@ -39,6 +39,10 @@ function billStatus(value) {
 }
 
 function readEntryInput(body) {
+  const deliveryMethod = body.deliveryMethod ?? 'carrier';
+  if (!['carrier', 'direct'].includes(deliveryMethod))
+    throw badRequest('Hình thức giao không hợp lệ.');
+  const direct = deliveryMethod === 'direct';
   const quantity = body.quantity == null || body.quantity === '' ? null : Number(body.quantity);
   if (quantity !== null && (!Number.isSafeInteger(quantity) || quantity <= 0)) {
     throw badRequest('Số lượng phải là số nguyên lớn hơn 0.');
@@ -51,14 +55,17 @@ function readEntryInput(body) {
   if (misaDocumentDate && !isIsoDate(misaDocumentDate)) {
     throw badRequest('Ngày chứng từ MISA không hợp lệ.');
   }
-  const transportUnitFee =
-    body.transportUnitFee == null ? null : money(body.transportUnitFee, 'Đơn giá vận chuyển');
+  const transportUnitFee = direct
+    ? 0
+    : body.transportUnitFee == null
+      ? null
+      : money(body.transportUnitFee, 'Đơn giá vận chuyển');
   const transportFee = money(
     transportUnitFee == null ? body.transportFee : transportUnitFee * (quantity ?? 1),
     'Cước vận chuyển',
   );
-  const otherFee = money(body.otherFee, 'Chi phí khác');
-  const otherFeeName = text(body.otherFeeName, 'tên chi phí khác', { max: 200 });
+  const otherFee = direct ? 0 : money(body.otherFee, 'Chi phí khác');
+  const otherFeeName = direct ? '' : text(body.otherFeeName, 'tên chi phí khác', { max: 200 });
   if (otherFee > 0 && !otherFeeName) {
     throw badRequest('Vui lòng nhập tên chi phí khác.');
   }
@@ -66,24 +73,27 @@ function readEntryInput(body) {
     throw badRequest('Vui lòng nhập số tiền chi phí khác.');
   }
   return {
+    deliveryMethod,
     entryDate,
     customer: text(body.customer, 'tên khách hàng', { required: true }),
-    carrier: text(body.carrier, 'nhà xe', { required: true }),
+    carrier: direct ? '' : text(body.carrier, 'nhà xe', { required: true }),
     recipient: text(body.recipient, 'người nhận'),
     address: text(body.address, 'địa chỉ', { max: 400 }),
-    spec: text(body.spec, 'quy cách', { required: true }),
+    spec: direct ? 'Tất cả' : text(body.spec, 'quy cách', { required: true }),
     quantity,
     transportUnitFee,
-    ticketFee: money(body.ticketFee, 'Phí vé'),
+    ticketFee: direct ? 0 : money(body.ticketFee, 'Phí vé'),
     transportFee,
-    gateFee: money(body.gateFee, 'Phí cổng'),
+    gateFee: direct ? 0 : money(body.gateFee, 'Phí cổng'),
     otherFeeName,
     otherFee,
     note: text(body.note, 'sản phẩm', { max: 1000, required: true }),
     generalNote: text(body.generalNote, 'ghi chú', { max: 1000 }),
-    rateVarianceNote: text(body.rateVarianceNote, 'lý do chênh lệch cước', { max: 1000 }),
+    rateVarianceNote: direct
+      ? ''
+      : text(body.rateVarianceNote, 'lý do chênh lệch cước', { max: 1000 }),
     duplicateReason: text(body.duplicateReason, 'lý do nhập trùng', { max: 1000 }),
-    billStatus: billStatus(body.billStatus),
+    billStatus: direct ? '' : billStatus(body.billStatus),
     misaDocumentDate,
     misaDocumentCode: text(body.misaDocumentCode, 'Số chứng từ MISA', { max: 100 }),
   };
@@ -99,11 +109,17 @@ function ensureDuplicateReason(db, input, excludedEntryId = 0) {
       `SELECT id FROM entries
       WHERE entry_date = ?
         AND customer_key = ?
+        AND delivery_method = ?
         AND id <> ?
       ORDER BY id DESC
       LIMIT 1`,
     )
-    .get(input.entryDate, normalizeSearchText(input.customer), excludedEntryId);
+    .get(
+      input.entryDate,
+      normalizeSearchText(input.customer),
+      input.deliveryMethod,
+      excludedEntryId,
+    );
   if (!duplicate) {
     input.duplicateReason = '';
     return;
@@ -197,6 +213,10 @@ function currentStandardTransportFee(db, customerId, carrierId, spec) {
  */
 function standardTransportFeeFor(db, body, input, before = null) {
   const customerId = customerForEntry(db, body, input.customer)?.id ?? null;
+  if (input.deliveryMethod === 'direct') {
+    if (!customerId) throw badRequest('Vui lòng chọn đơn vị nhận hàng trong danh mục khách hàng.');
+    return null;
+  }
   const carrierId = carrierForEntry(db, body, input.carrier)?.id ?? null;
   if (
     before &&
@@ -234,6 +254,7 @@ function ensureCarrierRateSavingPermission(user, body) {
 
 /** Nhân viên chỉ được lập phiếu theo quy cách đã có trong bảng giá của Admin. */
 function ensureStaffUsesConfiguredRate(db, user, body, input) {
+  if (input.deliveryMethod === 'direct') return;
   if (canSeeEveryone(user)) return;
   if (!input.spec) {
     throw badRequest('Vui lòng chọn quy cách đã được quản trị viên thiết lập.');
@@ -332,6 +353,7 @@ function appendRecipient(existing, next) {
 function syncCustomerDelivery(db, user, body, input, at) {
   const customer = customerForEntry(db, body, input.customer);
   if (!customer) return;
+  if (input.deliveryMethod === 'direct') return { customerId: customer.id, carrierId: null };
 
   const carrier = ensureCustomerCarrier(db, customer.id, input.carrier, at);
 
@@ -353,7 +375,10 @@ function syncCustomerDelivery(db, user, body, input, at) {
 function catalogIdsForEntry(db, body, input, delivery) {
   return {
     customerId: delivery?.customerId ?? customerForEntry(db, body, input.customer)?.id ?? null,
-    carrierId: delivery?.carrierId ?? carrierForEntry(db, body, input.carrier)?.id ?? null,
+    carrierId:
+      input.deliveryMethod === 'direct'
+        ? null
+        : (delivery?.carrierId ?? carrierForEntry(db, body, input.carrier)?.id ?? null),
   };
 }
 
@@ -377,6 +402,7 @@ function toApi(row, user) {
   const canManage = canSeeEveryone(user) || row.created_by === user.id;
   return {
     id: row.id,
+    deliveryMethod: row.delivery_method ?? 'carrier',
     entryDate: row.entry_date,
     customer: row.customer,
     carrier: row.carrier,
@@ -523,6 +549,9 @@ function register(router) {
     c.requirePage(PAGE);
     const entryDate = String(c.query.entryDate ?? '').trim();
     const customer = String(c.query.customer ?? '').trim();
+    const deliveryMethod = c.query.deliveryMethod ?? 'carrier';
+    if (!['carrier', 'direct'].includes(deliveryMethod))
+      throw badRequest('Hình thức giao không hợp lệ.');
     const excludedEntryId = Number(c.query.excludeId) || 0;
     if (
       canSeeEveryone(c.user) ||
@@ -538,10 +567,11 @@ function register(router) {
         `SELECT 1 FROM entries
         WHERE entry_date = ?
           AND customer_key = ?
+          AND delivery_method = ?
           AND id <> ?
         LIMIT 1`,
       )
-      .get(entryDate, normalizeSearchText(customer), excludedEntryId);
+      .get(entryDate, normalizeSearchText(customer), deliveryMethod, excludedEntryId);
     return { duplicate: Boolean(duplicate) };
   });
 
@@ -736,12 +766,13 @@ function register(router) {
       const result = c.db
         .prepare(
           `INSERT INTO entries
-             (entry_date, customer, carrier, recipient, address, spec, quantity, transport_unit_fee,
+             (delivery_method, entry_date, customer, carrier, recipient, address, spec, quantity, transport_unit_fee,
               ticket_fee, transport_fee, gate_fee, other_fee_name, other_fee, note, general_note, rate_variance_note, duplicate_reason, bill_status, misa_document_date, misa_document_code, employee_id,
               customer_id, carrier_id, standard_transport_fee, created_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
+          input.deliveryMethod,
           input.entryDate,
           input.customer,
           input.carrier,
@@ -814,13 +845,14 @@ function register(router) {
       c.db
         .prepare(
           `UPDATE entries SET
-             entry_date = ?, customer = ?, carrier = ?, recipient = ?,
+             delivery_method = ?, entry_date = ?, customer = ?, carrier = ?, recipient = ?,
              address = ?, spec = ?, quantity = ?, transport_unit_fee = ?, ticket_fee = ?, transport_fee = ?,
              gate_fee = ?, other_fee_name = ?, other_fee = ?, note = ?, general_note = ?, rate_variance_note = ?, duplicate_reason = ?, bill_status = ?, misa_document_date = ?, misa_document_code = ?, employee_id = ?,
              customer_id = ?, carrier_id = ?, standard_transport_fee = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
+          input.deliveryMethod,
           input.entryDate,
           input.customer,
           input.carrier,

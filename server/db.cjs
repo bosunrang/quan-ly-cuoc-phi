@@ -4,7 +4,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const { dirname } = require('node:path');
 
-const SCHEMA_VERSION = 45;
+const SCHEMA_VERSION = 46;
 
 /** Chuẩn hóa tiếng Việt để tìm kiếm không phân biệt dấu, hoa/thường và Đ/đ. */
 function normalizeSearchText(value) {
@@ -853,6 +853,17 @@ function migrate(db) {
       db.exec(`
       ALTER TABLE entries ADD COLUMN transport_unit_fee INTEGER
         CHECK (transport_unit_fee IS NULL OR transport_unit_fee >= 0);
+    `);
+    }
+
+    if (current < 46) {
+      db.exec(`
+      ALTER TABLE entries ADD COLUMN delivery_method TEXT NOT NULL DEFAULT 'carrier'
+        CHECK (delivery_method IN ('carrier', 'direct'));
+      ALTER TABLE fuel_record_legs ADD COLUMN to_customer_id INTEGER
+        REFERENCES customers(id) ON DELETE SET NULL;
+      ALTER TABLE fuel_record_legs ADD COLUMN to_carrier_id INTEGER
+        REFERENCES carriers(id) ON DELETE SET NULL;
     `);
     }
 

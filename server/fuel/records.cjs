@@ -97,14 +97,20 @@ function fuelHistory(db, user, isAdmin, query) {
     const placeholders = recordIds.map(() => '?').join(', ');
     for (const leg of db
       .prepare(
-        `SELECT fuel_record_id, sequence_no, from_name, to_name, distance_km
+        `SELECT fuel_record_id, sequence_no, from_name, to_name, distance_km, to_customer_id, to_carrier_id
        FROM fuel_record_legs
        WHERE fuel_record_id IN (${placeholders})
        ORDER BY fuel_record_id, sequence_no`,
       )
       .all(...recordIds)) {
       const legs = legsByRecord.get(leg.fuel_record_id) ?? [];
-      legs.push({ from: leg.from_name, to: leg.to_name, km: leg.distance_km });
+      legs.push({
+        from: leg.from_name,
+        to: leg.to_name,
+        km: leg.distance_km,
+        ...(leg.to_customer_id ? { toCustomerId: leg.to_customer_id } : {}),
+        ...(leg.to_carrier_id ? { toCarrierId: leg.to_carrier_id } : {}),
+      });
       legsByRecord.set(leg.fuel_record_id, legs);
     }
   }
@@ -205,6 +211,15 @@ function listFuelData(db, user, isAdmin, query, fuelTypes) {
 }
 
 function saveFuelRecord(db, user, input, employeeId, id = null) {
+  for (const leg of input.legs) {
+    if (
+      leg.toCustomerId &&
+      !db.prepare('SELECT id FROM customers WHERE id = ?').get(leg.toCustomerId)
+    )
+      throw badRequest('Đơn vị nhận hàng không tồn tại.');
+    if (leg.toCarrierId && !db.prepare('SELECT id FROM carriers WHERE id = ?').get(leg.toCarrierId))
+      throw badRequest('Nhà xe tại điểm đến không tồn tại.');
+  }
   const totalFee = calculateFuelTotal(input);
   const at = new Date().toISOString();
   return transaction(db, () => {

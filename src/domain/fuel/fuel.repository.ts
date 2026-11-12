@@ -38,7 +38,13 @@ export interface FuelData {
 		status: "active" | "voided";
 		voidReason: string;
 		finalizedAt: string | null;
-		legs: Array<{ from: string; to: string; km: number }>;
+		legs: Array<{
+			from: string;
+			to: string;
+			km: number;
+			toCustomerId?: number;
+			toCarrierId?: number;
+		}>;
 		canEdit: boolean;
 		canDelete: boolean;
 	}>;

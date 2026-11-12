@@ -67,11 +67,23 @@ function fuelRecordInput(body) {
   if (rawLegs.length > MAX_ROUTE_LEGS) {
     throw badRequest(`Lộ trình chỉ hỗ trợ tối đa ${MAX_ROUTE_LEGS} chặng.`);
   }
-  const legs = rawLegs.map((leg) => ({
-    from: cleanText(leg?.from, 500),
-    to: cleanText(leg?.to, 500),
-    km: nonNegativeNumber(leg?.km, 'Quãng đường'),
-  }));
+  const legs = rawLegs.map((leg) => {
+    const refs = {};
+    for (const key of ['toCustomerId', 'toCarrierId']) {
+      if (leg?.[key] == null) continue;
+      const id = Number(leg[key]);
+      if (!Number.isSafeInteger(id) || id <= 0) throw badRequest('Mã điểm đến không hợp lệ.');
+      refs[key] = id;
+    }
+    if (refs.toCustomerId && refs.toCarrierId)
+      throw badRequest('Chỉ chọn một đơn vị hoặc nhà xe cho điểm đến.');
+    return {
+      from: cleanText(leg?.from, 500),
+      to: cleanText(leg?.to, 500),
+      km: nonNegativeNumber(leg?.km, 'Quãng đường'),
+      ...refs,
+    };
+  });
   if (legs.some((leg) => !leg.from || !leg.to || leg.km <= 0)) {
     throw badRequest('Mỗi chặng cần có điểm đi, điểm đến và số km lớn hơn 0.');
   }

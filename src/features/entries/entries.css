@@ -15,6 +15,10 @@
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.entry-direct-spec-field {
+	width: min(280px, 100%);
+}
+
 .entry-dialog .field textarea.entry-product-textarea {
 	min-height: 36px;
 	overflow-y: hidden;

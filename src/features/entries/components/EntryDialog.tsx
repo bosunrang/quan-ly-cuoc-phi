@@ -126,7 +126,12 @@ export function EntryDialog({
 	onSave,
 	onClose,
 }: Props) {
-	const [form, setForm] = useState<EntryInput>(initial);
+	const [form, setForm] = useState<EntryInput>(() =>
+		initial.deliveryMethod === "direct"
+			? { ...initial, spec: "Tất cả" }
+			: initial,
+	);
+	const isDirect = form.deliveryMethod === "direct";
 	const [options, setOptions] = useState<EntryFormOptions | null>(formOptions);
 	const [customerId, setCustomerId] = useState<number | null>(null);
 	const [customerSearch, setCustomerSearch] = useState(initial.customer);
@@ -180,6 +185,7 @@ export function EntryDialog({
 			if (customerRequest.current !== requestId) return;
 			setContext(next);
 			// Ưu tiên mã nhà xe lưu trên phiếu: nhà xe đổi tên vẫn nhận đúng.
+			if (isDirect) return;
 			const carrierKey = normalizeText(initial.carrier.trim());
 			const sameCarrier = (item: { id: number; name: string }) =>
 				initial.carrierId
@@ -245,6 +251,7 @@ export function EntryDialog({
 		initial.customerId,
 		initial.entryDate,
 		initial.spec,
+		isDirect,
 	]);
 	useEffect(() => {
 		const textarea = productTextareaRef.current;
@@ -268,6 +275,7 @@ export function EntryDialog({
 			.duplicateCheck({
 				entryDate: form.entryDate,
 				customer: form.customer,
+				deliveryMethod: form.deliveryMethod,
 				excludeId: editingId ?? undefined,
 			})
 			.then((result) => {
@@ -277,7 +285,7 @@ export function EntryDialog({
 			.catch(() => {
 				if (duplicateRequest.current === requestId) setDuplicateDetected(false);
 			});
-	}, [editingId, form.customer, form.entryDate, options]);
+	}, [editingId, form.customer, form.entryDate, form.deliveryMethod, options]);
 	const customerSearchIndex = useMemo(
 		() =>
 			(options?.customers ?? []).map((customer) => ({
@@ -424,7 +432,7 @@ export function EntryDialog({
 				recipient: "",
 				address: next.customer.address,
 			}));
-			if (next.defaultCarrierId)
+			if (!isDirect && next.defaultCarrierId)
 				void chooseCarrierFor(next, id, next.defaultCarrierId);
 		} catch (cause) {
 			setError(
@@ -485,7 +493,7 @@ export function EntryDialog({
 		});
 		// Lỗi thiếu dữ liệu đã hiển thị ngay dưới từng ô, không lặp lại ở đầu form.
 		if (problem) return;
-		if (form.saveCarrierRate && !form.spec.trim()) {
+		if (!isDirect && form.saveCarrierRate && !form.spec.trim()) {
 			return;
 		}
 		if (transportOverRate && !form.rateVarianceNote.trim()) {
@@ -500,6 +508,22 @@ export function EntryDialog({
 				transportFee: entryTransportFee(form),
 				customerId: customerId ?? undefined,
 				carrierId: carrierId ?? undefined,
+				...(isDirect
+					? {
+							spec: "Tất cả",
+							carrier: "",
+							carrierId: undefined,
+							billStatus: "" as const,
+							transportUnitFee: 0,
+							transportFee: 0,
+							ticketFee: 0,
+							gateFee: 0,
+							otherFee: 0,
+							otherFeeName: "",
+							rateVarianceNote: "",
+							saveCarrierRate: false,
+						}
+					: {}),
 			});
 			onClose();
 		} catch (cause) {
@@ -521,9 +545,11 @@ export function EntryDialog({
 				: form.carrier === initial.carrier) &&
 			normalizeText(form.spec) === normalizeText(initial.spec),
 	);
-	const standardUnitFee = keepSavedStandard
-		? standardTransportFee
-		: rate?.transportFee;
+	const standardUnitFee = isDirect
+		? null
+		: keepSavedStandard
+			? standardTransportFee
+			: rate?.transportFee;
 	const standardTotal =
 		standardUnitFee == null ? null : standardUnitFee * (form.quantity ?? 1);
 	const transportOverRate =
@@ -535,14 +561,26 @@ export function EntryDialog({
 		showFieldErrors && invalid ? message : undefined;
 	return (
 		<Dialog
-			title={editingId ? "Sửa phiếu chi phí gửi hàng" : "Thêm chi phí gửi hàng"}
-			subtitle="Đối chiếu khách hàng, MISA và bảng cước nhà xe"
+			title={
+				isDirect
+					? editingId
+						? "Sửa phiếu giao trực tiếp"
+						: "Thêm phiếu giao trực tiếp"
+					: editingId
+						? "Sửa phiếu gửi nhà xe"
+						: "Thêm phiếu gửi nhà xe"
+			}
+			subtitle={
+				isDirect
+					? "Giao tới đơn vị nhận hàng, không phát sinh cước vận chuyển"
+					: "Đối chiếu khách hàng, MISA và bảng cước nhà xe"
+			}
 			confirmLabel={editingId ? "Lưu thay đổi" : "Lưu phiếu"}
 			onConfirm={save}
 			onClose={onClose}
 			className="entry-dialog"
 			footerStart={
-				options?.isAdmin ? (
+				options?.isAdmin && !isDirect ? (
 					<label className="entry-save-rate-toggle">
 						<input
 							type="checkbox"
@@ -561,6 +599,43 @@ export function EntryDialog({
 			}
 		>
 			{error && <Alert tone="error">{error}</Alert>}
+			{editingId && (
+				<Field label="Hình thức giao">
+					{(id) => (
+						<select
+							id={id}
+							value={form.deliveryMethod ?? "carrier"}
+							onChange={(event) => {
+								const deliveryMethod = event.target.value as
+									| "carrier"
+									| "direct";
+								setCarrierId(null);
+								setRate(null);
+								setRates([]);
+								setForm((current) => ({
+									...current,
+									deliveryMethod,
+									spec: deliveryMethod === "direct" ? "Tất cả" : current.spec,
+									carrier: "",
+									carrierId: undefined,
+									billStatus: "",
+									transportUnitFee: 0,
+									transportFee: 0,
+									ticketFee: 0,
+									gateFee: 0,
+									otherFee: 0,
+									otherFeeName: "",
+									rateVarianceNote: "",
+									saveCarrierRate: false,
+								}));
+							}}
+						>
+							<option value="carrier">Gửi nhà xe</option>
+							<option value="direct">Giao trực tiếp</option>
+						</select>
+					)}
+				</Field>
+			)}
 			<FieldGrid>
 				<Field
 					label="Ngày gửi *"
@@ -793,241 +868,254 @@ export function EntryDialog({
 					/>
 				)}
 			</Field>
-			<div className="field-grid entry-shipping-fields">
-				<Field
-					label="Nhà xe *"
-					error={fieldError(!form.carrier.trim(), "Vui lòng chọn nhà xe.")}
-				>
-					{(id) =>
-						options?.isAdmin ? (
-							<div className="entry-delivery-picker">
-								<input
-									id={id}
-									value={form.carrier}
-									disabled={!customerId}
-									placeholder="Tìm hoặc chọn nhà xe"
-									autoComplete="off"
-									onFocus={() => setCarrierPickerOpen(true)}
-									onBlur={() =>
-										window.setTimeout(() => setCarrierPickerOpen(false), 120)
-									}
-									onChange={(event) => {
-										const carrier = event.target.value;
-										const matched = carrierOptions.find(
-											(item) =>
-												normalizeText(item.name) === normalizeText(carrier),
-										);
-										setCarrierId(null);
-										ratesRequest.current += 1;
-										setRates([]);
-										setRate(null);
-										setCarrierPickerOpen(true);
-										setForm((current) => ({
-											...current,
-											carrier,
-											spec: "",
-											saveCarrierRate: false,
-										}));
-										if (matched) void chooseCarrier(matched.id);
-									}}
-								/>
-								{carrierPickerOpen && matchingCarriers.length ? (
-									<div className="entry-delivery-options" role="listbox">
-										<CarrierOptionGroup
-											label="Nhà xe đã liên kết"
-											options={linkedCarriers}
-											onChoose={(carrierId) => void chooseCarrier(carrierId)}
-										/>
-										<CarrierOptionGroup
-											label={
-												linkedCarriers.length
-													? "Nhà xe khác"
-													: "Danh sách nhà xe"
-											}
-											options={otherCarriers}
-											onChoose={(carrierId) => void chooseCarrier(carrierId)}
-										/>
-									</div>
-								) : null}
-							</div>
-						) : (
-							<div className="entry-delivery-picker">
-								<input
-									id={id}
-									value={form.carrier}
-									readOnly
-									disabled={!customerId || !context?.carriers.length}
-									placeholder={
-										customerId
-											? "Admin chưa gán nhà xe"
-											: "Chọn khách hàng trước"
-									}
-									onFocus={() => setCarrierPickerOpen(true)}
-									onBlur={() =>
-										window.setTimeout(() => setCarrierPickerOpen(false), 120)
-									}
-								/>
-								{carrierPickerOpen && context?.carriers.length ? (
-									<div className="entry-delivery-options" role="listbox">
-										<CarrierOptionGroup
-											label="Nhà xe đã liên kết"
-											options={context.carriers.map((item) => ({
-												...item,
-												isLinked: true,
-											}))}
-											onChoose={(nextCarrierId) => {
-												if (customerId)
-													void chooseCarrierFor(
-														context,
-														customerId,
-														nextCarrierId,
+			{isDirect ? (
+				<div className="entry-direct-spec-field">
+					<Field label="Quy cách">
+						{(id) => <input id={id} value="Tất cả" disabled />}
+					</Field>
+				</div>
+			) : (
+				<div className="field-grid entry-shipping-fields">
+					<Field
+						label="Nhà xe *"
+						error={fieldError(!form.carrier.trim(), "Vui lòng chọn nhà xe.")}
+					>
+						{(id) =>
+							options?.isAdmin ? (
+								<div className="entry-delivery-picker">
+									<input
+										id={id}
+										value={form.carrier}
+										disabled={!customerId}
+										placeholder="Tìm hoặc chọn nhà xe"
+										autoComplete="off"
+										onFocus={() => setCarrierPickerOpen(true)}
+										onBlur={() =>
+											window.setTimeout(() => setCarrierPickerOpen(false), 120)
+										}
+										onChange={(event) => {
+											const carrier = event.target.value;
+											const matched = carrierOptions.find(
+												(item) =>
+													normalizeText(item.name) === normalizeText(carrier),
+											);
+											setCarrierId(null);
+											ratesRequest.current += 1;
+											setRates([]);
+											setRate(null);
+											setCarrierPickerOpen(true);
+											setForm((current) => ({
+												...current,
+												carrier,
+												spec: "",
+												saveCarrierRate: false,
+											}));
+											if (matched) void chooseCarrier(matched.id);
+										}}
+									/>
+									{carrierPickerOpen && matchingCarriers.length ? (
+										<div className="entry-delivery-options" role="listbox">
+											<CarrierOptionGroup
+												label="Nhà xe đã liên kết"
+												options={linkedCarriers}
+												onChoose={(carrierId) => void chooseCarrier(carrierId)}
+											/>
+											<CarrierOptionGroup
+												label={
+													linkedCarriers.length
+														? "Nhà xe khác"
+														: "Danh sách nhà xe"
+												}
+												options={otherCarriers}
+												onChoose={(carrierId) => void chooseCarrier(carrierId)}
+											/>
+										</div>
+									) : null}
+								</div>
+							) : (
+								<div className="entry-delivery-picker">
+									<input
+										id={id}
+										value={form.carrier}
+										readOnly
+										disabled={!customerId || !context?.carriers.length}
+										placeholder={
+											customerId
+												? "Admin chưa gán nhà xe"
+												: "Chọn khách hàng trước"
+										}
+										onFocus={() => setCarrierPickerOpen(true)}
+										onBlur={() =>
+											window.setTimeout(() => setCarrierPickerOpen(false), 120)
+										}
+									/>
+									{carrierPickerOpen && context?.carriers.length ? (
+										<div className="entry-delivery-options" role="listbox">
+											<CarrierOptionGroup
+												label="Nhà xe đã liên kết"
+												options={context.carriers.map((item) => ({
+													...item,
+													isLinked: true,
+												}))}
+												onChoose={(nextCarrierId) => {
+													if (customerId)
+														void chooseCarrierFor(
+															context,
+															customerId,
+															nextCarrierId,
+														);
+													setCarrierPickerOpen(false);
+												}}
+											/>
+										</div>
+									) : null}
+								</div>
+							)
+						}
+					</Field>
+					<Field
+						label="Quy cách *"
+						error={fieldError(!form.spec.trim(), "Vui lòng chọn quy cách.")}
+					>
+						{(id) =>
+							options?.isAdmin ? (
+								<div className="entry-delivery-picker">
+									<input
+										id={id}
+										value={form.spec}
+										disabled={!carrierId}
+										placeholder="Nhập hoặc chọn quy cách"
+										onFocus={() => setRateOptionsOpen(true)}
+										onBlur={() =>
+											window.setTimeout(() => setRateOptionsOpen(false), 120)
+										}
+										onChange={(event) => {
+											const spec = event.target.value;
+											setRate(rateForSpec(rates, spec));
+											setForm((current) => ({ ...current, spec }));
+										}}
+									/>
+									{rateOptionsOpen &&
+									carrierId &&
+									matchingRateOptions.length ? (
+										<div className="entry-delivery-options" role="listbox">
+											<RateOptionGroup
+												label="Quy cách đã gán"
+												options={assignedRateOptions}
+												onChoose={(item) => {
+													chooseRate(
+														rates.find((rateItem) => rateItem.id === item.id) ??
+															null,
 													);
-												setCarrierPickerOpen(false);
-											}}
-										/>
-									</div>
-								) : null}
-							</div>
-						)
-					}
-				</Field>
-				<Field
-					label="Quy cách *"
-					error={fieldError(!form.spec.trim(), "Vui lòng chọn quy cách.")}
-				>
-					{(id) =>
-						options?.isAdmin ? (
-							<div className="entry-delivery-picker">
-								<input
-									id={id}
-									value={form.spec}
-									disabled={!carrierId}
-									placeholder="Nhập hoặc chọn quy cách"
-									onFocus={() => setRateOptionsOpen(true)}
-									onBlur={() =>
-										window.setTimeout(() => setRateOptionsOpen(false), 120)
-									}
-									onChange={(event) => {
-										const spec = event.target.value;
-										setRate(rateForSpec(rates, spec));
-										setForm((current) => ({ ...current, spec }));
-									}}
-								/>
-								{rateOptionsOpen && carrierId && matchingRateOptions.length ? (
-									<div className="entry-delivery-options" role="listbox">
-										<RateOptionGroup
-											label="Quy cách đã gán"
-											options={assignedRateOptions}
-											onChoose={(item) => {
-												chooseRate(
-													rates.find((rateItem) => rateItem.id === item.id) ??
-														null,
-												);
-												setRateOptionsOpen(false);
-											}}
-										/>
-										<RateOptionGroup
-											label="Thiết lập quy cách mới"
-											options={newRateOptions}
-											onChoose={(item) => {
-												chooseRate(null);
-												setForm((current) => ({ ...current, spec: item.spec }));
-												setRateOptionsOpen(false);
-											}}
-										/>
-									</div>
-								) : null}
-							</div>
-						) : (
-							<div className="entry-delivery-picker">
-								<input
-									id={id}
-									value={form.spec}
-									readOnly
-									disabled={!carrierId || !rates.length}
-									placeholder={
-										carrierId
-											? rates.length
-												? "Chọn quy cách đã thiết lập"
-												: "Admin chưa thiết lập quy cách"
-											: "Chọn nhà xe trước"
-									}
-									onFocus={() => setRateOptionsOpen(true)}
-									onBlur={() =>
-										window.setTimeout(() => setRateOptionsOpen(false), 120)
-									}
-								/>
-								{rateOptionsOpen && rates.length ? (
-									<div className="entry-delivery-options" role="listbox">
-										<RateOptionGroup
-											label="Quy cách đã gán"
-											options={rates.map((item) => ({
-												...item,
-												isAssigned: true,
-											}))}
-											onChoose={(item) => {
-												chooseRate(
-													rates.find((rateItem) => rateItem.id === item.id) ??
-														null,
-												);
-												setRateOptionsOpen(false);
-											}}
-										/>
-									</div>
-								) : null}
-							</div>
-						)
-					}
-				</Field>
-				<Field
-					label="Số lượng"
-					error={fieldError(
-						form.quantity != null &&
-							(!Number.isSafeInteger(form.quantity) || form.quantity <= 0),
-						"Số lượng phải là số nguyên lớn hơn 0.",
-					)}
-				>
-					{(id) => (
-						<input
-							id={id}
-							type="number"
-							inputMode="numeric"
-							min={1}
-							step={1}
-							value={form.quantity ?? ""}
-							placeholder="Số lượng"
-							onChange={(event) => {
-								const quantity = event.target.value;
-								setForm((current) => ({
-									...current,
-									quantity: quantity === "" ? null : Number(quantity),
-								}));
-							}}
-						/>
-					)}
-				</Field>
-				<Field
-					label="Bill *"
-					error={fieldError(!form.billStatus, "Vui lòng chọn bill.")}
-				>
-					{(id) => (
-						<select
-							id={id}
-							value={form.billStatus}
-							onChange={(event) =>
-								setForm((current) => ({
-									...current,
-									billStatus: event.target.value as EntryInput["billStatus"],
-								}))
-							}
-						>
-							<option value="">Chọn bill</option>
-							<option value="Có bill">Có bill</option>
-							<option value="Không bill">Không bill</option>
-						</select>
-					)}
-				</Field>
-			</div>
+													setRateOptionsOpen(false);
+												}}
+											/>
+											<RateOptionGroup
+												label="Thiết lập quy cách mới"
+												options={newRateOptions}
+												onChoose={(item) => {
+													chooseRate(null);
+													setForm((current) => ({
+														...current,
+														spec: item.spec,
+													}));
+													setRateOptionsOpen(false);
+												}}
+											/>
+										</div>
+									) : null}
+								</div>
+							) : (
+								<div className="entry-delivery-picker">
+									<input
+										id={id}
+										value={form.spec}
+										readOnly
+										disabled={!carrierId || !rates.length}
+										placeholder={
+											carrierId
+												? rates.length
+													? "Chọn quy cách đã thiết lập"
+													: "Admin chưa thiết lập quy cách"
+												: "Chọn nhà xe trước"
+										}
+										onFocus={() => setRateOptionsOpen(true)}
+										onBlur={() =>
+											window.setTimeout(() => setRateOptionsOpen(false), 120)
+										}
+									/>
+									{rateOptionsOpen && rates.length ? (
+										<div className="entry-delivery-options" role="listbox">
+											<RateOptionGroup
+												label="Quy cách đã gán"
+												options={rates.map((item) => ({
+													...item,
+													isAssigned: true,
+												}))}
+												onChoose={(item) => {
+													chooseRate(
+														rates.find((rateItem) => rateItem.id === item.id) ??
+															null,
+													);
+													setRateOptionsOpen(false);
+												}}
+											/>
+										</div>
+									) : null}
+								</div>
+							)
+						}
+					</Field>
+					<Field
+						label="Số lượng"
+						error={fieldError(
+							form.quantity != null &&
+								(!Number.isSafeInteger(form.quantity) || form.quantity <= 0),
+							"Số lượng phải là số nguyên lớn hơn 0.",
+						)}
+					>
+						{(id) => (
+							<input
+								id={id}
+								type="number"
+								inputMode="numeric"
+								min={1}
+								step={1}
+								value={form.quantity ?? ""}
+								placeholder="Số lượng"
+								onChange={(event) => {
+									const quantity = event.target.value;
+									setForm((current) => ({
+										...current,
+										quantity: quantity === "" ? null : Number(quantity),
+									}));
+								}}
+							/>
+						)}
+					</Field>
+					<Field
+						label="Bill *"
+						error={fieldError(!form.billStatus, "Vui lòng chọn bill.")}
+					>
+						{(id) => (
+							<select
+								id={id}
+								value={form.billStatus}
+								onChange={(event) =>
+									setForm((current) => ({
+										...current,
+										billStatus: event.target.value as EntryInput["billStatus"],
+									}))
+								}
+							>
+								<option value="">Chọn bill</option>
+								<option value="Có bill">Có bill</option>
+								<option value="Không bill">Không bill</option>
+							</select>
+						)}
+					</Field>
+				</div>
+			)}
 			{standardUnitFee != null && (
 				<div className="entry-rate-standard">
 					Cước chuẩn: {formatMoney(standardUnitFee)} đ × {form.quantity ?? 1}
@@ -1041,80 +1129,79 @@ export function EntryDialog({
 					)}
 				</div>
 			)}
-			<div className="field-grid entry-fee-fields">
-				<Field
-					label={
-						form.transportUnitFee == null
-							? "Tổng cước vận chuyển *"
-							: "Đơn giá vận chuyển *"
-					}
-					hint={
-						form.transportUnitFee == null
-							? "Nhập tổng cước; nhập 0 nếu không tính cước."
-							: "Đơn giá cho 1 đơn vị; nhập 0 nếu không tính cước."
-					}
-					error={fieldError(
-						transportTotal < 0 ||
-							!Number.isSafeInteger(transportTotal) ||
-							transportTotal > 1_000_000_000_000,
-						transportTotal < 0
-							? "Cước vận chuyển không được âm."
-							: "Thành tiền cước vượt quá giới hạn hợp lệ.",
+			{!isDirect && (
+				<div className="field-grid entry-fee-fields">
+					<Field
+						label={
+							form.transportUnitFee == null
+								? "Tổng cước vận chuyển *"
+								: "Đơn giá vận chuyển *"
+						}
+						error={fieldError(
+							transportTotal < 0 ||
+								!Number.isSafeInteger(transportTotal) ||
+								transportTotal > 1_000_000_000_000,
+							transportTotal < 0
+								? "Cước vận chuyển không được âm."
+								: "Thành tiền cước vượt quá giới hạn hợp lệ.",
+						)}
+					>
+						{(id) => (
+							<MoneyInput
+								id={id}
+								value={form.transportUnitFee ?? form.transportFee}
+								placeholder="Nhập cước vận chuyển"
+								onValueChange={(value) =>
+									setForm((current) =>
+										current.transportUnitFee == null
+											? { ...current, transportFee: value }
+											: { ...current, transportUnitFee: value },
+									)
+								}
+							/>
+						)}
+					</Field>
+					<Field label="Phí vào cổng">
+						{(id) => (
+							<MoneyInput
+								id={id}
+								value={form.gateFee}
+								placeholder="Để trống nếu không có phí"
+								onValueChange={(gateFee) =>
+									setForm((current) => ({ ...current, gateFee }))
+								}
+							/>
+						)}
+					</Field>
+					<Field label="Ghi chú">
+						{(id) => (
+							<input
+								id={id}
+								value={form.generalNote}
+								placeholder="Nhập ghi chú nếu cần"
+								onChange={(event) =>
+									setForm((current) => ({
+										...current,
+										generalNote: event.target.value,
+									}))
+								}
+							/>
+						)}
+					</Field>
+				</div>
+			)}
+			{!isDirect && (
+				<div className="entry-rate-standard">
+					Thành tiền cước:{" "}
+					{form.transportUnitFee != null && (
+						<>
+							{formatMoney(form.transportUnitFee)} đ × {form.quantity ?? 1}
+							{" = "}
+						</>
 					)}
-				>
-					{(id) => (
-						<MoneyInput
-							id={id}
-							value={form.transportUnitFee ?? form.transportFee}
-							placeholder="Nhập cước vận chuyển"
-							onValueChange={(value) =>
-								setForm((current) =>
-									current.transportUnitFee == null
-										? { ...current, transportFee: value }
-										: { ...current, transportUnitFee: value },
-								)
-							}
-						/>
-					)}
-				</Field>
-				<Field label="Phí vào cổng">
-					{(id) => (
-						<MoneyInput
-							id={id}
-							value={form.gateFee}
-							placeholder="Để trống nếu không có phí"
-							onValueChange={(gateFee) =>
-								setForm((current) => ({ ...current, gateFee }))
-							}
-						/>
-					)}
-				</Field>
-				<Field label="Ghi chú">
-					{(id) => (
-						<input
-							id={id}
-							value={form.generalNote}
-							placeholder="Nhập ghi chú nếu cần"
-							onChange={(event) =>
-								setForm((current) => ({
-									...current,
-									generalNote: event.target.value,
-								}))
-							}
-						/>
-					)}
-				</Field>
-			</div>
-			<div className="entry-rate-standard">
-				Thành tiền cước:{" "}
-				{form.transportUnitFee != null && (
-					<>
-						{formatMoney(form.transportUnitFee)} đ × {form.quantity ?? 1}
-						{" = "}
-					</>
-				)}
-				<strong>{formatMoney(transportTotal)} đ</strong>
-			</div>
+					<strong>{formatMoney(transportTotal)} đ</strong>
+				</div>
+			)}
 			{transportOverRate && (
 				<div className="entry-rate-warning">
 					<AlertCircle size={17} />

@@ -46,6 +46,7 @@ const detailLabels: Record<string, string> = {
 	address: "Địa chỉ giao hàng",
 	spec: "Quy cách",
 	quantity: "Số lượng",
+	deliveryMethod: "Hình thức giao",
 	transportUnitFee: "Đơn giá vận chuyển",
 	ticketFee: "Phí cước",
 	transportFee: "Cước vận chuyển",
@@ -143,6 +144,8 @@ const pageLabels: Record<string, string> = {
 
 function detailValue(value: unknown, key = ""): string {
 	if (value === null || value === undefined || value === "") return "—";
+	if (key === "deliveryMethod")
+		return value === "direct" ? "Giao trực tiếp" : "Gửi nhà xe";
 	if (typeof value === "boolean") return value ? "Có" : "Không";
 	if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
 		return formatDate(value);

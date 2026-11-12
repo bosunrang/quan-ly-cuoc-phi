@@ -1,7 +1,10 @@
 import { normalizeText } from "../../shared/lib/text";
 
 /** Phiếu cước gửi hàng. */
+export type DeliveryMethod = "carrier" | "direct";
+
 export interface Entry {
+	deliveryMethod?: DeliveryMethod;
 	id: number;
 	entryDate: string;
 	customer: string;
@@ -46,6 +49,7 @@ export interface Entry {
 
 /** Dữ liệu gửi lên khi tạo hoặc sửa. Không có createdBy: máy chủ tự điền. */
 export interface EntryInput {
+	deliveryMethod?: DeliveryMethod;
 	entryDate: string;
 	/** Khóa khách hàng dùng khi lưu trực tiếp thông tin giao nhận vào danh mục. */
 	customerId?: number;
@@ -205,8 +209,12 @@ export interface EntryListResult {
 	scope: "own" | "all";
 }
 
-export function emptyEntryInput(entryDate: string): EntryInput {
+export function emptyEntryInput(
+	entryDate: string,
+	deliveryMethod: DeliveryMethod = "carrier",
+): EntryInput {
 	return {
+		deliveryMethod,
 		entryDate,
 		customerId: undefined,
 		customer: "",
@@ -214,7 +222,7 @@ export function emptyEntryInput(entryDate: string): EntryInput {
 		carrier: "",
 		recipient: "",
 		address: "",
-		spec: "",
+		spec: deliveryMethod === "direct" ? "Tất cả" : "",
 		quantity: 1,
 		transportUnitFee: 0,
 		ticketFee: 0,
@@ -238,6 +246,7 @@ export function toEntryInput(entry: Entry): EntryInput {
 	const quantity = entry.quantity ?? 1;
 	const unitFee = entry.transportFee / quantity;
 	return {
+		deliveryMethod: entry.deliveryMethod ?? "carrier",
 		entryDate: entry.entryDate,
 		customerId: entry.customerId ?? undefined,
 		customer: entry.customer,
@@ -245,7 +254,7 @@ export function toEntryInput(entry: Entry): EntryInput {
 		carrier: entry.carrier,
 		recipient: entry.recipient,
 		address: entry.address,
-		spec: entry.spec,
+		spec: entry.deliveryMethod === "direct" ? "Tất cả" : entry.spec,
 		quantity,
 		transportUnitFee:
 			entry.transportUnitFee ?? (Number.isInteger(unitFee) ? unitFee : null),
@@ -268,6 +277,7 @@ export function toEntryInput(entry: Entry): EntryInput {
 
 /** Tiền cước thực tế; phí cổng và các phí khác được cộng một lần theo phiếu. */
 export function entryTransportFee(input: EntryInput): number {
+	if (input.deliveryMethod === "direct") return 0;
 	return input.transportUnitFee == null
 		? input.transportFee
 		: input.transportUnitFee * (input.quantity ?? 1);
@@ -286,14 +296,17 @@ export function validateEntry(
 	if (requireEmployee && !input.employeeId)
 		return "Vui lòng chọn nhân viên phụ trách.";
 	if (!input.customer.trim()) return "Vui lòng nhập tên khách hàng.";
-	if (!input.carrier.trim()) return "Vui lòng nhập nhà xe.";
-	if (!input.spec.trim()) return "Vui lòng nhập quy cách.";
+	if (input.deliveryMethod !== "direct" && !input.carrier.trim())
+		return "Vui lòng nhập nhà xe.";
+	if (input.deliveryMethod !== "direct" && !input.spec.trim())
+		return "Vui lòng nhập quy cách.";
 	if (
 		input.quantity != null &&
 		(!Number.isSafeInteger(input.quantity) || input.quantity <= 0)
 	)
 		return "Số lượng phải là số nguyên lớn hơn 0.";
-	if (!input.billStatus) return "Vui lòng chọn bill.";
+	if (input.deliveryMethod !== "direct" && !input.billStatus)
+		return "Vui lòng chọn bill.";
 	if (!input.note.trim()) return "Vui lòng nhập sản phẩm.";
 	if (
 		input.transportUnitFee != null &&

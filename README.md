@@ -48,6 +48,13 @@ số lượng**; phí vào cổng và phí khác được cộng một lần the
 50.000 đồng × 5 thùng = 250.000 đồng, không phát sinh chênh lệch nếu đơn giá
 chuẩn cũng là 50.000 đồng. Lưu bảng cước từ phiếu chỉ lưu đơn giá.
 
+Hai nút **Gửi nhà xe** và **Giao trực tiếp** mở biểu mẫu tương ứng. Giao trực
+tiếp không cần nhà xe hoặc bảng giá: nhập đơn vị nhận hàng và sản phẩm;
+quy cách cố định là **Tất cả**, phí trên phiếu tự về 0, Bill để trống. Báo cáo
+ghép hàng giao trực tiếp với điểm đến là đơn vị nhận hàng, vẫn giữ km và tiền xăng. Chọn địa điểm
+trong danh mục khi nhập lộ trình để lưu mã liên kết; lộ trình cũ đối chiếu theo
+tên. Phiếu cũ có thể đổi **Hình thức giao** trong form sửa phiếu.
+
 Muốn chạy như bản thật (một cổng duy nhất):
 
 ```bash

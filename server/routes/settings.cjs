@@ -151,6 +151,7 @@ const BACKUP_TABLES = {
       'bill_status',
       'quantity',
       'transport_unit_fee',
+      'delivery_method',
       'customer_id',
       'carrier_id',
       'standard_transport_fee',
@@ -214,7 +215,16 @@ const BACKUP_TABLES = {
   },
   fuelLegs: {
     table: 'fuel_record_legs',
-    columns: ['id', 'fuel_record_id', 'sequence_no', 'from_name', 'to_name', 'distance_km'],
+    columns: [
+      'id',
+      'fuel_record_id',
+      'sequence_no',
+      'from_name',
+      'to_name',
+      'distance_km',
+      'to_customer_id',
+      'to_carrier_id',
+    ],
   },
 };
 
@@ -310,6 +320,11 @@ function importRows(db, name, rows, userId, knownUserIds) {
     // Backup cũ chưa có số lượng vẫn giữ trạng thái chưa xác định.
     if (name === 'entries') value.quantity ??= null;
     if (name === 'entries') value.transport_unit_fee ??= null;
+    if (name === 'entries') value.delivery_method ??= 'carrier';
+    if (name === 'fuelLegs') {
+      value.to_customer_id ??= null;
+      value.to_carrier_id ??= null;
+    }
     // Backup cũ chưa có chi phí khác thì xem như không phát sinh.
     if (name === 'entries') value.other_fee ??= 0;
     if (name === 'entries') value.other_fee_name ??= '';

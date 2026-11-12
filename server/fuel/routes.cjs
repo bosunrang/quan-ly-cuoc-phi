@@ -111,7 +111,7 @@ async function vietmapRouteDistance(from, to, apiKey, forceRefresh = false) {
 
 function saveRouteLegs(db, recordId, legs, at) {
   const saveLeg = db.prepare(
-    'INSERT INTO fuel_record_legs (fuel_record_id, sequence_no, from_name, to_name, distance_km) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO fuel_record_legs (fuel_record_id, sequence_no, from_name, to_name, distance_km, to_customer_id, to_carrier_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
   );
   const saveDistance = db.prepare(
     `INSERT INTO route_distances
@@ -123,7 +123,15 @@ function saveRouteLegs(db, recordId, legs, at) {
        updated_at = excluded.updated_at`,
   );
   legs.forEach((leg, index) => {
-    saveLeg.run(recordId, index + 1, leg.from, leg.to, leg.km);
+    saveLeg.run(
+      recordId,
+      index + 1,
+      leg.from,
+      leg.to,
+      leg.km,
+      leg.toCustomerId ?? null,
+      leg.toCarrierId ?? null,
+    );
     // Km trên phiếu (kể cả người dùng sửa tay) là dữ liệu lộ trình chuẩn
     // của ứng dụng và được tái sử dụng ở kỳ sau.
     saveDistance.run(

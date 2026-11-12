@@ -1,6 +1,6 @@
 import {
+	MapPin,
 	Pencil,
-	Plus,
 	Search,
 	Trash2,
 	Truck,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+	DeliveryMethod,
 	Entry,
 	EntryFilters,
 	EntryFormOptions,
@@ -107,9 +108,9 @@ export function EntriesPage() {
 		else await entryRepository.create(input);
 		await load();
 	};
-	const openNewEntry = () => {
+	const openNewEntry = (deliveryMethod: DeliveryMethod) => {
 		setEditor({
-			initial: emptyEntryInput(draftEntryDate),
+			initial: emptyEntryInput(draftEntryDate, deliveryMethod),
 			editingId: null,
 		});
 	};
@@ -135,9 +136,22 @@ export function EntriesPage() {
 					<h2>Nhập chi phí gửi hàng</h2>
 					<p>{subtitle}</p>
 				</div>
-				<button type="button" className="button primary" onClick={openNewEntry}>
-					<Plus size={16} /> Thêm chi phí
-				</button>
+				<div className="entry-create-actions">
+					<button
+						type="button"
+						className="button primary"
+						onClick={() => openNewEntry("carrier")}
+					>
+						<Truck size={16} /> Gửi nhà xe
+					</button>
+					<button
+						type="button"
+						className="button"
+						onClick={() => openNewEntry("direct")}
+					>
+						<MapPin size={16} /> Giao trực tiếp
+					</button>
+				</div>
 			</section>
 			{error && <Alert tone="error">{error}</Alert>}
 			<section
@@ -282,7 +296,13 @@ export function EntriesPage() {
 												{isAdmin && <td>{entry.employeeName || "Chưa gán"}</td>}
 												{isAdmin ? (
 													<>
-														<td>{entry.carrier}</td>
+														<td>
+															{entry.deliveryMethod === "direct" ? (
+																<span title="Giao trực tiếp">—</span>
+															) : (
+																entry.carrier
+															)}
+														</td>
 														<td>
 															<strong>{entry.customer}</strong>
 														</td>
@@ -292,7 +312,13 @@ export function EntriesPage() {
 														<td>
 															<strong>{entry.customer}</strong>
 														</td>
-														<td>{entry.carrier}</td>
+														<td>
+															{entry.deliveryMethod === "direct" ? (
+																<span title="Giao trực tiếp">—</span>
+															) : (
+																entry.carrier
+															)}
+														</td>
 													</>
 												)}
 												<td className="entry-note-cell">{entry.note || "—"}</td>
