@@ -1471,6 +1471,136 @@ describe('phân quyền thẻ', () => {
   });
 });
 
+test('Admin và nhân viên lưu được giao trực tiếp cước 0; báo cáo vẫn giữ phiếu và phí cổng', async () => {
+  const customer = await call('POST', '/api/customers', {
+    token: adminToken,
+    body: { customerName: 'Khách giao trực tiếp miễn cước' },
+  });
+  const carrier = await call('POST', '/api/carriers', {
+    token: adminToken,
+    body: { name: 'Giao trực tiếp miễn cước' },
+  });
+  assert.equal(customer.status, 200);
+  assert.equal(carrier.status, 200);
+  const input = newEntry({
+    entryDate: '2026-12-05',
+    customerId: customer.data.id,
+    customer: customer.data.customerName,
+    carrierId: carrier.data.id,
+    carrier: carrier.data.name,
+    quantity: 5,
+    transportUnitFee: 0,
+    transportFee: 999999,
+    ticketFee: 0,
+    gateFee: 0,
+    saveCarrierRate: true,
+  });
+  const created = await call('POST', '/api/entries', { token: adminToken, body: input });
+  assert.equal(created.status, 200, JSON.stringify(created.data));
+  assert.equal(created.data.transportFee, 0);
+  assert.equal(created.data.totalFee, 0);
+  assert.equal(created.data.standardTransportFee, 0);
+  assert.equal(created.data.transportUnitFee, 0);
+  let staffId;
+  try {
+    const rates = await call(
+      'GET',
+      `/api/entries/rates?customerId=${customer.data.id}&carrierId=${carrier.data.id}`,
+      { token: staffAToken },
+    );
+    assert.equal(rates.data.items[0].transportFee, 0);
+    const staffInput = { ...input, entryDate: '2026-12-06', saveCarrierRate: false };
+    const staffCreated = await call('POST', '/api/entries', {
+      token: staffAToken,
+      body: staffInput,
+    });
+    assert.equal(staffCreated.status, 200, JSON.stringify(staffCreated.data));
+    staffId = staffCreated.data.id;
+    assert.equal(staffCreated.data.totalFee, 0);
+    const legacyZero = await call('PATCH', `/api/entries/${staffId}`, {
+      token: staffAToken,
+      body: { ...staffInput, transportUnitFee: null, transportFee: 0, quantity: 3, gateFee: 10000 },
+    });
+    assert.equal(legacyZero.status, 200, JSON.stringify(legacyZero.data));
+    assert.equal(legacyZero.data.transportFee, 0);
+    assert.equal(legacyZero.data.totalFee, 10000);
+    for (const invalid of [
+      { transportUnitFee: -1 },
+      { transportUnitFee: null, transportFee: -1 },
+    ]) {
+      const rejected = await call('PATCH', `/api/entries/${staffId}`, {
+        token: staffAToken,
+        body: { ...staffInput, ...invalid },
+      });
+      assert.equal(rejected.status, 400);
+    }
+    // Giá chuẩn 0 vẫn là giá hợp lệ để đối chiếu, không được bỏ qua như chưa có giá.
+    const needsReason = await call('PATCH', `/api/entries/${staffId}`, {
+      token: staffAToken,
+      body: { ...staffInput, transportUnitFee: 10000 },
+    });
+    assert.equal(needsReason.status, 400);
+    const range = `from=2026-12-05&to=2026-12-06&employeeId=${staffAEmployeeId}`;
+    const list = await call('GET', `/api/entries?${range}`, { token: adminToken });
+    assert.equal(list.data.count, 2);
+    assert.equal(list.data.total, 10000);
+    const dashboard = await call('GET', `/api/dashboard?${range}`, { token: adminToken });
+    assert.equal(dashboard.data.summary.entries, 2);
+    assert.equal(dashboard.data.summary.transport, 0);
+    assert.equal(dashboard.data.summary.gate, 10000);
+    assert.equal(dashboard.data.summary.total, 10000);
+    assert.equal(dashboard.data.summary.varianceAmount, 0);
+    const variance = await call('GET', `/api/reports/carrier-variance?${range}`, {
+      token: adminToken,
+    });
+    assert.equal(variance.data.summary.entries, 0);
+    const printable = await call('GET', `/api/reports/print?${range}&type=daily`, {
+      token: adminToken,
+    });
+    assert.equal(printable.status, 200);
+    assert.ok(
+      printable.data.sheets[0].rows
+        .flatMap((row) => row.cells)
+        .some((cell) => cell.value.includes(input.customer)),
+    );
+    const printedDeliveries = printable.data.sheets[0].rows.filter((row) =>
+      row.cells.some((cell) => cell.value === input.customer),
+    );
+    assert.equal(printedDeliveries.length, 2);
+    for (const row of printedDeliveries) {
+      assert.equal(row.cells.find((cell) => cell.address === `J${row.number}`).value, '-');
+    }
+    const exported = await call('GET', `/api/reports/export?${range}&type=daily`, {
+      token: adminToken,
+    });
+    assert.equal(exported.status, 200);
+    const workbook = XLSX.read(Buffer.from(exported.data.contentBase64, 'base64'), {
+      type: 'buffer',
+      cellNF: true,
+    });
+    assert.ok(
+      Object.values(workbook.Sheets[workbook.SheetNames[0]]).some(
+        (cell) => cell?.v === input.customer,
+      ),
+    );
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const deliveryCells = Object.entries(sheet).filter(([, cell]) => cell?.v === input.customer);
+    assert.equal(deliveryCells.length, 2);
+    for (const [address] of deliveryCells) {
+      const row = XLSX.utils.decode_cell(address).r + 1;
+      assert.equal(sheet[`J${row}`].v, 0, 'Giữ giá trị số để tính toán trong Excel');
+      assert.equal(
+        XLSX.utils.format_cell(sheet[`J${row}`]),
+        '-',
+        'Hiển thị cước miễn phí bằng dấu -',
+      );
+    }
+  } finally {
+    if (staffId) await call('DELETE', `/api/entries/${staffId}`, { token: adminToken });
+    await call('DELETE', `/api/entries/${created.data.id}`, { token: adminToken });
+  }
+});
+
 test('số lượng được lưu, sửa, xóa và giữ qua backup; backup cũ vẫn khôi phục được', async () => {
   const input = newEntry({ customer: 'Khách kiểm tra số lượng', quantity: 3 });
   const created = await call('POST', '/api/entries', { token: adminToken, body: input });

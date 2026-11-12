@@ -453,8 +453,16 @@ export function ReportsPage({ section }: { section: "employee" | "carrier" }) {
 												<td title={item.customer}>{item.customer}</td>
 												<td>{item.provinceCity || "—"}</td>
 												<td>{item.spec}</td>
-												<td>{formatMoney(item.standardFee)} đ</td>
-												<td>{formatMoney(item.actualFee)} đ</td>
+												<td>
+													{item.standardFee === 0
+														? "—"
+														: `${formatMoney(item.standardFee)} đ`}
+												</td>
+												<td>
+													{item.actualFee === 0
+														? "—"
+														: `${formatMoney(item.actualFee)} đ`}
+												</td>
 												<td
 													className={
 														item.difference > 0 ? "is-over" : "is-under"

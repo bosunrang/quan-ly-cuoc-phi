@@ -313,7 +313,9 @@ export function EntriesPage() {
 													)}
 												</td>
 												<td className={`entry-money${rateTone}`}>
-													{formatMoney(entry.transportFee)}
+													{entry.transportFee === 0
+														? "—"
+														: formatMoney(entry.transportFee)}
 												</td>
 												<td className="entry-money">
 													{entry.gateFee ? formatMoney(entry.gateFee) : "—"}

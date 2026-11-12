@@ -11,6 +11,8 @@ const EMPLOYEE_PAGE = 'reports_employee';
 const CARRIER_PAGE = 'reports_carrier';
 const FUEL_PRICE_PAGE = 'reports_fuel_price';
 const number = (value) => Number(value || 0);
+// Excel vẫn lưu số 0 để tính toán, nhưng hiển thị cước miễn phí bằng dấu gạch.
+const FREIGHT_MONEY_FORMAT = '#,##0;-#,##0;"-"';
 
 // Ghi chú chỉ giải thích phiếu trùng hoặc chênh lệch cước; trạng thái bill có cột riêng.
 const carrierExportNote = (entries) => {
@@ -609,19 +611,21 @@ function worksheetForPrint(ws, name) {
       const mergeRange = anchors.get(coordinate);
       const style = source?.s || {};
       const numberFormat = style.numFmt;
-      const decimalPlaces =
-        typeof numberFormat === 'string' && /^#,##0(?:\.0+)?$/.test(numberFormat)
-          ? numberFormat.split('.')[1]?.length || 0
-          : null;
+      const positiveFormat = typeof numberFormat === 'string' ? numberFormat.split(';')[0] : '';
+      const decimalPlaces = /^#,##0(?:\.0+)?$/.test(positiveFormat)
+        ? positiveFormat.split('.')[1]?.length || 0
+        : null;
       const value =
         source?.v == null
           ? ''
-          : typeof source.v === 'number' && decimalPlaces !== null
-            ? new Intl.NumberFormat('vi-VN', {
-                minimumFractionDigits: decimalPlaces,
-                maximumFractionDigits: decimalPlaces,
-              }).format(source.v)
-            : XLSX.utils.format_cell(source);
+          : source.v === 0 && numberFormat === FREIGHT_MONEY_FORMAT
+            ? '-'
+            : typeof source.v === 'number' && decimalPlaces !== null
+              ? new Intl.NumberFormat('vi-VN', {
+                  minimumFractionDigits: decimalPlaces,
+                  maximumFractionDigits: decimalPlaces,
+                }).format(source.v)
+              : XLSX.utils.format_cell(source);
       cells.push({
         address,
         value,
@@ -1038,13 +1042,15 @@ function dailySheet(data, input, employee) {
             ? dailyIncreasedPrice
             : targetColumn === 11 && value < 0
               ? dailyDecreasedPrice
-              : [9, 10, 11].includes(targetColumn)
-                ? dailyMoney
-                : targetColumn === 12
-                  ? dailyBillCheckbox
-                  : [0, 1, 4, 6, 8].includes(targetColumn)
-                    ? dailyCentered
-                    : dailyBaseStyle;
+              : targetColumn === 9
+                ? { ...dailyMoney, numFmt: FREIGHT_MONEY_FORMAT }
+                : [10, 11].includes(targetColumn)
+                  ? dailyMoney
+                  : targetColumn === 12
+                    ? dailyBillCheckbox
+                    : [0, 1, 4, 6, 8].includes(targetColumn)
+                      ? dailyCentered
+                      : dailyBaseStyle;
         set(ws, XLSX.utils.encode_cell({ r: excelRow - 1, c: targetColumn }), value, style);
       });
       if (delivery.mergeCarrier) {
@@ -1583,9 +1589,11 @@ function carrierVarianceSheet(items, input) {
         value,
         [0, 1, 2, 3, 5, 6].includes(column)
           ? centered
-          : [7, 8, 9].includes(column)
-            ? money
-            : baseStyle,
+          : [7, 8].includes(column)
+            ? { ...money, numFmt: FREIGHT_MONEY_FORMAT }
+            : column === 9
+              ? money
+              : baseStyle,
       );
     });
   });

@@ -53,6 +53,17 @@ describe("kiểm tra phiếu cước", () => {
 		expect(validateEntry(valid)).toBeNull();
 	});
 
+	it("cho phép giao trực tiếp không tính cước, kể cả khi giao nhiều đơn vị", () => {
+		expect(validateEntry({ ...valid, transportFee: 0 })).toBeNull();
+		const freeDelivery = { ...valid, quantity: 5, transportUnitFee: 0 };
+		expect(validateEntry(freeDelivery)).toBeNull();
+		expect(entryTransportFee(freeDelivery)).toBe(0);
+		expect(validateEntry({ ...freeDelivery, gateFee: 10_000 })).toBeNull();
+		expect(validateEntry({ ...valid, transportFee: -1 })).toContain(
+			"không được âm",
+		);
+	});
+
 	it("mặc định số lượng là 1, cho phép bỏ trống và chỉ nhận số nguyên dương", () => {
 		expect(emptyEntryInput("2026-08-29").quantity).toBe(1);
 		expect(validateEntry({ ...valid, quantity: null })).toBeNull();
@@ -78,7 +89,6 @@ describe("kiểm tra phiếu cước", () => {
 		expect(validateEntry({ ...valid, spec: "" })).toContain("quy cách");
 		expect(validateEntry({ ...valid, billStatus: "" })).toContain("bill");
 		expect(validateEntry({ ...valid, note: "" })).toContain("sản phẩm");
-		expect(validateEntry({ ...valid, transportFee: 0 })).toContain("lớn hơn 0");
 		expect(validateEntry(valid, { requireEmployee: true })).toContain(
 			"nhân viên phụ trách",
 		);

@@ -1050,15 +1050,15 @@ export function EntryDialog({
 					}
 					hint={
 						form.transportUnitFee == null
-							? "Phiếu cũ lưu tổng cước; nhập tổng tiền thực tế."
-							: "Cước cho 1 đơn vị quy cách"
+							? "Nhập tổng cước; nhập 0 nếu không tính cước."
+							: "Đơn giá cho 1 đơn vị; nhập 0 nếu không tính cước."
 					}
 					error={fieldError(
-						transportTotal <= 0 ||
+						transportTotal < 0 ||
 							!Number.isSafeInteger(transportTotal) ||
 							transportTotal > 1_000_000_000_000,
-						transportTotal <= 0
-							? "Vui lòng nhập cước vận chuyển."
+						transportTotal < 0
+							? "Cước vận chuyển không được âm."
 							: "Thành tiền cước vượt quá giới hạn hợp lệ.",
 					)}
 				>

@@ -59,9 +59,6 @@ function readEntryInput(body) {
   );
   const otherFee = money(body.otherFee, 'Chi phí khác');
   const otherFeeName = text(body.otherFeeName, 'tên chi phí khác', { max: 200 });
-  if (transportFee === 0) {
-    throw badRequest('Vui lòng nhập cước vận chuyển lớn hơn 0.');
-  }
   if (otherFee > 0 && !otherFeeName) {
     throw badRequest('Vui lòng nhập tên chi phí khác.');
   }

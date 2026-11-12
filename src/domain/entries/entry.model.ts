@@ -316,6 +316,5 @@ export function validateEntry(
 		return "Vui lòng nhập tên chi phí khác.";
 	if (input.otherFeeName.trim() && input.otherFee === 0)
 		return "Vui lòng nhập số tiền chi phí khác.";
-	if (transportFee === 0) return "Vui lòng nhập cước vận chuyển lớn hơn 0.";
 	return null;
 }
