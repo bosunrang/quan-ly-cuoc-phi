@@ -50,6 +50,104 @@ afterEach(async () => {
 });
 
 describe("hai hình thức giao hàng", () => {
+	it.each([
+		{ unitFee: 40_000, direction: "thấp hơn", note: "Nhà xe giảm giá" },
+		{ unitFee: 60_000, direction: "cao hơn", note: "Giao hàng gấp" },
+		{ unitFee: 0, direction: "thấp hơn", note: "Nhà xe miễn cước" },
+		{ unitFee: 50_000, direction: "", note: "" },
+	])(
+		"yêu cầu lý do khi đơn giá $unitFee chênh lệch với giá chuẩn theo số lượng",
+		async ({ unitFee, direction, note }) => {
+			vi.spyOn(entryRepository, "misaOrders").mockResolvedValue({ items: [] });
+			vi.spyOn(entryRepository, "customerContext").mockResolvedValue({
+				customer: { id: 1, name: "Trạm y tế A", recipient: "", address: "" },
+				carriers: [{ id: 2, name: "Nhà xe A" }],
+				recipients: [],
+				defaultCarrierId: 2,
+			});
+			vi.spyOn(entryRepository, "rates").mockResolvedValue({
+				items: [
+					{
+						id: 1,
+						spec: "Thùng nhỏ",
+						isDefault: false,
+						transportFee: 50_000,
+						gateFee: 0,
+						note: "",
+					},
+				],
+			});
+			const save = vi.fn().mockResolvedValue(undefined);
+			await act(async () =>
+				root.render(
+					createElement(EntryDialog, {
+						editingId: 7,
+						standardTransportFee: 50_000,
+						formOptions: options,
+						onSave: save,
+						onClose: vi.fn(),
+						initial: {
+							...emptyEntryInput("2026-12-12"),
+							customerId: 1,
+							customer: "Trạm y tế A",
+							employeeId: 1,
+							carrierId: 2,
+							carrier: "Nhà xe A",
+							spec: "Thùng nhỏ",
+							billStatus: "Có bill",
+							note: "Hàng",
+							quantity: 2,
+							transportUnitFee: unitFee,
+							transportFee: unitFee * 2,
+						},
+					}),
+				),
+			);
+			const submit = async () =>
+				act(async () =>
+					container
+						.querySelector("form")
+						?.dispatchEvent(
+							new Event("submit", { bubbles: true, cancelable: true }),
+						),
+				);
+			if (!direction) {
+				expect(labels()).not.toContain("Lý do chênh lệch cước");
+				await submit();
+				expect(save).toHaveBeenCalledOnce();
+				return;
+			}
+			expect(labels()).toContain("Lý do chênh lệch cước");
+			expect(container.textContent).toContain(direction);
+			if (unitFee !== 0) expect(container.textContent).toContain("20.000");
+			await submit();
+			expect(save).not.toHaveBeenCalled();
+			expect(container.textContent).toContain(
+				"Vui lòng nhập lý do chênh lệch cước.",
+			);
+			const label = [...container.querySelectorAll("label")].find(
+				(item) => item.textContent === "Lý do chênh lệch cước",
+			);
+			const textarea = container.querySelector<HTMLTextAreaElement>(
+				`textarea[id="${label?.htmlFor}"]`,
+			);
+			if (!textarea) throw new Error("Không có ô lý do");
+			await act(async () => {
+				Object.getOwnPropertyDescriptor(
+					HTMLTextAreaElement.prototype,
+					"value",
+				)?.set?.call(textarea, note);
+				textarea.dispatchEvent(new Event("input", { bubbles: true }));
+			});
+			await submit();
+			expect(save).toHaveBeenCalledWith(
+				expect.objectContaining({
+					rateVarianceNote: note,
+					transportFee: unitFee * 2,
+				}),
+			);
+		},
+	);
 	it("chuyển phiếu cũ sang giao trực tiếp và bỏ cước, nhà xe, Bill khi lưu", async () => {
 		vi.spyOn(entryRepository, "misaOrders").mockResolvedValue({ items: [] });
 		vi.spyOn(entryRepository, "customerContext").mockResolvedValue({

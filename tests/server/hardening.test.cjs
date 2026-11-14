@@ -592,7 +592,7 @@ test('báo cáo chênh lệch nhà xe phân trang, số liệu tổng hợp tín
         carrierId: carrier.data.id,
         spec: 'Tất cả',
         transportFee: over ? 101000 : 98000,
-        rateVarianceNote: over ? 'Phụ phí' : '',
+        rateVarianceNote: over ? 'Phụ phí' : 'Nhà xe giảm giá',
         note: `Hàng ${index}`,
         billStatus: 'Có bill',
         employeeId,

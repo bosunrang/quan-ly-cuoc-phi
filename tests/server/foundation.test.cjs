@@ -1237,8 +1237,22 @@ describe('bảng cước theo nhà xe và khách hàng', () => {
         gateFee: 15000,
       }),
     });
-    assert.equal(belowRateWithoutReason.status, 200);
-    assert.equal(belowRateWithoutReason.data.rateVarianceNote, '');
+    assert.equal(belowRateWithoutReason.status, 400);
+    assert.match(belowRateWithoutReason.data.error, /lý do chênh lệch cước/);
+    const belowRateWithReason = await call('POST', '/api/entries', {
+      token: adminToken,
+      body: newEntry({
+        customerId: customer.data.id,
+        customer: customer.data.customerName,
+        carrier: carrier.data.name,
+        spec: '01 thùng nhỏ',
+        transportFee: 49999,
+        gateFee: 15000,
+        rateVarianceNote: 'Nhà xe giảm giá',
+      }),
+    });
+    assert.equal(belowRateWithReason.status, 200);
+    assert.equal(belowRateWithReason.data.rateVarianceNote, 'Nhà xe giảm giá');
 
     const offRate = await call('POST', '/api/entries', {
       token: adminToken,

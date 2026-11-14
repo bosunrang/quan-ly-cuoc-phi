@@ -342,14 +342,20 @@ test('cước theo số lượng khớp giữa phiếu, chênh lệch, Tổng qu
     60_000,
   );
 
-  const decreased = await call('PATCH', `/api/entries/${id}`, {
+  const lowerMissingReason = await call('PATCH', `/api/entries/${id}`, {
     body: { ...input, quantity: 2, transportUnitFee: 40_000 },
+  });
+  assert.equal(lowerMissingReason.status, 400);
+  const decreased = await call('PATCH', `/api/entries/${id}`, {
+    body: { ...input, quantity: 2, transportUnitFee: 40_000, rateVarianceNote: 'Nhà xe giảm giá' },
   });
   assert.equal(decreased.status, 200);
   assert.equal(decreased.data.transportFee, 80_000);
   variance = await call('GET', `/api/reports/carrier-variance?${range}`);
   assert.equal(variance.data.items[0].standardFee, 100_000);
   assert.equal(variance.data.summary.underAmount, 20_000);
+  assert.equal(decreased.data.rateVarianceNote, 'Nhà xe giảm giá');
+  assert.equal(variance.data.items[0].varianceNote, 'Nhà xe giảm giá');
 
   // Lưu bảng giá chỉ lưu đơn giá 60k, không lưu thành tiền 300k.
   const savedRate = await call('PATCH', `/api/entries/${id}`, {
@@ -668,6 +674,107 @@ test('giao trực tiếp khớp đúng điểm đến trong ngày có cả nhà 
   assert.equal(converted.data.deliveryMethod, 'direct');
   assert.equal(converted.data.carrierId, null);
   assert.equal(converted.data.totalFee, 0);
+});
+
+test('chênh lệch cước có ngày mới nhất ở đầu mọi trang trên màn hình và cuối Excel, kể cả qua tháng/năm', async () => {
+  const employee = await createEmployee('Nhân viên thứ tự ngày');
+  const customer = (
+    await call('POST', '/api/customers', { body: { customerName: 'Khách thứ tự ngày' } })
+  ).data;
+  const carriers = [];
+  for (const name of ['A Nhà xe thứ tự', 'Z Nhà xe thứ tự']) {
+    const result = await call('POST', '/api/carriers', { body: { name } });
+    assert.equal(result.status, 200);
+    carriers.push(result.data);
+    await call('PATCH', `/api/carriers/${result.data.id}/customers`, {
+      body: { customerIds: [customer.id] },
+    });
+    const rate = await call(
+      'POST',
+      `/api/carriers/${result.data.id}/customers/${customer.id}/rates`,
+      {
+        body: { isDefault: true, transportFee: 50000, gateFee: 0 },
+      },
+    );
+    assert.equal(rate.status, 200);
+  }
+  const entries = [];
+  for (const [entryDate, carrierIndex] of [
+    ['2027-01-01', 0],
+    ['2026-12-31', 1],
+    ['2026-11-03', 0],
+    ['2026-11-02', 1],
+    ['2026-11-02', 0],
+    ['2026-11-02', 0],
+  ]) {
+    entries.push(
+      await createEntry({
+        entryDate,
+        employeeId: employee.id,
+        customerId: customer.id,
+        customer: customer.customerName,
+        carrierId: carriers[carrierIndex].id,
+        carrier: carriers[carrierIndex].name,
+        spec: 'Tất cả',
+        transportFee: 60000,
+        rateVarianceNote: 'Phụ phí',
+      }),
+    );
+  }
+  const expectedIds = [0, 1, 2, 4, 5, 3].map((index) => entries[index].id);
+  const range = `from=2026-11-01&to=2027-01-31&employeeId=${employee.id}`;
+  const pagedItems = [];
+  for (let page = 1; page <= 3; page += 1) {
+    const result = await call(
+      'GET',
+      `/api/reports/carrier-variance?${range}&pageSize=2&page=${page}`,
+    );
+    assert.equal(result.status, 200);
+    assert.equal(result.data.summary.entries, 6);
+    assert.equal(result.data.summary.difference, 60000);
+    pagedItems.push(...result.data.items);
+  }
+  assert.deepEqual(
+    pagedItems.map((item) => item.id),
+    expectedIds,
+  );
+  const expectedDates = [
+    '2027-01-01',
+    '2026-12-31',
+    '2026-11-03',
+    '2026-11-02',
+    '2026-11-02',
+    '2026-11-02',
+  ];
+  assert.deepEqual(
+    pagedItems.map((item) => item.entryDate),
+    expectedDates,
+  );
+  const all = await call('GET', `/api/reports/carrier-variance?all=1&employeeId=${employee.id}`);
+  assert.deepEqual(
+    all.data.items.map((item) => item.id),
+    expectedIds,
+  );
+  for (const query of [range, `all=1&employeeId=${employee.id}`]) {
+    const exported = await call('GET', `/api/reports/carrier-variance/export?${query}`);
+    assert.equal(exported.status, 200);
+    const workbook = XLSX.read(Buffer.from(exported.data.contentBase64, 'base64'), {
+      type: 'buffer',
+    });
+    const sheet = workbook.Sheets['Chênh lệch cước'];
+    assert.deepEqual(
+      expectedDates.map((_, index) => sheet[`B${index + 5}`].v),
+      ['02/11/2026', '02/11/2026', '02/11/2026', '03/11/2026', '31/12/2026', '01/01/2027'],
+    );
+    assert.deepEqual(
+      expectedDates.map((_, index) => sheet[`A${index + 5}`].v),
+      [1, 2, 3, 4, 5, 6],
+    );
+    assert.deepEqual(
+      expectedDates.map((_, index) => sheet[`D${index + 5}`].v),
+      [0, 0, 1, 0, 1, 0].map((index) => carriers[index].name),
+    );
+  }
 });
 
 test('Tổng quan chỉ lấy chi phí khác từ kỳ tính xăng', async () => {

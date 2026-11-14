@@ -237,7 +237,7 @@ function ensureVarianceReason(body, input, standardFee) {
     return;
   }
   if (standardFee == null) return;
-  if (input.transportFee <= standardFee * (input.quantity ?? 1)) {
+  if (input.transportFee === standardFee * (input.quantity ?? 1)) {
     input.rateVarianceNote = '';
     return;
   }

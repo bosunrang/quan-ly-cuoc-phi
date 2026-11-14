@@ -496,7 +496,7 @@ export function EntryDialog({
 		if (!isDirect && form.saveCarrierRate && !form.spec.trim()) {
 			return;
 		}
-		if (transportOverRate && !form.rateVarianceNote.trim()) {
+		if (requiresVarianceReason && !form.rateVarianceNote.trim()) {
 			return;
 		}
 		if (duplicateDetected && !form.duplicateReason.trim()) {
@@ -552,10 +552,10 @@ export function EntryDialog({
 			: rate?.transportFee;
 	const standardTotal =
 		standardUnitFee == null ? null : standardUnitFee * (form.quantity ?? 1);
-	const transportOverRate =
+	const requiresVarianceReason =
 		!form.saveCarrierRate &&
 		standardTotal != null &&
-		transportTotal > standardTotal;
+		transportTotal !== standardTotal;
 	const difference = standardTotal == null ? 0 : transportTotal - standardTotal;
 	const fieldError = (invalid: boolean, message: string) =>
 		showFieldErrors && invalid ? message : undefined;
@@ -1202,16 +1202,16 @@ export function EntryDialog({
 					<strong>{formatMoney(transportTotal)} đ</strong>
 				</div>
 			)}
-			{transportOverRate && (
+			{requiresVarianceReason && (
 				<div className="entry-rate-warning">
 					<AlertCircle size={17} />
 					<span>
-						Cước vận chuyển cao hơn giá thiết lập {formatMoney(difference)} đ.
-						Vui lòng ghi rõ lý do.
+						Cước vận chuyển {difference > 0 ? "cao hơn" : "thấp hơn"} giá thiết
+						lập {formatMoney(Math.abs(difference))} đ. Vui lòng ghi rõ lý do.
 					</span>
 				</div>
 			)}
-			{transportOverRate && (
+			{requiresVarianceReason && (
 				<Field
 					label="Lý do chênh lệch cước"
 					error={fieldError(
@@ -1229,7 +1229,11 @@ export function EntryDialog({
 									rateVarianceNote: event.target.value,
 								}))
 							}
-							placeholder="Ví dụ: Khách yêu cầu giao gấp, thay đổi địa điểm giao..."
+							placeholder={
+								difference < 0
+									? "Ví dụ: Nhà xe giảm giá, áp dụng ưu đãi..."
+									: "Ví dụ: Khách yêu cầu giao gấp, thay đổi địa điểm giao..."
+							}
 						/>
 					)}
 				</Field>

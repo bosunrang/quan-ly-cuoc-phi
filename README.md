@@ -47,6 +47,10 @@ số lượng**; phí vào cổng và phí khác được cộng một lần the
 đối chiếu thành tiền thực tế với **đơn giá chuẩn đã chốt × số lượng**. Ví dụ,
 50.000 đồng × 5 thùng = 250.000 đồng, không phát sinh chênh lệch nếu đơn giá
 chuẩn cũng là 50.000 đồng. Lưu bảng cước từ phiếu chỉ lưu đơn giá.
+Khi cước thực tế cao hơn hoặc thấp hơn cước chuẩn theo số lượng, phiếu cần có
+lý do chênh lệch, trừ khi lưu đơn giá mới vào bảng cước nhà xe. Cước bằng giá
+chuẩn không cần lý do. Báo cáo chênh lệch trên màn hình hiển thị ngày mới nhất
+ở trên; Excel sắp ngày tăng dần để ngày mới nhất nằm cuối báo cáo.
 
 Hai nút **Gửi nhà xe** và **Giao trực tiếp** mở biểu mẫu tương ứng. Giao trực
 tiếp không cần nhà xe hoặc bảng giá: nhập đơn vị nhận hàng và sản phẩm;

@@ -342,12 +342,14 @@ function carrierVarianceSource(input) {
 }
 
 /**
- * Các dòng chênh lệch, sắp theo nhà xe → khách hàng → ngày. Có `page` thì chỉ
- * lấy một trang; tỉnh/thành (tra trong MISA) chỉ tính cho các dòng của trang đó.
+ * Các dòng chênh lệch: màn hình dùng ngày giảm dần, Excel dùng ngày tăng dần.
+ * Cùng ngày thì sắp theo nhà xe → khách hàng → id. Có `page` thì chỉ lấy một trang;
+ * tỉnh/thành (tra trong MISA) chỉ tính cho các dòng của trang đó.
  */
-function carrierVariance(db, input, page = null) {
+function carrierVariance(db, input, page = null, newestFirst = false) {
   const source = carrierVarianceSource(input);
   const paging = page ? 'LIMIT ? OFFSET ?' : '';
+  const dateOrder = newestFirst ? 'DESC' : 'ASC';
   return db
     .prepare(
       `WITH rows AS MATERIALIZED (
@@ -357,8 +359,8 @@ function carrierVariance(db, input, page = null) {
          e.spec, (e.standard_transport_fee * COALESCE(e.quantity, 1)) AS standard_fee, e.transport_fee AS actual_fee,
          e.transport_fee - (e.standard_transport_fee * COALESCE(e.quantity, 1)) AS difference, e.rate_variance_note,
          ROW_NUMBER() OVER (
-           ORDER BY COALESCE(ca.name, e.carrier) COLLATE NOCASE,
-             COALESCE(cu.customer_name, e.customer) COLLATE NOCASE, e.entry_date ASC, e.id ASC
+           ORDER BY e.entry_date ${dateOrder}, COALESCE(ca.name, e.carrier) COLLATE NOCASE,
+             COALESCE(cu.customer_name, e.customer) COLLATE NOCASE, e.id ASC
          ) AS position
        ${source.sql}
        ORDER BY position
@@ -1739,7 +1741,12 @@ function register(router) {
     );
     const pageCount = Math.max(1, Math.ceil(summary.entries / pageSize));
     const page = Math.min(Math.max(Number(c.query.page) || 1, 1), pageCount);
-    const items = carrierVariance(c.db, input, { limit: pageSize, offset: (page - 1) * pageSize });
+    const items = carrierVariance(
+      c.db,
+      input,
+      { limit: pageSize, offset: (page - 1) * pageSize },
+      true,
+    );
     return {
       employees: filterEmployees(c.db),
       items,
