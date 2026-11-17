@@ -15,7 +15,7 @@ describe("bản in bảng kê cước", () => {
 			color: "",
 			border: true,
 		});
-		const columns = "ABCDEFGHIJKLMNOPQR".split("");
+		const columns = "ABCDEFGHIJKLMNOPQRS".split("");
 		const excelWidths = columns.map((_, index) =>
 			index === 0 ? 5.42578125 : index === 12 ? 4.42578125 : 10,
 		);
@@ -45,8 +45,10 @@ describe("bản in bảng kê cước", () => {
 										: column === "M"
 											? "☑"
 											: column === "N"
-												? "6,8"
-												: "",
+												? "Xe máy"
+												: column === "O"
+													? "6,8"
+													: "",
 									["E", "M"].includes(column) ? 2 : 1,
 								),
 							),
@@ -56,7 +58,7 @@ describe("bản in bảng kê cước", () => {
 							cells: columns
 								.filter((column) => !["E", "M"].includes(column))
 								.map((column) =>
-									cell(`${column}13`, column === "N" ? "3,0" : ""),
+									cell(`${column}13`, column === "O" ? "3,0" : ""),
 								),
 						},
 					],
@@ -68,7 +70,7 @@ describe("bản in bảng kê cước", () => {
 			"text/html",
 		);
 		const table = page.querySelector("table");
-		expect(table?.querySelectorAll("col")).toHaveLength(18);
+		expect(table?.querySelectorAll("col")).toHaveLength(19);
 		expect(
 			page.querySelector('link[href="/report-print.css?v=2"]'),
 		).not.toBeNull();
@@ -92,8 +94,11 @@ describe("bản in bảng kê cước", () => {
 		expect(
 			table?.querySelector('[data-cell="M12"]')?.getAttribute("rowspan"),
 		).toBe("2");
-		expect(table?.querySelector('[data-cell="N12"]')?.textContent).toBe("6,8");
-		expect(table?.querySelector('[data-cell="N13"]')?.textContent).toBe("3,0");
-		expect(table?.querySelectorAll('tr[data-row="13"] td')).toHaveLength(16);
+		expect(table?.querySelector('[data-cell="N12"]')?.textContent).toBe(
+			"Xe máy",
+		);
+		expect(table?.querySelector('[data-cell="O12"]')?.textContent).toBe("6,8");
+		expect(table?.querySelector('[data-cell="O13"]')?.textContent).toBe("3,0");
+		expect(table?.querySelectorAll('tr[data-row="13"] td')).toHaveLength(17);
 	});
 });

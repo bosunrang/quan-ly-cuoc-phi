@@ -268,10 +268,9 @@ test('hai lần tính xăng cùng ngày dùng chung STT và ngày', () => {
   assert.equal(details.filter((row) => row.fuelRow != null).length, 2);
   assert.equal(details[0].fuelSpan, 2);
   assert.equal(details[2].fuelSpan, 3);
-  assert.equal(details[0].dayFuelPrice, 27_080);
-  assert.equal(details[0].dayFuelTotal, 30_999);
-  assert.equal(details[0].dayFuelSpan, 5);
-  assert.equal(details.filter((row) => row.dayFuelTotal != null).length, 1);
+  assert.equal(details[0].fuelRow.fuelPrice, 27_080);
+  assert.equal(details[0].fuelRow.totalFee, 9_834);
+  assert.equal(details[2].fuelRow.totalFee, 21_165);
 });
 
 test('tên sheet báo cáo được làm sạch và không trùng nhau', () => {
@@ -455,7 +454,7 @@ test('lưu, sửa và xóa kỳ tính xăng vẫn giữ tổng tiền và các c
   );
   assert.doesNotMatch(fuelSheetXml, /<ignoredErrors\b/);
   assert.equal(sheet.A17.v, 'Giám Đốc');
-  assert.equal(sheet.D17.v, 'Kế Toán Trưởng');
+  assert.equal(sheet.D17.v, 'Kế Toán');
   assert.equal(sheet.E17, undefined);
   assert.equal(
     sheet['!merges'].some(
@@ -480,7 +479,8 @@ test('lưu, sửa và xóa kỳ tính xăng vẫn giữ tổng tiền và các c
   assert.equal(dailySheet.D11.v, 'Điểm đến');
   assert.equal(dailySheet.C12.v, 'A');
   assert.equal(dailySheet.D12.v, 'B');
-  assert.equal(dailySheet.N12.v, 40);
+  assert.equal(dailySheet.N12.v, 'Ô tô');
+  assert.equal(dailySheet.O12.v, 40);
 
   const deleted = await call('DELETE', `/api/fuel/records/${created.data.id}`);
   assert.deepEqual(deleted.data, { ok: true });
@@ -658,7 +658,7 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   assert.equal(printable.status, 200);
   assert.equal(printable.data.sheets.length, 1);
   const printSheet = printable.data.sheets[0];
-  assert.equal(printSheet.columnWidths.length, 18);
+  assert.equal(printSheet.columnWidths.length, 19);
   const printCells = new Map(
     printSheet.rows.flatMap((row) => row.cells.map((cell) => [cell.address, cell])),
   );
@@ -667,16 +667,16 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
     'D11',
     'E11',
     'M11',
-    'N11',
     'O11',
     'P11',
     'Q11',
     'R11',
+    'S11',
     'C12',
     'D12',
     'E12',
     'M12',
-    'R12',
+    'S12',
     'M13',
   ]) {
     assert.equal(
@@ -685,10 +685,10 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
       `${address} bản in phải khớp Excel`,
     );
   }
-  assert.equal(printCells.get('N12').value, '30,0');
-  assert.equal(printCells.get('O12').value, '20.000');
-  assert.equal(printCells.get('P12').value, '96.000');
-  assert.equal(printCells.get('Q12').value, '7.000');
+  assert.equal(printCells.get('O12').value, '30,0');
+  assert.equal(printCells.get('P12').value, '20.000');
+  assert.equal(printCells.get('Q12').value, '96.000');
+  assert.equal(printCells.get('R12').value, '7.000');
   assert.equal(printCells.get('C21').value, '256.000');
   for (const mergeRange of sheet['!merges']) {
     const address = XLSX.utils.encode_cell(mergeRange.s);
@@ -706,22 +706,23 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   assert.equal(sheet.H11.v, 'Sản phẩm');
   assert.equal(sheet.L11.v, 'Chênh lệch');
   assert.equal(sheet.M11.v, 'Bill');
-  assert.equal(sheet.N11.v, 'Km');
-  assert.equal(sheet.O11.v, 'Giá xăng');
-  assert.equal(sheet.P11.v, 'Tiền xăng');
-  assert.equal(sheet.Q11.v, 'Chi phí khác');
-  assert.equal(sheet.R11.v, 'Ghi chú');
-  assert.equal(sheet['!cols'].length, 18);
+  assert.equal(sheet.N11.v, 'Phương tiện');
+  assert.equal(sheet.O11.v, 'Km');
+  assert.equal(sheet.P11.v, 'Giá xăng');
+  assert.equal(sheet.Q11.v, 'Tiền xăng');
+  assert.equal(sheet.R11.v, 'Chi phí khác');
+  assert.equal(sheet.S11.v, 'Ghi chú');
+  assert.equal(sheet['!cols'].length, 19);
   assert.deepEqual(
     sheet['!cols'].map((column) => column.width),
     [
       5.42578125, 13.57, 27.7109375, 27.7109375, 14.42578125, 32.5703125, 10.85546875, 28.42578125,
-      10.28515625, 10.140625, 9.42578125, 11.85546875, 4.42578125, 7.42578125, 9.5703125,
+      10.28515625, 10.140625, 9.42578125, 11.85546875, 4.42578125, 11.5, 7.42578125, 9.5703125,
       10.7109375, 11.7109375, 17.7109375,
     ],
   );
   assert.equal(sheet['!rows'][10].hpt, 34);
-  for (const range of ['A1:D2', 'N1:R1', 'N2:R2', 'A4:R4', 'A7:R7']) {
+  for (const range of ['A1:D2', 'N1:S1', 'N2:S2', 'A4:S4', 'A7:S7']) {
     const expected = XLSX.utils.decode_range(range);
     assert.equal(
       sheet['!merges'].some(
@@ -755,20 +756,20 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
     /<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"\/>/,
   );
   assert.doesNotMatch(sheetXml, /<ignoredErrors\b/);
-  assert.equal(sheet.N12.v, 30);
+  assert.equal(sheet.O12.v, 30);
   assert.equal(sheet.E13.v, 'Nhà xe gộp bill');
   assert.equal(sheet.H13.v, '200 sản phẩm B');
   assert.equal(sheet.H14.v, '300 sản phẩm C');
-  assert.equal(sheet.O12.v, 20_000);
-  assert.equal(sheet.P12.v, 96_000);
-  assert.equal(sheet.Q12.v, 7_000);
-  assert.equal(sheet.R12.v, 'Khách yêu cầu giao gấp / Giao tại cổng sau / Gửi xe');
-  assert.equal(sheet.Q13.v, '-');
-  assert.equal(sheet.R13.v, 'Cùng ngày có nhiều điểm giao / Để hàng ở sảnh.');
-  assert.equal(sheet.R14.v, '-');
-  assert.doesNotMatch(sheet.R12.v, /bill/i);
-  assert.doesNotMatch(sheet.R13.v, /bill/i);
-  for (const column of [14, 15]) {
+  assert.equal(sheet.P12.v, 20_000);
+  assert.equal(sheet.Q12.v, 96_000);
+  assert.equal(sheet.R12.v, 7_000);
+  assert.equal(sheet.S12.v, 'Khách yêu cầu giao gấp / Giao tại cổng sau / Gửi xe');
+  assert.equal(sheet.R13.v, '-');
+  assert.equal(sheet.S13.v, 'Cùng ngày có nhiều điểm giao / Để hàng ở sảnh.');
+  assert.equal(sheet.S14.v, '-');
+  assert.doesNotMatch(sheet.S12.v, /bill/i);
+  assert.doesNotMatch(sheet.S13.v, /bill/i);
+  for (const column of [13, 15, 16]) {
     assert.equal(
       sheet['!merges'].some(
         (item) => item.s.c === column && item.s.r === 11 && item.e.c === column && item.e.r === 14,
@@ -792,13 +793,13 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   }
   assert.equal(
     sheet['!merges'].some(
-      (item) => item.s.c === 17 && item.s.r === 12 && item.e.c === 17 && item.e.r === 13,
+      (item) => item.s.c === 18 && item.s.r === 12 && item.e.c === 18 && item.e.r === 13,
     ),
     false,
   );
   assert.equal(
     sheet['!merges'].some(
-      (item) => item.s.c === 16 && item.s.r === 12 && item.e.c === 16 && item.e.r === 13,
+      (item) => item.s.c === 17 && item.s.r === 12 && item.e.c === 17 && item.e.r === 13,
     ),
     true,
   );
@@ -810,9 +811,9 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
     ),
     false,
   );
-  assert.equal(sheet.R14.v, '-');
-  assert.equal(sheet.P14.v, '');
-  for (const column of [2, 3, 13]) {
+  assert.equal(sheet.S14.v, '-');
+  assert.equal(sheet.Q14.v, '');
+  for (const column of [2, 3, 14]) {
     assert.equal(
       sheet['!merges'].some(
         (item) => item.s.c === column && item.s.r === 11 && item.e.c === column && item.e.r === 13,
@@ -825,19 +826,19 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   for (const column of ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M']) {
     assert.equal(sheet[`${column}15`].v, '-');
   }
-  assert.equal(sheet.N15.v, 10);
-  assert.equal(sheet.Q15.v, 3_000);
-  assert.equal(sheet.R15.v, 'Tiền ăn');
+  assert.equal(sheet.O15.v, 10);
+  assert.equal(sheet.R15.v, 3_000);
+  assert.equal(sheet.S15.v, 'Tiền ăn');
   assert.equal(sheet.C17.v, 140_000);
   assert.equal(sheet.C18.v, 10_000);
   assert.equal(sheet.C19.v, 96_000);
   assert.equal(sheet.C20.v, 10_000);
   assert.equal(sheet.C21.v, 256_000);
-  assert.equal(sheet.P23.v, 'Ngày… tháng…năm….');
+  assert.equal(sheet.Q23.v, 'Ngày… tháng…năm….');
   assert.equal(sheet.A24.v, 'Giám Đốc Duyệt');
-  assert.equal(sheet.F24.v, 'Kế Toán Trưởng');
-  assert.equal(sheet.P24.v, 'Người lập');
-  for (const range of ['P23:R23', 'A24:C24', 'F24:I24', 'P24:R24']) {
+  assert.equal(sheet.F24.v, 'Kế Toán');
+  assert.equal(sheet.Q24.v, 'Người lập');
+  for (const range of ['Q23:S23', 'A24:C24', 'F24:I24', 'Q24:S24']) {
     const expected = XLSX.utils.decode_range(range);
     assert.equal(
       sheet['!merges'].some(
@@ -863,6 +864,216 @@ test('xuất bảng kê cước gộp chi tiết xăng vào đúng bố cục b�
   assert.doesNotMatch(stylesXml, /xfpb:xfComplement i="0"/);
   assert.doesNotMatch(sheetXml, /<c r="L1[23]"[^>]*t="b">/);
   assert.doesNotMatch(sheetXml, /<c r="K14"[^>]*t="b">/);
+});
+
+test('cùng ngày có ô tô giá xăng 0 và xe máy: đúng điểm đến, phương tiện, giá từng lượt và tổng tiền ngày trong Excel/PDF', async () => {
+  const employee = await call('POST', '/api/employees', {
+    fullName: 'Nhân viên hai phương tiện',
+    isActive: true,
+  });
+  assert.equal(employee.status, 200);
+  const customer = await call('POST', '/api/customers', { customerName: 'Đơn vị giao ô tô' });
+  const unmatchedCustomer = await call('POST', '/api/customers', {
+    customerName: 'Đơn vị chưa có lộ trình',
+  });
+  const carrier = await call('POST', '/api/carriers', { name: 'Nhà xe giao xe máy' });
+  assert.equal(customer.status, 200);
+  assert.equal(carrier.status, 200);
+  const date = '2026-11-11';
+  const base = {
+    entryDate: date,
+    employeeId: employee.data.id,
+    spec: 'Tất cả',
+    billStatus: 'Không bill',
+    transportFee: 50000,
+    note: 'Sản phẩm xe máy',
+    carrierId: carrier.data.id,
+    carrier: carrier.data.name,
+  };
+  // Nhập phiếu khác thứ tự lộ trình; không suy đoán phương tiện theo thứ tự phiếu.
+  for (const body of [
+    { ...base, customer: 'Khách xe máy A' },
+    {
+      ...base,
+      deliveryMethod: 'direct',
+      customerId: customer.data.id,
+      customer: customer.data.customerName,
+      note: 'Sản phẩm ô tô',
+    },
+    { ...base, customer: 'Khách xe máy B' },
+    {
+      ...base,
+      deliveryMethod: 'direct',
+      customerId: unmatchedCustomer.data.id,
+      customer: unmatchedCustomer.data.customerName,
+      note: 'Sản phẩm chưa có lộ trình',
+    },
+  ]) {
+    const entry = await call('POST', '/api/entries', body);
+    assert.equal(entry.status, 200, JSON.stringify(entry.data));
+  }
+  const fuelBase = {
+    periodFrom: date,
+    periodTo: date,
+    employeeId: employee.data.id,
+    consumptionLiters: 1,
+    consumptionBaseKm: 40,
+  };
+  const companyCar = await call('POST', '/api/fuel/records', {
+    ...fuelBase,
+    vehicleType: 'truck',
+    fuelPrice: 0,
+    legs: [
+      { from: 'Kho', to: 'Điểm nhận bằng ô tô', km: 20, toCustomerId: customer.data.id },
+      { from: 'Điểm nhận bằng ô tô', to: 'Kho', km: 20 },
+    ],
+    extraCosts: [{ name: 'Phí gửi ô tô', amount: 5000, legIndex: 0 }],
+  });
+  assert.equal(companyCar.status, 200);
+  assert.equal(companyCar.data.totalFee, 5000); // Chỉ chi phí khác, tiền xăng bằng 0.
+  const motorcycle = await call('POST', '/api/fuel/records', {
+    ...fuelBase,
+    vehicleType: 'motorcycle',
+    fuelPrice: 20000,
+    legs: [
+      { from: 'Kho', to: 'Điểm nhận bằng xe máy', km: 10, toCarrierId: carrier.data.id },
+      { from: 'Điểm nhận bằng xe máy', to: 'Kho', km: 10 },
+    ],
+  });
+  assert.equal(motorcycle.status, 200);
+  assert.equal(motorcycle.data.totalFee, 10000);
+  const query = `from=${date}&to=${date}&employeeId=${employee.data.id}&type=daily`;
+  const exported = await call('GET', `/api/reports/export?${query}`);
+  assert.equal(exported.status, 200);
+  const workbook = XLSX.read(Buffer.from(exported.data.contentBase64, 'base64'), {
+    type: 'buffer',
+  });
+  const sheet = workbook.Sheets['Bảng kê cước'];
+  assert.equal(sheet.N11.v, 'Phương tiện');
+  assert.equal(sheet.H12.v, 'Sản phẩm ô tô');
+  assert.equal(sheet.D12.v, 'Điểm nhận bằng ô tô');
+  assert.equal(sheet.N12.v, 'Ô tô');
+  assert.equal(sheet.O12.v, 20);
+  assert.equal(sheet.P12.v, 0);
+  assert.equal(sheet.Q12.v, 10000);
+  assert.equal(sheet.R12.v, 5000);
+  assert.equal(sheet.D14.v, 'Điểm nhận bằng xe máy');
+  assert.equal(sheet.H14.v, 'Sản phẩm xe máy');
+  assert.equal(sheet.H15.v, 'Sản phẩm xe máy');
+  assert.equal(sheet.N14.v, 'Xe máy');
+  assert.equal(sheet.O14.v, 10);
+  assert.equal(sheet.P14.v, 20000);
+  assert.equal(sheet.Q14.v, '');
+  assert.equal(sheet.H17.v, 'Sản phẩm chưa có lộ trình');
+  assert.equal(sheet.N17.v, '-');
+  for (const range of ['N12:N13', 'P12:P13', 'N14:N16', 'P14:P16', 'Q12:Q17']) {
+    const expected = XLSX.utils.decode_range(range);
+    assert.ok(
+      sheet['!merges'].some((item) => JSON.stringify(item) === JSON.stringify(expected)),
+      range,
+    );
+  }
+  assert.equal(sheet.C21.v, 10000); // Tổng tiền xăng không đổi.
+  assert.equal(sheet.C22.v, 5000); // Chi phí khác tách riêng.
+  const printable = await call('GET', `/api/reports/print?${query}`);
+  assert.equal(printable.status, 200);
+  const printCells = new Map(
+    printable.data.sheets[0].rows.flatMap((row) => row.cells.map((cell) => [cell.address, cell])),
+  );
+  for (const [address, value] of Object.entries({
+    N11: 'Phương tiện',
+    D12: 'Điểm nhận bằng ô tô',
+    N12: 'Ô tô',
+    P12: '0',
+    Q12: '10.000',
+    D14: 'Điểm nhận bằng xe máy',
+    N14: 'Xe máy',
+    P14: '20.000',
+    N17: '-',
+  }))
+    assert.equal(printCells.get(address)?.value, value, address);
+  for (const column of ['N', 'P']) {
+    assert.equal(printCells.get(`${column}12`).rowSpan, 2);
+    assert.equal(printCells.get(`${column}14`).rowSpan, 3);
+  }
+  assert.equal(printCells.get('Q12').rowSpan, 6);
+  assert.equal(printCells.has('Q14'), false);
+});
+
+test('gộp phương tiện và giá độc lập theo lượt liền nhau, không gộp qua lượt khác hoặc qua ngày trong Excel/PDF', async () => {
+  const employee = await call('POST', '/api/employees', {
+    fullName: 'Nhân viên gộp ô lộ trình',
+    isActive: true,
+  });
+  assert.equal(employee.status, 200);
+  for (const [date, vehicleType, fuelPrice] of [
+    ['2026-11-15', 'motorcycle', 20000],
+    ['2026-11-15', 'motorcycle', 20000],
+    ['2026-11-15', 'motorcycle', 0],
+    ['2026-11-15', 'truck', 0],
+    ['2026-11-15', 'motorcycle', 20000],
+    ['2026-11-16', 'motorcycle', 20000],
+  ]) {
+    const result = await call('POST', '/api/fuel/records', {
+      periodFrom: date,
+      periodTo: date,
+      employeeId: employee.data.id,
+      vehicleType,
+      fuelPrice,
+      consumptionLiters: 1,
+      consumptionBaseKm: 40,
+      legs: [
+        { from: 'Kho', to: 'Điểm nhận', km: 10 },
+        { from: 'Điểm nhận', to: 'Kho', km: 10 },
+      ],
+    });
+    assert.equal(result.status, 200);
+  }
+  const query = `from=2026-11-15&to=2026-11-16&employeeId=${employee.data.id}&type=daily`;
+  const exported = await call('GET', `/api/reports/export?${query}`);
+  assert.equal(exported.status, 200);
+  const sheet = XLSX.read(Buffer.from(exported.data.contentBase64, 'base64'), { type: 'buffer' })
+    .Sheets['Bảng kê cước'];
+  const printable = await call('GET', `/api/reports/print?${query}`);
+  assert.equal(printable.status, 200);
+  const cells = new Map(
+    printable.data.sheets[0].rows.flatMap((row) => row.cells.map((cell) => [cell.address, cell])),
+  );
+  for (const range of [
+    'N12:N17',
+    'N18:N19',
+    'N20:N21',
+    'N22:N23',
+    'P12:P15',
+    'P16:P19',
+    'P20:P21',
+    'P22:P23',
+    'Q12:Q21',
+    'Q22:Q23',
+  ]) {
+    const expected = XLSX.utils.decode_range(range);
+    assert.ok(
+      sheet['!merges'].some((item) => JSON.stringify(item) === JSON.stringify(expected)),
+      range,
+    );
+    const anchor = cells.get(XLSX.utils.encode_cell(expected.s));
+    assert.equal(anchor.rowSpan, expected.e.r - expected.s.r + 1, range);
+    for (let row = expected.s.r + 1; row <= expected.e.r; row++) {
+      assert.equal(cells.has(XLSX.utils.encode_cell({ r: row, c: expected.s.c })), false, range);
+    }
+  }
+  assert.equal(sheet.N12.v, 'Xe máy');
+  assert.equal(sheet.N18.v, 'Ô tô');
+  assert.equal(sheet.N20.v, 'Xe máy');
+  assert.equal(sheet.P12.v, 20000);
+  assert.equal(sheet.P16.v, 0);
+  assert.equal(cells.get('P16').value, '0');
+  assert.equal(sheet.P20.v, 20000);
+  assert.equal(sheet.Q12.v, 30000);
+  assert.equal(sheet.Q22.v, 10000);
+  assert.equal(cells.get('Q12').value, '30.000');
+  assert.equal(cells.get('Q22').value, '10.000');
+  assert.equal(sheet.B22.v, '16/11/2026');
 });
 
 test('Excel chỉ có lộ trình xăng vẫn xuất STT và ngày', async () => {
@@ -923,9 +1134,13 @@ test('Excel chỉ có lộ trình xăng vẫn xuất STT và ngày', async () =>
   assert.equal(sheet.B11.v, 'Ngày');
   assert.equal(sheet.A12.v, 1);
   assert.equal(sheet.B12.v, '05/10/2026');
-  assert.equal(sheet.O12.v, 27_080);
-  assert.equal(sheet.P12.v, 204_400);
-  for (const range of ['A12:A16', 'B12:B16', 'O12:O16', 'P12:P16']) {
+  assert.equal(sheet.P12.v, 27_080);
+  assert.equal(sheet.N12.v, 'Ô tô');
+  assert.equal(sheet.Q12.v, fuel.data.totalFee + afternoonFuel.data.totalFee);
+  assert.equal(sheet.N14.v, '');
+  assert.equal(sheet.P14.v, '');
+  assert.equal(sheet.Q14.v, '');
+  for (const range of ['A12:A16', 'B12:B16', 'N12:N16', 'P12:P16', 'Q12:Q16']) {
     const expected = XLSX.utils.decode_range(range);
     assert.equal(
       sheet['!merges'].some(

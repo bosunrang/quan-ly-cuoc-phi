@@ -456,6 +456,7 @@ const DAILY_REPORT_HEADERS = [
   'Phí cổng',
   'Chênh lệch',
   'Bill',
+  'Phương tiện',
   'Km',
   'Giá xăng',
   'Tiền xăng',
@@ -464,12 +465,12 @@ const DAILY_REPORT_HEADERS = [
 ];
 const DAILY_REPORT_COLUMN_WIDTHS = [
   5.42578125, 13.57, 27.7109375, 27.7109375, 14.42578125, 32.5703125, 10.85546875, 28.42578125,
-  10.28515625, 10.140625, 9.42578125, 11.85546875, 4.42578125, 7.42578125, 9.5703125, 10.7109375,
-  11.7109375, 17.7109375,
+  10.28515625, 10.140625, 9.42578125, 11.85546875, 4.42578125, 11.5, 7.42578125, 9.5703125,
+  10.7109375, 11.7109375, 17.7109375,
 ];
 const DAILY_REPORT_TEXT_WIDTHS = [
-  4.71, 12.86, 27, 27, 13.71, 31.86, 10.14, 27.71, 9.57, 9.43, 8.71, 11.14, 3.71, 6.71, 8.86, 10,
-  11, 17,
+  4.71, 12.86, 27, 27, 13.71, 31.86, 10.14, 27.71, 9.57, 9.43, 8.71, 11.14, 3.71, 10.79, 6.71, 8.86,
+  10, 11, 17,
 ];
 function set(ws, cell, value, style) {
   const type = typeof value === 'number' ? 'n' : typeof value === 'boolean' ? 'b' : 's';
@@ -752,6 +753,7 @@ function fuelSummaryRows(data, employeeId) {
         periodFrom: record.period_from,
         periodTo: record.period_to,
         distanceKm: number(record.distance_km),
+        vehicleType: record.vehicle_type || '',
         fuelPrice: number(record.fuel_price),
         totalFee: fuelBaseFee(record),
         extraCosts,
@@ -860,13 +862,32 @@ function detailRowsForFuels(fuelRows, deliveries = []) {
   return rows;
 }
 
-function dailyFuelSummary(fuelRows, rowCount) {
-  if (!fuelRows.length) return {};
-  return {
-    dayFuelPrice: fuelRows[0].fuelPrice,
-    dayFuelTotal: fuelRows.reduce((sum, fuelRow) => sum + number(fuelRow.totalFee), 0),
-    dayFuelSpan: rowCount,
-  };
+/** Chỉ gộp phương tiện/giá giống nhau ở các lượt liền kề; tiền xăng cộng cả ngày. */
+function addDailyFuelMerges(rows) {
+  const records = rows.flatMap((row, index) =>
+    row.fuelRow ? [{ index, span: row.fuelSpan, record: row.fuelRow }] : [],
+  );
+  for (const [field, spanField] of [
+    ['vehicleType', 'vehicleSpan'],
+    ['fuelPrice', 'fuelPriceSpan'],
+  ]) {
+    for (let offset = 0; offset < records.length; ) {
+      const first = records[offset++];
+      let span = first.span;
+      while (
+        offset < records.length &&
+        records[offset].index === first.index + span &&
+        records[offset].record[field] === first.record[field]
+      ) {
+        span += records[offset++].span;
+      }
+      rows[first.index][spanField] = span;
+    }
+  }
+  rows[0].dayFuelTotal = records.length
+    ? records.reduce((sum, item) => sum + number(item.record.totalFee), 0)
+    : '-';
+  rows[0].dayFuelSpan = rows.length;
 }
 
 function dailyDetailRows(deliveries, fuels) {
@@ -883,14 +904,12 @@ function dailyDetailRows(deliveries, fuels) {
     if (!dayRows.length) {
       dayRows.push({ delivery: null, fuelLeg: null, fuelLegSpan: 1, fuelRow: null, fuelSpan: 1 });
     }
-    const fuelSummary = dailyFuelSummary(fuelRows, dayRows.length);
     dayRows.forEach((row, index) => {
       dayRows[index] = {
         ...row,
         dayNumber: null,
         entryDate: index === 0 ? firstDelivery.entryDate : null,
         daySpan: index === 0 ? dayRows.length : null,
-        ...(index === 0 ? fuelSummary : {}),
       };
     });
     dayBlocks.push({ date, rows: dayRows });
@@ -913,19 +932,20 @@ function dailyDetailRows(deliveries, fuels) {
     }
     const fuelDate = formatDate(firstFuel.periodFrom);
     const dayRows = detailRowsForFuels(sameDayFuels);
-    const fuelSummary = dailyFuelSummary(sameDayFuels, dayRows.length);
     dayRows.forEach((row, index) => {
       dayRows[index] = {
         ...row,
         dayNumber: null,
         entryDate: index === 0 ? fuelDate : null,
         daySpan: index === 0 ? dayRows.length : null,
-        ...(index === 0 ? fuelSummary : {}),
       };
     });
     dayBlocks.push({ date: firstFuel.periodFrom, rows: dayRows });
   }
   dayBlocks.sort((left, right) => left.date.localeCompare(right.date));
+  dayBlocks.forEach((block) => {
+    addDailyFuelMerges(block.rows);
+  });
   const rows = dayBlocks.flatMap((block, index) =>
     block.rows.map((row, rowIndex) => ({
       ...row,
@@ -989,29 +1009,29 @@ function dailySheet(data, input, employee) {
     font: { name: 'Times New Roman', sz: 12, bold: true },
     alignment: { horizontal: 'center' },
   });
-  merge(ws, 'N1:R1');
+  merge(ws, 'N1:S1');
   set(ws, 'N2', 'Độc lập - Tự do - Hạnh phúc', {
     font: { name: 'Times New Roman', sz: 12, bold: true },
     alignment: { horizontal: 'center' },
   });
-  merge(ws, 'N2:R2');
+  merge(ws, 'N2:S2');
   set(ws, 'A4', 'BẢNG CHI TIẾT CƯỚC NHÂN VIÊN', {
     font: { name: 'Times New Roman', sz: 18, bold: true },
     alignment: { horizontal: 'center' },
   });
-  merge(ws, 'A4:R4');
+  merge(ws, 'A4:S4');
   set(ws, 'A5', `Từ ngày ${formatDate(input.from)} đến ngày ${formatDate(input.to)}`, {
     font: { name: 'Times New Roman', sz: 12, italic: true },
     alignment: { horizontal: 'center' },
   });
-  merge(ws, 'A5:R5');
+  merge(ws, 'A5:S5');
   const companyInfo = { font: { name: 'Times New Roman', sz: 12 } };
   set(ws, 'A7', `Đơn vị: ${companyName}`, companyInfo);
-  merge(ws, 'A7:R7');
+  merge(ws, 'A7:S7');
   set(ws, 'A8', `Địa chỉ: ${companyAddress}`, companyInfo);
-  merge(ws, 'A8:R8');
+  merge(ws, 'A8:S8');
   set(ws, 'A9', `Nhân viên phụ trách: ${employee.full_name}`, companyInfo);
-  merge(ws, 'A9:R9');
+  merge(ws, 'A9:S9');
   DAILY_REPORT_HEADERS.forEach((value, index) => {
     set(ws, XLSX.utils.encode_cell({ r: 10, c: index }), value, dailyHeading);
   });
@@ -1026,7 +1046,10 @@ function dailySheet(data, input, employee) {
       delivery,
       fuelLeg,
       fuelLegSpan,
-      dayFuelPrice,
+      fuelRow,
+      fuelSpan,
+      vehicleSpan,
+      fuelPriceSpan,
       dayFuelTotal,
       dayFuelSpan,
       dayNumber,
@@ -1096,10 +1119,10 @@ function dailySheet(data, input, employee) {
     if (fuelLeg) {
       set(ws, `C${excelRow}`, fuelLeg.from || '—', dailyBaseStyle);
       set(ws, `D${excelRow}`, fuelLeg.to || '—', dailyBaseStyle);
-      set(ws, `N${excelRow}`, number(fuelLeg.km), fuelDistance);
+      set(ws, `O${excelRow}`, number(fuelLeg.km), fuelDistance);
       if (fuelLegSpan > 1) {
         const lastExcelRow = excelRow + fuelLegSpan - 1;
-        for (const column of ['C', 'D', 'N']) {
+        for (const column of ['C', 'D', 'O']) {
           merge(ws, `${column}${excelRow}:${column}${lastExcelRow}`);
         }
       }
@@ -1109,15 +1132,32 @@ function dailySheet(data, input, employee) {
         }
       }
     }
-    if (dayFuelSpan) {
-      set(ws, `O${excelRow}`, dayFuelPrice, dailyMoney);
-      set(ws, `P${excelRow}`, dayFuelTotal, dailyMoney);
-      if (dayFuelSpan > 1) {
-        const lastExcelRow = excelRow + dayFuelSpan - 1;
-        for (const column of ['O', 'P']) {
+    if (fuelRow) {
+      const vehicle =
+        fuelRow.vehicleType === 'motorcycle'
+          ? 'Xe máy'
+          : fuelRow.vehicleType === 'truck'
+            ? 'Ô tô'
+            : '-';
+      for (const [column, span, value, style] of [
+        ['N', vehicleSpan, vehicle, dailyCentered],
+        ['P', fuelPriceSpan, fuelRow.fuelPrice, dailyMoney],
+      ]) {
+        if (!span) continue;
+        set(ws, `${column}${excelRow}`, value, style);
+        if (span > 1) {
+          const lastExcelRow = excelRow + span - 1;
           merge(ws, `${column}${excelRow}:${column}${lastExcelRow}`);
         }
       }
+    } else if (!fuelLeg && fuelSpan === 1) {
+      for (const column of ['N', 'O', 'P']) {
+        set(ws, `${column}${excelRow}`, '-', dailyCentered);
+      }
+    }
+    if (dayFuelSpan) {
+      set(ws, `Q${excelRow}`, dayFuelTotal, dailyMoney);
+      if (dayFuelSpan > 1) merge(ws, `Q${excelRow}:Q${excelRow + dayFuelSpan - 1}`);
     }
     const routeExtraCosts = fuelLeg?.extraCosts || [];
     const routeExtraCost = routeExtraCosts.reduce((sum, item) => sum + number(item.amount), 0);
@@ -1126,14 +1166,14 @@ function dailySheet(data, input, employee) {
       .filter(Boolean)
       .join(' / ');
     const totalExtraCost = routeExtraCost;
-    set(ws, `Q${excelRow}`, totalExtraCost || '-', totalExtraCost ? dailyMoney : dailyCentered);
+    set(ws, `R${excelRow}`, totalExtraCost || '-', totalExtraCost ? dailyMoney : dailyCentered);
     const finalNote = [delivery?.noteValue, delivery?.entry.general_note, routeExtraNote]
       .map((value) => String(value ?? '').trim())
       .filter(Boolean)
       .filter((value, index, values) => values.indexOf(value) === index)
       .join(' / ');
     detailExtras[index] = { totalExtraCost, finalNote };
-    set(ws, `R${excelRow}`, finalNote || '-', dailyCentered);
+    set(ws, `S${excelRow}`, finalNote || '-', dailyCentered);
     ws['!rows'] ??= [];
     ws['!rows'][excelRow - 1] = {
       hpt: wrappedRowHeight([
@@ -1148,7 +1188,7 @@ function dailySheet(data, input, employee) {
         [delivery?.entry.province_city, DAILY_REPORT_TEXT_WIDTHS[6]],
         [delivery?.entry.note, DAILY_REPORT_TEXT_WIDTHS[7]],
         [delivery?.entry.spec, DAILY_REPORT_TEXT_WIDTHS[8]],
-        [finalNote, DAILY_REPORT_TEXT_WIDTHS[17]],
+        [finalNote, DAILY_REPORT_TEXT_WIDTHS[18]],
       ]),
     };
   }
@@ -1168,11 +1208,11 @@ function dailySheet(data, input, employee) {
       .join(' / ');
     const startRow = detailStartRow + index;
     const lastRow = startRow + groupSize - 1;
-    set(ws, `Q${startRow}`, totalExtraCost || '-', totalExtraCost ? dailyMoney : dailyCentered);
-    merge(ws, `Q${startRow}:Q${lastRow}`);
+    set(ws, `R${startRow}`, totalExtraCost || '-', totalExtraCost ? dailyMoney : dailyCentered);
+    merge(ws, `R${startRow}:R${lastRow}`);
     if (!hasEntryGeneralNote) {
-      set(ws, `R${startRow}`, finalNote || '-', dailyCentered);
-      merge(ws, `R${startRow}:R${lastRow}`);
+      set(ws, `S${startRow}`, finalNote || '-', dailyCentered);
+      merge(ws, `S${startRow}:S${lastRow}`);
     }
   });
   const summaryRow = detailStartRow + detailRows + 1;
@@ -1209,26 +1249,26 @@ function dailySheet(data, input, employee) {
     font: { name: 'Times New Roman', sz: 12, bold: true },
     alignment: { horizontal: 'center', vertical: 'center' },
   };
-  set(ws, `P${signDateRow}`, 'Ngày… tháng…năm….', {
+  set(ws, `Q${signDateRow}`, 'Ngày… tháng…năm….', {
     font: { name: 'Times New Roman', sz: 12, italic: true },
     alignment: { horizontal: 'center', vertical: 'center' },
   });
-  merge(ws, `P${signDateRow}:R${signDateRow}`);
+  merge(ws, `Q${signDateRow}:S${signDateRow}`);
   set(ws, `A${signRow}`, 'Giám Đốc Duyệt', signature);
   merge(ws, `A${signRow}:C${signRow}`);
-  set(ws, `F${signRow}`, 'Kế Toán Trưởng', signature);
+  set(ws, `F${signRow}`, 'Kế Toán', signature);
   set(ws, `G${signRow}`, '', signature);
   set(ws, `H${signRow}`, '', signature);
   set(ws, `I${signRow}`, '', signature);
   merge(ws, `F${signRow}:I${signRow}`);
-  set(ws, `P${signRow}`, 'Người lập', signature);
-  merge(ws, `P${signRow}:R${signRow}`);
+  set(ws, `Q${signRow}`, 'Người lập', signature);
+  merge(ws, `Q${signRow}:S${signRow}`);
   ws['!rows'] ??= [];
   ws['!rows'][0] = { hpt: 18 };
   ws['!rows'][1] = { hpt: 18 };
   ws['!rows'][3] = { hpt: 25.5 };
   ws['!rows'][10] = { hpt: 34 };
-  ws['!ref'] = `A1:R${signRow}`;
+  ws['!ref'] = `A1:S${signRow}`;
   return ws;
 }
 
@@ -1517,7 +1557,7 @@ function fuelHistorySheet(items, input, employeeName, company) {
   set(ws, `A${signatureTitleRow + 1}`, 'Giám Đốc', signatureTitleStyle);
   set(ws, `B${signatureTitleRow + 1}`, '', signatureTitleStyle);
   merge(ws, `A${signatureTitleRow + 1}:B${signatureTitleRow + 1}`);
-  set(ws, `D${signatureTitleRow + 1}`, 'Kế Toán Trưởng', signatureTitleStyle);
+  set(ws, `D${signatureTitleRow + 1}`, 'Kế Toán', signatureTitleStyle);
   set(ws, `G${signatureTitleRow + 1}`, 'Người Lập', signatureTitleStyle);
   set(ws, `H${signatureTitleRow + 1}`, '', signatureTitleStyle);
   merge(ws, `G${signatureTitleRow + 1}:H${signatureTitleRow + 1}`);

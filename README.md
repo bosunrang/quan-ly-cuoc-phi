@@ -59,6 +59,13 @@ ghép hàng giao trực tiếp với điểm đến là đơn vị nhận hàng,
 trong danh mục khi nhập lộ trình để lưu mã liên kết; lộ trình cũ đối chiếu theo
 tên. Phiếu cũ có thể đổi **Hình thức giao** trong form sửa phiếu.
 
+Báo cáo Excel và PDF có cột **Phương tiện**, lấy từ từng lượt tính xăng đã lưu.
+Các lượt liền kề trong cùng ngày có phương tiện hoặc giá xăng giống nhau được
+gộp ô tương ứng; tiền xăng cộng và gộp thành một ô cho cả ngày. Giá xăng **0**
+hợp lệ cho xe công ty; lượt đó đóng góp 0 vào tổng tiền xăng. Chi phí khác vẫn
+tách riêng. Phiếu chưa khớp lộ trình để dấu **-** ở phương tiện và giá xăng,
+không tự suy đoán phương tiện.
+
 Muốn chạy như bản thật (một cổng duy nhất):
 
 ```bash

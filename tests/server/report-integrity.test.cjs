@@ -613,7 +613,7 @@ test('giao trực tiếp khớp đúng điểm đến trong ngày có cả nhà 
     assert.equal(cell(row, 'I'), 'Tất cả');
   }
   assert.equal(cell(productRows[1], 'J'), '50.000');
-  const km = productRows.map((row) => cell(row, 'N')).filter((value) => value != null);
+  const km = productRows.map((row) => cell(row, 'O')).filter((value) => value != null);
   assert.deepEqual(km, ['10,0', '20,0', '30,0', '40,0']);
   const exported = await call('GET', `/api/reports/export?${range}&type=daily`);
   const workbook = XLSX.read(Buffer.from(exported.data.contentBase64, 'base64'), {
