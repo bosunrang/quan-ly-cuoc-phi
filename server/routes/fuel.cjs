@@ -27,17 +27,6 @@ const {
 
 const PAGE = 'fuel';
 
-function applyConfiguredConsumption(db, input) {
-  const vehicleType = input.vehicleType === 'truck' ? 'truck' : 'motorcycle';
-  const profile = consumptionProfiles(db)[vehicleType];
-  return {
-    ...input,
-    vehicleType,
-    consumptionLiters: profile.consumptionLiters,
-    consumptionBaseKm: profile.consumptionBaseKm,
-  };
-}
-
 function register(router) {
   router.get('/api/fuel', async (c) => {
     c.requirePage(PAGE);
@@ -153,8 +142,7 @@ function register(router) {
   router.post('/api/fuel/records', async (c) => {
     c.requirePage(PAGE);
     const isAdmin = canSeeEveryone(c.user);
-    const parsed = fuelRecordInput(c.body);
-    const input = isAdmin ? parsed : applyConfiguredConsumption(c.db, parsed);
+    const input = fuelRecordInput(c.body);
     const employee = activeEmployee(c.db, c.user, isAdmin, c.body.employeeId);
     return saveFuelRecord(c.db, c.user, input, employee.id);
   });
@@ -164,8 +152,7 @@ function register(router) {
     const id = Number(c.params.id);
     const isAdmin = canSeeEveryone(c.user);
     const record = editableRecord(c.db, id, c.user, isAdmin);
-    const parsed = fuelRecordInput(c.body);
-    const input = isAdmin ? parsed : applyConfiguredConsumption(c.db, parsed);
+    const input = fuelRecordInput(c.body);
     const employee = activeEmployee(c.db, c.user, isAdmin, c.body.employeeId, record.employee_id);
     return saveFuelRecord(c.db, c.user, input, employee.id, id);
   });

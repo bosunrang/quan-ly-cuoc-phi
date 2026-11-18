@@ -15,6 +15,10 @@ import {
 	type FuelPrice,
 	fuelRepository,
 } from "../../domain/fuel/fuel.repository";
+import {
+	exactFuelLocations,
+	searchFuelLocations,
+} from "../../domain/fuel/location.search";
 import { formatDate, formatMoney, todayIso } from "../../shared/lib/format";
 import { parsePastedMoney } from "../../shared/lib/money";
 import { normalizeText } from "../../shared/lib/text";
@@ -120,35 +124,6 @@ const locationRouteText = (item: FuelData["locations"][number]) => {
 	return `${name}, ${address}`;
 };
 
-type LocationSearchItem = {
-	item: FuelData["locations"][number];
-	nameKey: string;
-	searchKey: string;
-};
-// Danh mục địa điểm có thể lên tới vài nghìn dòng. Chuẩn hóa một lần cho mỗi
-// lần tải dữ liệu và dùng chung cho mọi ô địa điểm, thay vì chuẩn hóa lại toàn
-// bộ danh mục ở từng ô sau mỗi phím gõ.
-const locationSearchIndexes = new WeakMap<
-	FuelData["locations"],
-	LocationSearchItem[]
->();
-function locationSearchIndex(
-	locations: FuelData["locations"],
-): LocationSearchItem[] {
-	let index = locationSearchIndexes.get(locations);
-	if (!index) {
-		index = locations.map((item) => ({
-			item,
-			nameKey: locationKey(item.name),
-			searchKey: locationKey(
-				`${item.name} ${item.address} ${item.deliveryPoint}`,
-			),
-		}));
-		locationSearchIndexes.set(locations, index);
-	}
-	return index;
-}
-
 function LocationInput({
 	value,
 	ariaLabel,
@@ -171,17 +146,10 @@ function LocationInput({
 	const [open, setOpen] = useState(false);
 	const matches = useMemo(() => {
 		if (!open || readOnly) return [];
-		const query = locationKey(value);
-		return locationSearchIndex(locations)
-			.filter((entry) => !query || entry.searchKey.includes(query))
-			.slice(0, 8)
-			.map((entry) => entry.item);
+		return searchFuelLocations(locations, value);
 	}, [locations, open, readOnly, value]);
 	const type = (value: string) => {
-		const key = locationKey(value);
-		const exact = locationSearchIndex(locations)
-			.filter((entry) => entry.nameKey === key)
-			.map((entry) => entry.item);
+		const exact = exactFuelLocations(locations, value);
 		onChange(
 			exact.length === 1 ? locationRouteText(exact[0]) : value,
 			exact.length === 1,
@@ -268,6 +236,16 @@ export function FuelPage() {
 		[legs, setLegs] = useState<Leg[]>([newLeg()]),
 		[estimatingLegId, setEstimatingLegId] = useState<string | null>(null),
 		[saving, setSaving] = useState(false);
+	const [draftProfiles, setDraftProfiles] = useState<
+		Partial<FuelData["consumptionProfiles"]>
+	>({});
+	const consumptionProfiles = useMemo(() => {
+		const profiles = data?.consumptionProfiles ?? {
+			motorcycle: { consumptionLiters: 1, consumptionBaseKm: 40 },
+			truck: { consumptionLiters: 7.5, consumptionBaseKm: 100 },
+		};
+		return data?.isAdmin ? profiles : { ...profiles, ...draftProfiles };
+	}, [data?.consumptionProfiles, data?.isAdmin, draftProfiles]);
 	const savingRef = useRef(false);
 	const initialPeriodTo = useRef(periodTo);
 	const hasLoadedInitialPrice = useRef(false);
@@ -356,14 +334,14 @@ export function FuelPage() {
 	// của bản ghi đang được sửa.
 	const appliedProfileKey = useRef("");
 	useEffect(() => {
-		const profile = data?.consumptionProfiles[vehicleType];
-		if (!profile || editingRecord) return;
+		const profile = consumptionProfiles[vehicleType];
+		if (!data || editingRecord) return;
 		const key = `${vehicleType}:${profile.consumptionLiters}:${profile.consumptionBaseKm}`;
 		if (appliedProfileKey.current === key) return;
 		appliedProfileKey.current = key;
 		setConsumption(String(profile.consumptionLiters));
 		setBaseKm(String(profile.consumptionBaseKm));
-	}, [data?.consumptionProfiles, editingRecord, vehicleType]);
+	}, [consumptionProfiles, data, editingRecord, vehicleType]);
 	const findStoredPrice = (date: string) =>
 		data?.prices.find(
 			(item) =>
@@ -403,11 +381,8 @@ export function FuelPage() {
 		1,
 		Math.ceil((data?.recordsTotal ?? 0) / HISTORY_PAGE_SIZE),
 	);
-	const consumptionProfiles = data?.consumptionProfiles ?? {
-		motorcycle: { consumptionLiters: 1, consumptionBaseKm: 40 },
-		truck: { consumptionLiters: 7.5, consumptionBaseKm: 100 },
-	};
 	const vehicleProfileLabel = (nextVehicleType: VehicleType) => {
+		if (nextVehicleType === vehicleType) return `${consumption}L / ${baseKm}km`;
 		const profile = consumptionProfiles[nextVehicleType];
 		return profile.consumptionLiters
 			? `${profile.consumptionLiters}L / ${profile.consumptionBaseKm || "—"}km`
@@ -763,17 +738,15 @@ export function FuelPage() {
 										<Bike size={17} />
 										<span>Xe máy · {vehicleProfileLabel("motorcycle")}</span>
 									</button>
-									{data.isAdmin && (
-										<button
-											className="fuel-consumption-edit"
-											type="button"
-											onClick={() => setConsumptionEditor("motorcycle")}
-											aria-label="Thiết lập định mức xe máy"
-											title="Thiết lập định mức xe máy"
-										>
-											<Pencil size={15} />
-										</button>
-									)}
+									<button
+										className="fuel-consumption-edit"
+										type="button"
+										onClick={() => setConsumptionEditor("motorcycle")}
+										aria-label="Thiết lập định mức xe máy"
+										title="Thiết lập định mức xe máy"
+									>
+										<Pencil size={15} />
+									</button>
 								</div>
 								<div
 									className={`fuel-vehicle-option ${vehicleType === "truck" ? "is-active" : ""}`}
@@ -787,17 +760,15 @@ export function FuelPage() {
 										<CarFront size={17} />
 										<span>Ô tô · {vehicleProfileLabel("truck")}</span>
 									</button>
-									{data.isAdmin && (
-										<button
-											className="fuel-consumption-edit"
-											type="button"
-											onClick={() => setConsumptionEditor("truck")}
-											aria-label="Thiết lập định mức ô tô"
-											title="Thiết lập định mức ô tô"
-										>
-											<Pencil size={15} />
-										</button>
-									)}
+									<button
+										className="fuel-consumption-edit"
+										type="button"
+										onClick={() => setConsumptionEditor("truck")}
+										aria-label="Thiết lập định mức ô tô"
+										title="Thiết lập định mức ô tô"
+									>
+										<Pencil size={15} />
+									</button>
 								</div>
 							</div>
 							{data.isAdmin && (
@@ -877,8 +848,8 @@ export function FuelPage() {
 							<div>
 								<strong>Lộ trình</strong>
 								<span>
-									Ghi tên địa điểm kèm địa chỉ đầy đủ để VietMap xác định đúng
-									vị trí.
+									Tìm theo tên khách hàng, nhà xe hoặc địa chỉ. Hiển thị 20 kết
+									quả phù hợp nhất, ưu tiên khớp tên.
 								</span>
 							</div>
 						</div>
@@ -1243,24 +1214,40 @@ export function FuelPage() {
 			{consumptionEditor && (
 				<ConsumptionDialog
 					vehicleType={consumptionEditor}
+					shared={data.isAdmin}
 					profile={{
 						consumption: String(
-							consumptionProfiles[consumptionEditor].consumptionLiters,
+							consumptionEditor === vehicleType
+								? consumption
+								: consumptionProfiles[consumptionEditor].consumptionLiters,
 						),
 						baseKm: String(
-							consumptionProfiles[consumptionEditor].consumptionBaseKm,
+							consumptionEditor === vehicleType
+								? baseKm
+								: consumptionProfiles[consumptionEditor].consumptionBaseKm,
 						),
 					}}
 					close={() => setConsumptionEditor(null)}
 					saved={async (nextConsumption, nextBaseKm) => {
-						const profiles = await fuelRepository.saveConsumption({
-							vehicleType: consumptionEditor,
+						const profile = {
 							consumptionLiters: decimal(nextConsumption),
 							consumptionBaseKm: decimal(nextBaseKm),
-						});
-						setData((current) =>
-							current ? { ...current, consumptionProfiles: profiles } : current,
-						);
+						};
+						if (data.isAdmin) {
+							const profiles = await fuelRepository.saveConsumption({
+								vehicleType: consumptionEditor,
+								...profile,
+							});
+							setData((current) =>
+								current
+									? { ...current, consumptionProfiles: profiles }
+									: current,
+							);
+						} else
+							setDraftProfiles((current) => ({
+								...current,
+								[consumptionEditor]: profile,
+							}));
 						localStorage.setItem(VEHICLE_TYPE_DRAFT_KEY, consumptionEditor);
 						setVehicleType(consumptionEditor);
 						setConsumption(nextConsumption);
@@ -1299,11 +1286,13 @@ export function FuelPage() {
 
 function ConsumptionDialog({
 	vehicleType,
+	shared,
 	profile,
 	close,
 	saved,
 }: {
 	vehicleType: VehicleType;
+	shared: boolean;
 	profile: ConsumptionProfile;
 	close: () => void;
 	saved: (consumption: string, baseKm: string) => Promise<void>;
@@ -1314,7 +1303,11 @@ function ConsumptionDialog({
 		<Dialog
 			className="fuel-consumption-dialog"
 			title={`Định mức ${vehicleLabels[vehicleType]}`}
-			subtitle="Thiết lập mức tiêu hao riêng cho loại xe này."
+			subtitle={
+				shared
+					? "Thiết lập mức tiêu hao mặc định cho loại xe này."
+					: "Tự nhập mức tiêu hao dùng để tính xăng cho bạn."
+			}
 			onClose={close}
 			confirmLabel="Lưu định mức"
 			onConfirm={async () => {

@@ -73,6 +73,15 @@ hợp lệ cho xe công ty; lượt đó đóng góp 0 vào tổng tiền xăng.
 tách riêng. Phiếu chưa khớp lộ trình để dấu **-** ở phương tiện và giá xăng,
 không tự suy đoán phương tiện.
 
+Tìm điểm đi/đến hiển thị tối đa **20 kết quả phù hợp nhất**, ưu tiên tên khớp
+chính xác, đầu tên và phần tên có chứa từ khóa trước kết quả theo địa chỉ.
+Hỗ trợ gõ tiếng Việt không dấu và tìm theo điểm giao của nhà xe.
+
+Nhân viên được sửa định mức lít/km bằng nút bút chì ở **Xe máy** hoặc **Ô tô**
+và nhập giá xăng cho lượt tính của mình (giá 0 vẫn hợp lệ cho xe công ty).
+Định mức và giá đã nhập được lưu trên từng lượt tính; mức chung của Admin chỉ
+là gợi ý ban đầu. Thay đổi của nhân viên không ghi đè cấu hình chung.
+
 Muốn chạy như bản thật (một cổng duy nhất):
 
 ```bash

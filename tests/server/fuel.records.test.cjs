@@ -17,11 +17,11 @@ let baseUrl;
 let token;
 let workDir;
 
-async function call(method, path, body) {
+async function call(method, path, body, requestToken = token) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers: {
-      authorization: `Bearer ${token}`,
+      authorization: `Bearer ${requestToken}`,
       ...(body ? { 'content-type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -47,6 +47,126 @@ before(async () => {
 after(async () => {
   await app?.close();
   if (workDir) rmSync(workDir, { recursive: true, force: true });
+});
+
+test('nhân viên tự nhập lít/km và giá xăng khi tạo/sửa lượt của mình, giữ nguyên định mức chung', async () => {
+  const user = await call('POST', '/api/users', {
+    username: 'fuel-custom-staff',
+    fullName: 'Nhân viên tự nhập định mức',
+    password: 'StaffFuel2026!',
+    pages: ['fuel'],
+  });
+  assert.equal(user.status, 200);
+  const employee = await call('POST', '/api/employees', {
+    fullName: user.data.fullName,
+    userId: user.data.id,
+    isActive: true,
+  });
+  assert.equal(employee.status, 200);
+  const login = await call('POST', '/api/login', {
+    username: 'fuel-custom-staff',
+    password: 'StaffFuel2026!',
+  });
+  assert.equal(login.status, 200);
+  const staffToken = login.data.token;
+  assert.equal(
+    (await call('POST', '/api/me/initial-password', { newPassword: 'OwnFuel2026!' }, staffToken))
+      .status,
+    200,
+  );
+  const defaults = () =>
+    app.db
+      .prepare(
+        'SELECT motorcycle_consumption_liters, motorcycle_base_km, truck_consumption_liters, truck_base_km FROM app_settings WHERE id = 1',
+      )
+      .get();
+  const before = defaults();
+  const input = {
+    periodFrom: '2026-11-18',
+    periodTo: '2026-11-18',
+    employeeId: 999999,
+    vehicleType: 'motorcycle',
+    consumptionLiters: 2.5,
+    consumptionBaseKm: 100,
+    fuelPrice: 20000,
+    legs: [{ from: 'Kho', to: 'Đơn vị', km: 40 }],
+  };
+  const created = await call('POST', '/api/fuel/records', input, staffToken);
+  assert.equal(created.status, 200, JSON.stringify(created.data));
+  assert.equal(created.data.totalFee, 20000);
+  const updated = await call(
+    'PATCH',
+    `/api/fuel/records/${created.data.id}`,
+    {
+      ...input,
+      consumptionLiters: 1.5,
+      consumptionBaseKm: 50,
+      fuelPrice: 21000,
+    },
+    staffToken,
+  );
+  assert.equal(updated.status, 200);
+  assert.equal(updated.data.totalFee, 25200);
+  const companyCar = await call(
+    'POST',
+    '/api/fuel/records',
+    {
+      ...input,
+      vehicleType: 'truck',
+      consumptionLiters: 8,
+      consumptionBaseKm: 100,
+      fuelPrice: 0,
+    },
+    staffToken,
+  );
+  assert.equal(companyCar.status, 200);
+  assert.equal(companyCar.data.totalFee, 0);
+  const history = await call('GET', '/api/fuel/records', undefined, staffToken);
+  const saved = history.data.records.find((record) => record.id === created.data.id);
+  assert.equal(saved.employeeId, employee.data.id);
+  assert.equal(saved.consumptionLiters, 1.5);
+  assert.equal(saved.consumptionBaseKm, 50);
+  assert.equal(saved.fuelPrice, 21000);
+  assert.equal(saved.totalFee, 25200);
+  assert.equal(
+    (await call('POST', '/api/fuel/records', { ...input, consumptionBaseKm: 0 }, staffToken))
+      .status,
+    400,
+  );
+  assert.equal(
+    (await call('POST', '/api/fuel/records', { ...input, consumptionLiters: -1 }, staffToken))
+      .status,
+    400,
+  );
+  // Tự nhập cho chứng từ không cấp quyền sửa cấu hình dùng chung.
+  assert.equal(
+    (
+      await call(
+        'PATCH',
+        '/api/fuel/consumption',
+        {
+          vehicleType: 'motorcycle',
+          consumptionLiters: 9,
+          consumptionBaseKm: 10,
+        },
+        staffToken,
+      )
+    ).status,
+    400,
+  );
+  assert.deepEqual(defaults(), before);
+  const adminRecord = await call('POST', '/api/fuel/records', {
+    ...input,
+    employeeId: employee.data.id,
+  });
+  assert.equal(adminRecord.status, 200);
+  assert.equal(
+    (await call('PATCH', `/api/fuel/records/${adminRecord.data.id}`, input, staffToken)).status,
+    400,
+  );
+  for (const record of [created, companyCar, adminRecord]) {
+    assert.equal((await call('DELETE', `/api/fuel/records/${record.data.id}`)).status, 200);
+  }
 });
 
 test('gộp ghi chú trống theo từng ngày và tách riêng nhà xe có lý do', () => {
