@@ -29,10 +29,11 @@ export const entryRepository = {
 	misaOrders: (
 		customerId: number,
 		endDate: string,
+		excludeId?: number,
 	): Promise<{ items: MisaOrder[] }> =>
 		api(
 			"GET",
-			`/api/entries/misa-orders?customerId=${customerId}&endDate=${endDate}`,
+			`/api/entries/misa-orders?customerId=${customerId}&endDate=${endDate}${excludeId ? `&excludeId=${excludeId}` : ""}`,
 		),
 	rates: (
 		customerId: number,

@@ -101,9 +101,20 @@
 	cursor: pointer;
 }
 
-.entry-misa-orders button:hover {
+.entry-misa-orders button:hover:not(:disabled) {
 	border-color: var(--teal-border);
 	background: var(--surface-accent-faint);
+}
+
+.entry-misa-orders button:disabled {
+	border-color: var(--line);
+	background: var(--surface-muted);
+	color: var(--muted);
+	cursor: not-allowed;
+}
+
+.entry-misa-orders button:disabled strong {
+	color: var(--muted);
 }
 
 .entry-misa-orders button strong {

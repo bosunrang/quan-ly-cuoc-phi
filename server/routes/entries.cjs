@@ -4,7 +4,7 @@ const { normalizeSearchText, transaction } = require('../db.cjs');
 const { ensureCustomerCarrier, refreshCustomerCarrier } = require('../carrier-links.cjs');
 const { writeAudit } = require('../audit.cjs');
 const { canSeeEveryone } = require('../permissions.cjs');
-const { badRequest, conflict, notFound, isIsoDate } = require('../http.cjs');
+const { HttpError, badRequest, conflict, notFound, isIsoDate } = require('../http.cjs');
 
 const PAGE = 'entries';
 const MAX_LIMIT = 500;
@@ -172,6 +172,50 @@ function customerForEntry(db, body, customerName) {
     throw badRequest('Khách hàng không khớp với dữ liệu đã chọn.');
   }
   return customer;
+}
+
+/** Một nhóm MISA trên form là toàn bộ hàng của khách trong một ngày chứng từ. */
+function misaOrderUsage(db, customerId, customerKey, from, to, excludedEntryId = 0) {
+  const rows = db
+    .prepare(
+      `SELECT misa_document_date, entry_date FROM entries
+       WHERE (customer_id = ? OR (customer_id IS NULL AND customer_key = ?))
+         AND misa_document_date BETWEEN ? AND ? AND id <> ?
+       ORDER BY entry_date DESC, id DESC`,
+    )
+    .all(customerId, customerKey, from, to, excludedEntryId);
+  const used = new Map();
+  for (const row of rows) {
+    if (!used.has(row.misa_document_date)) used.set(row.misa_document_date, row.entry_date);
+  }
+  return used;
+}
+
+/** Kiểm tra trong giao dịch ghi, áp dụng cho cả Admin và mọi hình thức giao hàng. */
+function ensureMisaOrderAvailable(db, body, input, before = null) {
+  if (!input.misaDocumentDate) return;
+  const customerId = customerForEntry(db, body, input.customer)?.id ?? null;
+  const customerKey = normalizeSearchText(input.customer);
+  const sameCustomer = before?.customer_id
+    ? before.customer_id === customerId
+    : before?.customer_key === customerKey;
+  // Phiếu cũ giữ nguyên đơn đã chọn vẫn sửa được, kể cả dữ liệu từng bị nhập trùng.
+  if (before && sameCustomer && before.misa_document_date === input.misaDocumentDate) return;
+  const usedOn = misaOrderUsage(
+    db,
+    customerId,
+    customerKey,
+    input.misaDocumentDate,
+    input.misaDocumentDate,
+    before?.id ?? 0,
+  ).get(input.misaDocumentDate);
+  if (usedOn) {
+    throw new HttpError(
+      409,
+      `Đơn MISA ngày ${input.misaDocumentDate.split('-').reverse().join('/')} đã được dùng trong phiếu giao hàng ngày ${usedOn.split('-').reverse().join('/')}. Vui lòng chọn đơn khác.`,
+      'MISA_ORDER_USED',
+    );
+  }
 }
 
 /** Nhà xe của phiếu: theo mã đã chọn trên form, hoặc theo tên khi chưa có mã. */
@@ -672,6 +716,11 @@ function register(router) {
     const customerId = Number(c.query.customerId);
     const endDate = String(c.query.endDate ?? '').trim();
     if (!isIsoDate(endDate)) throw badRequest('Ngày gửi không hợp lệ.');
+    const excludedEntryId = c.query.excludeId == null ? 0 : Number(c.query.excludeId);
+    if (!Number.isSafeInteger(excludedEntryId) || excludedEntryId < 0) {
+      throw badRequest('Phiếu giao hàng không hợp lệ.');
+    }
+    if (excludedEntryId) loadOwned(c.db, c.user, excludedEntryId);
     const customer = c.db
       .prepare('SELECT customer_name, customer_code FROM customers WHERE id = ?')
       .get(customerId);
@@ -700,10 +749,20 @@ function register(router) {
       items.push({ productName: row.product_name, quantity: Number(row.quantity) });
       groups.set(key, { documentDate: row.document_date, documentCode: '', items });
     }
+    const used = misaOrderUsage(
+      c.db,
+      customerId,
+      normalizeSearchText(customer.customer_name),
+      dateOffset(endDate, -19),
+      endDate,
+      excludedEntryId,
+    );
     return {
       items: [...groups.values()].map(({ documentDate, documentCode, items }) => ({
         documentDate,
         documentCode,
+        used: used.has(documentDate),
+        usedOn: used.get(documentDate) ?? null,
         items,
         totalQuantity: items.reduce((total, item) => total + item.quantity, 0),
         note: items
@@ -751,6 +810,7 @@ function register(router) {
     const at = new Date().toISOString();
 
     return transaction(c.db, () => {
+      ensureMisaOrderAvailable(c.db, c.body, input);
       ensureStaffDuplicateReason(c.db, c.user, input);
       const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, at);
       const catalog = catalogIdsForEntry(c.db, c.body, input, delivery);
@@ -831,6 +891,7 @@ function register(router) {
     let standardFee = standardTransportFeeFor(c.db, c.body, input, before);
     ensureVarianceReason(c.body, input, standardFee);
     return transaction(c.db, () => {
+      ensureMisaOrderAvailable(c.db, c.body, input, before);
       ensureStaffDuplicateReason(c.db, c.user, input, before.id);
       const delivery = syncCustomerDelivery(c.db, c.user, c.body, input, new Date().toISOString());
       const catalog = catalogIdsForEntry(c.db, c.body, input, delivery);

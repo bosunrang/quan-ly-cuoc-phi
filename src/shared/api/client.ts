@@ -52,6 +52,7 @@ export class ApiError extends Error {
 	constructor(
 		message: string,
 		readonly status: number,
+		readonly code?: string,
 	) {
 		super(message);
 	}
@@ -122,6 +123,7 @@ export async function api<T>(
 
 	const data = (await response.json().catch(() => null)) as {
 		error?: string;
+		code?: string;
 	} | null;
 
 	if (!response.ok) {
@@ -134,6 +136,7 @@ export async function api<T>(
 		throw new ApiError(
 			data?.error ?? "Máy chủ không xử lý được yêu cầu.",
 			response.status,
+			data?.code,
 		);
 	}
 	return data as T;

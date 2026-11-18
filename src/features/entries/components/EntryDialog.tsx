@@ -175,7 +175,7 @@ export function EntryDialog({
 			const ordersRequestId = ordersRequest.current + 1;
 			ordersRequest.current = ordersRequestId;
 			void entryRepository
-				.misaOrders(id, initial.entryDate)
+				.misaOrders(id, initial.entryDate, editingId ?? undefined)
 				.then((result) => {
 					if (ordersRequest.current === ordersRequestId)
 						setOrders(result.items);
@@ -343,7 +343,11 @@ export function EntryDialog({
 		const requestId = ordersRequest.current + 1;
 		ordersRequest.current = requestId;
 		try {
-			const result = await entryRepository.misaOrders(id, date);
+			const result = await entryRepository.misaOrders(
+				id,
+				date,
+				editingId ?? undefined,
+			);
 			if (ordersRequest.current === requestId) setOrders(result.items);
 		} catch (cause) {
 			if (ordersRequest.current === requestId)
@@ -527,8 +531,17 @@ export function EntryDialog({
 			});
 			onClose();
 		} catch (cause) {
-			if (cause instanceof ApiError && cause.status === 409)
-				setDuplicateDetected(true);
+			if (cause instanceof ApiError && cause.status === 409) {
+				if (cause.code === "MISA_ORDER_USED") {
+					setForm((current) => ({
+						...current,
+						misaDocumentDate: "",
+						misaDocumentCode: "",
+						note: "",
+					}));
+					if (customerId) await loadOrders(customerId, form.entryDate);
+				} else setDuplicateDetected(true);
+			}
 			throw cause;
 		}
 	};
@@ -816,7 +829,9 @@ export function EntryDialog({
 								<button
 									key={order.documentDate}
 									type="button"
+									disabled={order.used}
 									onClick={() =>
+										!order.used &&
 										setForm((current) => ({
 											...current,
 											note: order.note,
@@ -829,7 +844,11 @@ export function EntryDialog({
 										{formatDate(order.documentDate)}
 										{order.documentCode ? ` · ${order.documentCode}` : ""}
 									</strong>
-									<small>{order.totalQuantity} sản phẩm</small>
+									<small>
+										{order.used
+											? `Đã được dùng${order.usedOn ? ` · gửi ngày ${formatDate(order.usedOn)}` : ""}`
+											: `${order.totalQuantity} sản phẩm`}
+									</small>
 									<span
 										style={{
 											gridColumn: "1 / -1",

@@ -153,6 +153,8 @@ export function defaultEntryRecipient(recipients: string[]): string {
 export interface MisaOrder {
 	documentDate: string;
 	documentCode: string;
+	used: boolean;
+	usedOn: string | null;
 	items: Array<{ productName: string; quantity: number }>;
 	totalQuantity: number;
 	note: string;

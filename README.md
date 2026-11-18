@@ -59,6 +59,13 @@ ghép hàng giao trực tiếp với điểm đến là đơn vị nhận hàng,
 trong danh mục khi nhập lộ trình để lưu mã liên kết; lộ trình cũ đối chiếu theo
 tên. Phiếu cũ có thể đổi **Hình thức giao** trong form sửa phiếu.
 
+Nhóm đơn MISA đã chọn và lưu trên phiếu được đánh dấu **Đã được dùng** kèm ngày
+gửi và không thể chọn lại cho phiếu khác, kể cả khác ngày, nhân viên hoặc hình
+thức giao. Danh sách đang gom theo khách hàng và ngày chứng từ. Sửa phiếu vẫn
+giữ được đơn hiện tại; đổi đơn hoặc xóa phiếu sẽ mở lại đơn cũ nếu không còn
+phiếu nào sử dụng. Phiếu nhập sản phẩm thủ công không có liên kết MISA thì
+không tự suy đoán đơn đã dùng.
+
 Báo cáo Excel và PDF có cột **Phương tiện**, lấy từ từng lượt tính xăng đã lưu.
 Các lượt liền kề trong cùng ngày có phương tiện hoặc giá xăng giống nhau được
 gộp ô tương ứng; tiền xăng cộng và gộp thành một ô cho cả ngày. Giá xăng **0**

@@ -592,6 +592,199 @@ describe('nhập dữ liệu MISA', () => {
     assert.match(orders.data.items[0].note, /Sản phẩm liên kết theo mã/);
   });
 
+  test('khóa nhóm MISA đã dùng qua ngày gửi, nhân viên và hình thức giao; sửa/xóa phiếu cập nhật lại trạng thái', async () => {
+    const { customer, carrier } = await configureStaffRate('Bệnh viện khóa đơn MISA');
+    const code = 'KH-MISA-LOCK';
+    assert.equal(
+      (
+        await call('PATCH', `/api/customers/${customer.id}`, {
+          token: adminToken,
+          body: { ...customer, customerCode: code },
+        })
+      ).status,
+      200,
+    );
+    const imported = await call('POST', '/api/misa/import', {
+      token: adminToken,
+      body: {
+        fileName: 'misa-lock.xlsx',
+        rows: ['14', '15', '16'].map((day) =>
+          misaRow({
+            documentDate: `2026-11-${day}`,
+            documentCode: `LOCK-${day}`,
+            customerCode: code,
+            customerName: customer.customerName,
+            sourceKey: `misa-lock-${day}`,
+          }),
+        ),
+      },
+    });
+    assert.equal(imported.status, 200);
+    assert.equal(imported.data.inserted, 3);
+    const list = async (suffix = '', token = adminToken) => {
+      const result = await call(
+        'GET',
+        `/api/entries/misa-orders?customerId=${customer.id}&endDate=2026-11-19${suffix}`,
+        { token },
+      );
+      assert.equal(result.status, 200);
+      return result.data.items;
+    };
+    assert.equal(
+      (await list()).every((item) => item.used === false && item.usedOn === null),
+      true,
+    );
+    const input = newEntry({
+      entryDate: '2026-11-17',
+      customerId: customer.id,
+      customer: customer.customerName,
+      carrierId: carrier.id,
+      carrier: carrier.name,
+      misaDocumentDate: '2026-11-15',
+    });
+    const first = await call('POST', '/api/entries', { token: adminToken, body: input });
+    assert.equal(first.status, 200, JSON.stringify(first.data));
+    // Dữ liệu cũ chưa gắn mã danh mục vẫn nhận ra đơn đã dùng theo khóa khách hàng.
+    app.db.prepare('UPDATE entries SET customer_id = NULL WHERE id = ?').run(first.data.id);
+    const used = (await list('', staffAToken)).find(
+      (item) => item.documentDate === input.misaDocumentDate,
+    );
+    assert.equal(used.used, true);
+    assert.equal(used.usedOn, '2026-11-17');
+    assert.equal((await list()).find((item) => item.documentDate === '2026-11-16').used, false);
+    for (const [token, deliveryMethod] of [
+      [adminToken, 'carrier'],
+      [staffAToken, 'carrier'],
+      [adminToken, 'direct'],
+    ]) {
+      const duplicate = await call('POST', '/api/entries', {
+        token,
+        body: {
+          ...input,
+          entryDate: '2026-11-18',
+          deliveryMethod,
+          duplicateReason: 'Vẫn thử gửi lại',
+        },
+      });
+      assert.equal(duplicate.status, 409);
+      assert.equal(duplicate.data.code, 'MISA_ORDER_USED');
+      assert.match(duplicate.data.error, /đã được dùng.*17\/11\/2026/);
+    }
+    const editing = await call('PATCH', `/api/entries/${first.data.id}`, {
+      token: adminToken,
+      body: { ...input, entryDate: '2026-11-18', generalNote: 'Sửa phiếu đang giữ đơn MISA' },
+    });
+    assert.equal(editing.status, 200);
+    assert.equal(
+      (await list()).find((item) => item.documentDate === '2026-11-15').usedOn,
+      '2026-11-18',
+    );
+    assert.equal(
+      (await list(`&excludeId=${first.data.id}`)).find((item) => item.documentDate === '2026-11-15')
+        .used,
+      false,
+    );
+    const forbiddenExclude = await call(
+      'GET',
+      `/api/entries/misa-orders?customerId=${customer.id}&endDate=2026-11-19&excludeId=${first.data.id}`,
+      { token: staffAToken },
+    );
+    assert.equal(forbiddenExclude.status, 404);
+    const secondInput = { ...input, misaDocumentDate: '2026-11-16' };
+    const second = await call('POST', '/api/entries', { token: adminToken, body: secondInput });
+    assert.equal(second.status, 200);
+    assert.equal(
+      (await call('PATCH', `/api/entries/${second.data.id}`, { token: adminToken, body: input }))
+        .status,
+      409,
+    );
+    // Đổi đơn của phiếu giải phóng đơn cũ; không phải chỉ xóa phiếu mới mở lại được.
+    assert.equal(
+      (
+        await call('PATCH', `/api/entries/${first.data.id}`, {
+          token: adminToken,
+          body: { ...input, misaDocumentDate: '' },
+        })
+      ).status,
+      200,
+    );
+    assert.equal((await list()).find((item) => item.documentDate === '2026-11-15').used, false);
+    const direct = await call('POST', '/api/entries', {
+      token: adminToken,
+      body: { ...input, deliveryMethod: 'direct' },
+    });
+    assert.equal(direct.status, 200);
+    assert.equal((await list()).find((item) => item.documentDate === '2026-11-15').used, true);
+    assert.equal(
+      (await call('DELETE', `/api/entries/${direct.data.id}`, { token: adminToken })).status,
+      200,
+    );
+    assert.equal((await list()).find((item) => item.documentDate === '2026-11-15').used, false);
+    // Đổi tên khách nhưng giữ mã không làm mất khóa đơn đã dùng.
+    const renamedName = 'Bệnh viện khóa đơn MISA đổi tên';
+    assert.equal(
+      (
+        await call('PATCH', `/api/customers/${customer.id}`, {
+          token: adminToken,
+          body: { ...customer, customerName: renamedName, customerCode: code },
+        })
+      ).status,
+      200,
+    );
+    assert.equal((await list()).find((item) => item.documentDate === '2026-11-16').used, true);
+    assert.equal(
+      (
+        await call('POST', '/api/entries', {
+          token: adminToken,
+          body: { ...secondInput, customer: renamedName, entryDate: '2026-11-19' },
+        })
+      ).status,
+      409,
+    );
+    // Hai màn hình cùng thấy đơn chưa dùng: chỉ một yêu cầu lưu được chấp nhận.
+    const concurrent = await Promise.all(
+      ['2026-11-18', '2026-11-19'].map((entryDate) =>
+        call('POST', '/api/entries', {
+          token: adminToken,
+          body: {
+            ...input,
+            customer: renamedName,
+            entryDate,
+            misaDocumentDate: '2026-11-14',
+            deliveryMethod: 'direct',
+          },
+        }),
+      ),
+    );
+    assert.deepEqual(concurrent.map((result) => result.status).sort(), [200, 409]);
+    // Khách khác có chứng từ cùng ngày vẫn chọn và lưu bình thường.
+    const otherCustomer = await call('POST', '/api/customers', {
+      token: adminToken,
+      body: { customerName: 'Khách khác ngày MISA trùng' },
+    });
+    const other = await call('POST', '/api/entries', {
+      token: adminToken,
+      body: {
+        ...secondInput,
+        customerId: otherCustomer.data.id,
+        customer: otherCustomer.data.customerName,
+        deliveryMethod: 'direct',
+      },
+    });
+    assert.equal(other.status, 200);
+    for (const entry of [
+      first,
+      second,
+      other,
+      ...concurrent.filter((result) => result.status === 200),
+    ]) {
+      assert.equal(
+        (await call('DELETE', `/api/entries/${entry.data.id}`, { token: adminToken })).status,
+        200,
+      );
+    }
+  });
+
   test('tìm tiếng Việt không phân biệt dấu, hoa thường và Đ/đ', async () => {
     const row = misaRow({
       rowNumber: 8,

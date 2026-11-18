@@ -8,6 +8,7 @@ import {
 import { entryRepository } from "../src/domain/entries/entry.repository";
 import { EntryDialog } from "../src/features/entries/components/EntryDialog";
 import { EntriesPage } from "../src/features/entries/EntriesPage";
+import { ApiError } from "../src/shared/api/client";
 
 const options: EntryFormOptions = {
 	currentUserId: 1,
@@ -50,6 +51,180 @@ afterEach(async () => {
 });
 
 describe("hai hình thức giao hàng", () => {
+	it("khi người khác vừa dùng đơn MISA, tải lại đơn đã khóa và cho chọn đơn khác", async () => {
+		vi.spyOn(entryRepository, "misaOrders").mockResolvedValue({
+			items: [
+				{
+					documentDate: "2026-11-16",
+					documentCode: "",
+					used: true,
+					usedOn: "2026-11-18",
+					items: [],
+					totalQuantity: 10,
+					note: "Hàng đã dùng",
+				},
+				{
+					documentDate: "2026-11-15",
+					documentCode: "",
+					used: false,
+					usedOn: null,
+					items: [],
+					totalQuantity: 20,
+					note: "Hàng chưa dùng",
+				},
+			],
+		});
+		vi.spyOn(entryRepository, "customerContext").mockResolvedValue({
+			customer: { id: 1, name: "Trạm y tế A", recipient: "", address: "" },
+			carriers: [],
+			recipients: [],
+			defaultCarrierId: null,
+		});
+		const save = vi
+			.fn()
+			.mockRejectedValueOnce(
+				new ApiError(
+					"Đơn MISA đã được dùng. Vui lòng chọn đơn khác.",
+					409,
+					"MISA_ORDER_USED",
+				),
+			)
+			.mockResolvedValue(undefined);
+		await act(async () =>
+			root.render(
+				createElement(EntryDialog, {
+					editingId: 7,
+					formOptions: options,
+					onSave: save,
+					onClose: vi.fn(),
+					initial: {
+						...emptyEntryInput("2026-11-18"),
+						deliveryMethod: "direct",
+						customerId: 1,
+						customer: "Trạm y tế A",
+						employeeId: 1,
+						note: "Hàng đã dùng",
+						misaDocumentDate: "2026-11-16",
+					},
+				}),
+			),
+		);
+		const submit = async () =>
+			act(async () => {
+				container
+					.querySelector("form")
+					?.dispatchEvent(
+						new Event("submit", { bubbles: true, cancelable: true }),
+					);
+			});
+		await submit();
+		expect(container.textContent).toContain("Đơn MISA đã được dùng.");
+		expect(
+			container.querySelector<HTMLTextAreaElement>(".entry-product-textarea")
+				?.value,
+		).toBe("");
+		const choices = container.querySelectorAll<HTMLButtonElement>(
+			".entry-misa-orders button",
+		);
+		expect(choices[0].disabled).toBe(true);
+		expect(labels().some((label) => label?.includes("Lý do nhập trùng"))).toBe(
+			false,
+		);
+		await act(async () => choices[1].click());
+		await submit();
+		expect(save).toHaveBeenCalledTimes(2);
+		expect(save).toHaveBeenLastCalledWith(
+			expect.objectContaining({ misaDocumentDate: "2026-11-15" }),
+		);
+	});
+	it.each(["carrier", "direct"] as const)(
+		"khóa đơn MISA đã dùng, ghi ngày gửi và chỉ cho chọn đơn chưa dùng khi giao %s",
+		async (deliveryMethod) => {
+			const orders = vi.spyOn(entryRepository, "misaOrders").mockResolvedValue({
+				items: [
+					{
+						documentDate: "2026-11-16",
+						documentCode: "",
+						used: true,
+						usedOn: "2026-11-17",
+						items: [{ productName: "Hàng đã gửi", quantity: 10 }],
+						totalQuantity: 10,
+						note: "10 Hàng đã gửi",
+					},
+					{
+						documentDate: "2026-11-15",
+						documentCode: "",
+						used: false,
+						usedOn: null,
+						items: [{ productName: "Hàng chưa gửi", quantity: 20 }],
+						totalQuantity: 20,
+						note: "20 Hàng chưa gửi",
+					},
+				],
+			});
+			vi.spyOn(entryRepository, "customerContext").mockResolvedValue({
+				customer: { id: 1, name: "Trạm y tế A", recipient: "", address: "" },
+				carriers: [],
+				recipients: [],
+				defaultCarrierId: null,
+			});
+			const save = vi.fn().mockResolvedValue(undefined);
+			await act(async () =>
+				root.render(
+					createElement(EntryDialog, {
+						editingId: 7,
+						formOptions: options,
+						onSave: save,
+						onClose: vi.fn(),
+						initial: {
+							...emptyEntryInput("2026-11-18"),
+							deliveryMethod,
+							customerId: 1,
+							customer: "Trạm y tế A",
+							employeeId: 1,
+							carrier: "Nhà xe A",
+							spec: "Tất cả",
+							billStatus: "Không bill",
+							note: "Hàng nhập tay",
+						},
+					}),
+				),
+			);
+			expect(orders).toHaveBeenCalledWith(1, "2026-11-18", 7);
+			const choices = container.querySelectorAll<HTMLButtonElement>(
+				".entry-misa-orders button",
+			);
+			expect(choices).toHaveLength(2);
+			expect(choices[0].disabled).toBe(true);
+			expect(choices[0].textContent).toContain(
+				"Đã được dùng · gửi ngày 17/11/2026",
+			);
+			expect(choices[1].disabled).toBe(false);
+			await act(async () => choices[0].click());
+			expect(
+				container.querySelector<HTMLTextAreaElement>(".entry-product-textarea")
+					?.value,
+			).toBe("Hàng nhập tay");
+			await act(async () => choices[1].click());
+			expect(
+				container.querySelector<HTMLTextAreaElement>(".entry-product-textarea")
+					?.value,
+			).toBe("20 Hàng chưa gửi");
+			await act(async () => {
+				container
+					.querySelector("form")
+					?.dispatchEvent(
+						new Event("submit", { bubbles: true, cancelable: true }),
+					);
+			});
+			expect(save).toHaveBeenCalledWith(
+				expect.objectContaining({
+					misaDocumentDate: "2026-11-15",
+					note: "20 Hàng chưa gửi",
+				}),
+			);
+		},
+	);
 	it.each([
 		{ unitFee: 40_000, direction: "thấp hơn", note: "Nhà xe giảm giá" },
 		{ unitFee: 60_000, direction: "cao hơn", note: "Giao hàng gấp" },
